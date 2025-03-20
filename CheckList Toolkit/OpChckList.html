@@ -50,6 +50,11 @@
             justify-content: center;
             border-radius: 4px;
         }
+        .title-locked {
+            background-color: #e9ecef;
+            color: #6c757d;
+            pointer-events: none;
+        }
         .table-container {
             margin-top: 20px;
             padding-bottom: 250px;
@@ -152,10 +157,9 @@
         #console-header button { background: none; border: none; color: #ccc; cursor: pointer; padding: 0 5px; font-size: 14px; }
         #console-header button:hover { color: #fff; }
         .toggle-btn { padding: 2px 8px; min-width: 80px; text-align: center; }
-        .page-lock-indicator {
+        .page-lock-indicator, .lang-switcher {
             position: fixed;
             top: 15px;
-            right: 20px;
             z-index: 2100;
             font-size: 1.25rem;
             color: #495057;
@@ -170,7 +174,9 @@
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             transition: all 0.2s ease;
         }
-        .page-lock-indicator:hover {
+        .page-lock-indicator { right: 20px; }
+        .lang-switcher { right: 65px; }
+        .page-lock-indicator:hover, .lang-switcher:hover {
             background-color: #e9ecef;
             transform: scale(1.05);
         }
@@ -198,6 +204,10 @@
         .edit-inputs .form-control {
             margin-bottom: 5px;
         }
+        .edit-inputs .input-group {
+            display: flex;
+            gap: 5px;
+        }
         @media (max-width: 768px) {
             body { padding-top: 170px; }
             .input-group-fixed { padding: 10px; }
@@ -207,6 +217,7 @@
             #console-log { width: calc(100% - 40px); left: 20px; }
             .input-group-custom { flex-wrap: wrap; }
             .input-group-custom .btn { margin-top: 5px; }
+            .lang-switcher { right: 55px; }
         }
         #jsonFileInput, #imageFilesInput { display: none; }
     </style>
@@ -214,33 +225,33 @@
 <body>
     <div class="container">
         <div class="input-group-fixed">
-            <h4>清单工具箱 v1</h4>
+            <h4 data-lang-key="title">清单工具箱 v1</h4>
             <div class="input-group-custom">
-                <button class="btn btn-primary" id="loadBtn" title="导入清单文件 (.json)"><i class="bi bi-folder2-open"></i></button>
-                <input type="text" class="form-control" id="titleInput" placeholder="输入标题">
-                <button class="btn btn-outline-secondary title-lock-btn" id="titleLockBtn" title="锁定/解锁标题"><i class="bi bi-unlock"></i></button>
-                <input type="text" class="form-control" id="contentInput" placeholder="输入内容">
-                <input type="text" class="form-control" id="imageUrlInput" placeholder="图片链接（或使用粘贴截图按钮）" readonly>
-                <button class="btn btn-warning" id="pasteBtn" title="粘贴截图"><i class="bi bi-clipboard"></i></button>
-                <button class="btn btn-success" id="addBtn" title="添加项目"><i class="bi bi-plus-lg"></i></button>
-                <button class="btn btn-info" id="saveBtn" title="保存清单到文件"><i class="bi bi-floppy"></i></button>
-                <button class="btn btn-secondary" id="resetBtn" title="重置清单"><i class="bi bi-arrow-repeat"></i></button>
-                <button class="btn btn-outline-secondary" id="toggleLogBtn" title="显示/隐藏日志"><i class="bi bi-terminal"></i></button>
-                <button class="btn btn-outline-success" id="exportBtn" title="导出清单与图片"><i class="bi bi-box-arrow-up"></i></button>
+                <button class="btn btn-primary" id="loadBtn" data-tooltip-key="loadBtn"><i class="bi bi-folder2-open"></i></button>
+                <input type="text" class="form-control" id="titleInput" placeholder="输入标题" data-lang-placeholder="titleInput">
+                <button class="btn btn-outline-secondary title-lock-btn" id="titleLockBtn" data-tooltip-key="titleLockBtn"><i class="bi bi-unlock"></i></button>
+                <input type="text" class="form-control" id="contentInput" placeholder="输入内容" data-lang-placeholder="contentInput">
+                <input type="text" class="form-control" id="imageUrlInput" placeholder="图片链接（或使用粘贴截图按钮）" readonly data-lang-placeholder="imageUrlInput">
+                <button class="btn btn-warning" id="pasteBtn" data-tooltip-key="pasteBtn"><i class="bi bi-clipboard"></i></button>
+                <button class="btn btn-success" id="addBtn" data-tooltip-key="addBtn"><i class="bi bi-plus-lg"></i></button>
+                <button class="btn btn-info" id="saveBtn" data-tooltip-key="saveBtn"><i class="bi bi-floppy"></i></button>
+                <button class="btn btn-secondary" id="resetBtn" data-tooltip-key="resetBtn"><i class="bi bi-arrow-repeat"></i></button>
+                <button class="btn btn-outline-secondary" id="toggleLogBtn" data-tooltip-key="toggleLogBtn"><i class="bi bi-terminal"></i></button>
             </div>
             <input type="file" id="jsonFileInput" accept=".json">
             <input type="file" id="imageFilesInput" accept="image/*" multiple>
         </div>
         
-        <div class="page-lock-indicator" id="pageLockBtn" title="锁定/解锁页面"><i class="bi bi-unlock"></i></div>
+        <div class="page-lock-indicator" id="pageLockBtn" data-tooltip-key="pageLockBtn"><i class="bi bi-unlock"></i></div>
+        <div class="lang-switcher" id="langSwitcher" data-tooltip-key="langSwitcher"><i class="bi bi-globe"></i></div>
         <div id="floating-message"></div>
         <div id="notification-area"></div>
         <div id="console-log">
             <div id="console-header">
-                <span>控制台日志</span>
+                <span data-lang-key="consoleLog">控制台日志</span>
                 <div>
-                    <button id="clearLogBtn" title="清空日志"><i class="bi bi-trash"></i></button>
-                    <button id="closeLogBtn" title="关闭"><i class="bi bi-x"></i></button>
+                    <button id="clearLogBtn" data-tooltip-key="clearLogBtn"><i class="bi bi-trash"></i></button>
+                    <button id="closeLogBtn" data-tooltip-key="closeLogBtn"><i class="bi bi-x"></i></button>
                 </div>
             </div>
             <div id="console-content"></div>
@@ -250,12 +261,12 @@
             <table class="table table-striped table-bordered">
                 <thead>
                     <tr>
-                        <th style="width: 10%;">状态</th>
-                        <th style="width: 5%;">序号</th>
-                        <th style="width: 20%;">标题</th>
-                        <th style="width: 25%;">内容</th>
-                        <th style="width: 15%;">预览</th>
-                        <th style="width: 25%;">操作</th>
+                        <th style="width: 10%;" data-lang-key="status">状态</th>
+                        <th style="width: 5%;" data-lang-key="index">序号</th>
+                        <th style="width: 20%;" data-lang-key="titleHeader">标题</th>
+                        <th style="width: 25%;" data-lang-key="contentHeader">内容</th>
+                        <th style="width: 15%;" data-lang-key="preview">预览</th>
+                        <th style="width: 25%;" data-lang-key="actions">操作</th>
                     </tr>
                 </thead>
                 <tbody id="checklistBody"></tbody>
@@ -274,6 +285,80 @@
         let imageBlobs = new Map();
         let tooltips = [];
         let titleIsLocked = false;
+        let currentLang = 'zh-CN';
+
+        const translations = {
+            'zh-CN': {
+                title: '清单工具箱 v1',
+                titleInput: '输入标题',
+                contentInput: '输入内容',
+                imageUrlInput: '图片链接（或使用粘贴截图按钮）',
+                consoleLog: '控制台日志',
+                status: '状态',
+                index: '序号',
+                titleHeader: '标题',
+                contentHeader: '内容',
+                preview: '预览',
+                actions: '操作',
+                noItems: '清单中没有项目。使用上方表单添加项目。',
+                addFirstItem: '添加第一个项目',
+                systemInitialized: '系统初始化完成！',
+                // Tooltips
+                loadBtn: '导入清单文件 (.json)',
+                titleLockBtn: '锁定/解锁标题',
+                pasteBtn: '粘贴截图',
+                addBtn: '添加项目',
+                saveBtn: '保存清单到文件',
+                resetBtn: '重置清单',
+                toggleLogBtn: '显示/隐藏日志',
+                pageLockBtn: '锁定/解锁页面',
+                langSwitcher: '切换语言',
+                clearLogBtn: '清空日志',
+                closeLogBtn: '关闭',
+                editBtn: '编辑项目',
+                removeBtn: '删除项目',
+                editPasteBtn: '粘贴截图',
+                saveEditBtn: '保存',
+                cancelEditBtn: '取消',
+                markComplete: '标记为已完成',
+                markIncomplete: '标记为未完成'
+            },
+            'en': {
+                title: 'Checklist Toolbox v1',
+                titleInput: 'Enter Title',
+                contentInput: 'Enter Content',
+                imageUrlInput: 'Image URL (or use paste screenshot button)',
+                consoleLog: 'Console Log',
+                status: 'Status',
+                index: 'No.',
+                titleHeader: 'Title',
+                contentHeader: 'Content',
+                preview: 'Preview',
+                actions: 'Actions',
+                noItems: 'No items in the checklist. Use the form above to add items.',
+                addFirstItem: 'Add First Item',
+                systemInitialized: 'System initialized!',
+                // Tooltips
+                loadBtn: 'Import checklist file (.json)',
+                titleLockBtn: 'Lock/Unlock Title',
+                pasteBtn: 'Paste Screenshot',
+                addBtn: 'Add Item',
+                saveBtn: 'Save Checklist to File',
+                resetBtn: 'Reset Checklist',
+                toggleLogBtn: 'Show/Hide Log',
+                pageLockBtn: 'Lock/Unlock Page',
+                langSwitcher: 'Switch Language',
+                clearLogBtn: 'Clear Log',
+                closeLogBtn: 'Close',
+                editBtn: 'Edit Item',
+                removeBtn: 'Delete Item',
+                editPasteBtn: 'Paste Screenshot',
+                saveEditBtn: 'Save',
+                cancelEditBtn: 'Cancel',
+                markComplete: 'Mark as complete',
+                markIncomplete: 'Mark as incomplete'
+            }
+        };
 
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM已加载，开始初始化...');
@@ -294,12 +379,20 @@
             document.getElementById('toggleLogBtn').onclick = toggleLogConsole;
             document.getElementById('clearLogBtn').onclick = clearLogConsole;
             document.getElementById('closeLogBtn').onclick = hideLogConsole;
-            document.getElementById('exportBtn').onclick = exportChecklist;
             document.getElementById('pageLockBtn').onclick = togglePageLock;
             document.getElementById('titleLockBtn').onclick = toggleTitleLock;
+            document.getElementById('langSwitcher').onclick = toggleLanguage;
 
             const imageUrlInput = document.getElementById('imageUrlInput');
             if (imageUrlInput) imageUrlInput.addEventListener('paste', handlePaste);
+
+            const contentInput = document.getElementById('contentInput');
+            if (contentInput) contentInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addItem();
+                }
+            });
 
             checklistBody.addEventListener('click', handleTableEvents);
             window.addEventListener('beforeunload', handleBeforeUnload);
@@ -308,8 +401,9 @@
             document.getElementById('imageFilesInput').addEventListener('change', handleImageFilesUpload);
 
             console.log('初次渲染，checklist长度:', checklist.length);
+            updateLanguage();
             renderChecklist();
-            showFloatingMessage('系统初始化完成！', 'success', 2000);
+            showFloatingMessage(getTranslation('systemInitialized'), 'success', 2000);
             addLogEntry('系统初始化完成', 'info');
         });
 
@@ -318,13 +412,50 @@
                 tooltips.forEach(tooltip => tooltip.dispose && tooltip.dispose());
                 tooltips = [];
             }
-            const tooltipTriggerList = document.querySelectorAll('[title]');
-            tooltips = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el, { trigger: 'hover focus', delay: { show: 500, hide: 100 } }));
+            const tooltipTriggerList = document.querySelectorAll('[data-tooltip-key]');
+            tooltips = [...tooltipTriggerList].map(el => {
+                const key = el.getAttribute('data-tooltip-key');
+                const title = getTranslation(key);
+                return new bootstrap.Tooltip(el, { 
+                    title, 
+                    trigger: 'hover focus', 
+                    delay: { show: 500, hide: 100 } 
+                });
+            });
+        }
+
+        function getTranslation(key) {
+            return translations[currentLang][key] || translations['zh-CN'][key] || key;
+        }
+
+        function updateLanguage() {
+            document.querySelectorAll('[data-lang-key]').forEach(el => {
+                const key = el.getAttribute('data-lang-key');
+                el.textContent = getTranslation(key);
+            });
+            document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-lang-placeholder');
+                el.placeholder = getTranslation(key);
+            });
+            document.documentElement.lang = currentLang;
+            initTooltips();
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'zh-CN' ? 'en' : 'zh-CN';
+            updateLanguage();
+            renderChecklist();
+            showFloatingMessage(currentLang === 'zh-CN' ? '已切换到中文' : 'Switched to English', 'info');
+            addLogEntry(`语言切换至 ${currentLang === 'zh-CN' ? '中文' : 'English'}`, 'info');
         }
 
         function showFloatingMessage(message, type = 'info', duration = 3000) {
             const messageEl = document.getElementById('floating-message');
-            if (!messageEl) return;
+            if (!messageEl || !message || message.trim() === '') {
+                console.warn('尝试显示空消息，已忽略:', message);
+                addLogEntry('尝试显示空消息，已忽略', 'warning');
+                return;
+            }
             if (floatingMessageTimeout) clearTimeout(floatingMessageTimeout);
             let color = { info: '#17a2b8', error: '#dc3545', warning: '#ffc107', success: '#28a745' }[type] || '#17a2b8';
             messageEl.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
@@ -336,7 +467,7 @@
 
         function handleBeforeUnload(event) {
             if (pageIsLocked || imageBlobs.size > 0) {
-                const message = '警告：您有未保存的图片。请在离开前导出。';
+                const message = currentLang === 'zh-CN' ? '警告：您有未保存的图片。请在离开前保存。' : 'Warning: You have unsaved images. Please save before leaving.';
                 event.returnValue = message;
                 return message;
             }
@@ -348,10 +479,16 @@
             if (lockBtn) {
                 lockBtn.innerHTML = pageIsLocked ? '<i class="bi bi-lock"></i>' : '<i class="bi bi-unlock"></i>';
                 lockBtn.classList.toggle('locked', pageIsLocked);
-                lockBtn.title = pageIsLocked ? '解锁页面' : '锁定页面';
-                showFloatingMessage(pageIsLocked ? '页面已锁定。刷新将被阻止。' : '页面已解锁。', 'info');
+                lockBtn.setAttribute('data-tooltip-key', 'pageLockBtn');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' 
+                        ? (pageIsLocked ? '页面已锁定。刷新将被阻止。' : '页面已解锁。') 
+                        : (pageIsLocked ? 'Page locked. Refresh will be prevented.' : 'Page unlocked.'),
+                    'info'
+                );
                 console.log('页面锁定状态:', pageIsLocked);
                 addLogEntry(`页面${pageIsLocked ? '锁定' : '解锁'}`, 'info');
+                initTooltips();
             } else {
                 console.error('未找到pageLockBtn元素');
             }
@@ -368,16 +505,26 @@
 
             titleIsLocked = !titleIsLocked;
             titleInput.readOnly = titleIsLocked;
+            titleInput.classList.toggle('title-locked', titleIsLocked);
             lockBtn.innerHTML = titleIsLocked ? '<i class="bi bi-lock"></i>' : '<i class="bi bi-unlock"></i>';
             lockBtn.classList.toggle('locked', titleIsLocked);
-            lockBtn.title = titleIsLocked ? '解锁标题' : '锁定标题';
-            showFloatingMessage(titleIsLocked ? '标题已锁定' : '标题已解锁', 'info');
+            lockBtn.setAttribute('data-tooltip-key', 'titleLockBtn');
+            showFloatingMessage(
+                currentLang === 'zh-CN' 
+                    ? (titleIsLocked ? '标题已锁定' : '标题已解锁') 
+                    : (titleIsLocked ? 'Title locked' : 'Title unlocked'),
+                'info'
+            );
             addLogEntry(`标题${titleIsLocked ? '锁定' : '解锁'}: ${titleInput.value || '空'}`, 'info');
 
             if (titleIsLocked && !titleInput.value.trim()) {
-                showFloatingMessage('警告：锁定了一个空标题', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '警告：锁定了一个空标题' : 'Warning: Locked an empty title',
+                    'warning'
+                );
                 addLogEntry('标题锁定警告：空标题', 'warning');
             }
+            initTooltips();
         }
 
         function toggleLogConsole() {
@@ -389,7 +536,10 @@
                 addLogEntry(`日志控制台${logVisible ? '显示' : '隐藏'}`, 'info');
             } else {
                 console.error('未找到console-log元素');
-                showFloatingMessage('错误：无法显示日志控制台', 'error');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无法显示日志控制台' : 'Error: Cannot show log console',
+                    'error'
+                );
             }
         }
 
@@ -434,18 +584,25 @@
             else if (action === 'copy') copyItem(index);
             else if (action === 'saveEdit') saveEdit(index);
             else if (action === 'cancelEdit') cancelEdit(index);
+            else if (action === 'editPaste') triggerEditPaste(index);
         }
 
         function loadChecklist(event) {
             const file = event.target.files[0];
             if (!file) {
-                showFloatingMessage('未选择文件，请选择一个 .json 文件', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '未选择文件，请选择一个 .json 文件' : 'No file selected, please choose a .json file',
+                    'warning'
+                );
                 addLogEntry('导入取消：未选择文件', 'warning');
                 return;
             }
 
             if (!file.name.endsWith('.json')) {
-                showFloatingMessage('请选择一个有效的 .json 文件', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请选择一个有效的 .json 文件' : 'Please select a valid .json file',
+                    'warning'
+                );
                 addLogEntry('导入失败：无效文件类型', 'warning');
                 event.target.value = '';
                 return;
@@ -466,15 +623,25 @@
                     const itemsWithImages = checklist.filter(item => item.imageId && item.imagePath);
                     if (itemsWithImages.length > 0) {
                         imageBlobs.clear();
-                        showFloatingMessage('清单中包含图片引用，请选择对应的图片文件', 'info', 5000);
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '清单中包含图片引用，请选择对应的图片文件' : 'Checklist contains image references, please select corresponding image files',
+                            'info',
+                            5000
+                        );
                         document.getElementById('imageFilesInput').click();
                     } else {
                         renderChecklist();
-                        showFloatingMessage('清单导入成功！', 'success');
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '清单导入成功！' : 'Checklist imported successfully!',
+                            'success'
+                        );
                     }
                 } catch (error) {
                     console.error('导入JSON失败:', error);
-                    showFloatingMessage('导入失败：无效的JSON文件', 'error');
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '导入失败：无效的JSON文件' : 'Import failed: Invalid JSON file',
+                        'error'
+                    );
                     addLogEntry('导入失败：无效JSON', 'error');
                     checklist = [];
                     renderChecklist();
@@ -482,7 +649,10 @@
                 event.target.value = '';
             };
             reader.onerror = function() {
-                showFloatingMessage('读取文件失败，请重试', 'error');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '读取文件失败，请重试' : 'Failed to read file, please try again',
+                    'error'
+                );
                 addLogEntry('导入失败：文件读取错误', 'error');
                 event.target.value = '';
             };
@@ -492,7 +662,10 @@
         function handleImageFilesUpload(event) {
             const files = event.target.files;
             if (!files || files.length === 0) {
-                showFloatingMessage('未选择图片文件，清单已导入但无图片', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '未选择图片文件，清单已导入但无图片' : 'No image files selected, checklist imported without images',
+                    'warning'
+                );
                 addLogEntry('图片导入取消：未选择文件', 'warning');
                 renderChecklist();
                 return;
@@ -523,11 +696,17 @@
 
             if (loadedImages > 0) {
                 renderChecklist();
-                showFloatingMessage(`成功导入清单和 ${loadedImages} 张图片！`, 'success');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? `成功导入清单和 ${loadedImages} 张图片！` : `Successfully imported checklist and ${loadedImages} images!`,
+                    'success'
+                );
                 addLogEntry(`导入 ${loadedImages} 张图片成功`, 'success');
             } else {
                 renderChecklist();
-                showFloatingMessage('清单已导入，但未匹配到有效图片', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单已导入，但未匹配到有效图片' : 'Checklist imported, but no valid images matched',
+                    'warning'
+                );
                 addLogEntry('图片导入失败：无匹配', 'warning');
             }
             event.target.value = '';
@@ -537,10 +716,33 @@
             const pasteInput = document.getElementById('imageUrlInput');
             if (pasteInput) {
                 pasteInput.focus();
-                showFloatingMessage('请按 Ctrl+V 将截图粘贴到输入框', 'info');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请按 Ctrl+V 将截图粘贴到输入框' : 'Press Ctrl+V to paste a screenshot into the input',
+                    'info'
+                );
             } else {
-                showFloatingMessage('错误：无法触发粘贴 - 未找到输入框', 'error');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无法触发粘贴 - 未找到输入框' : 'Error: Cannot trigger paste - input not found',
+                    'error'
+                );
                 addLogEntry('粘贴触发失败：未找到输入框', 'error');
+            }
+        }
+
+        function triggerEditPaste(index) {
+            const pasteInput = document.getElementById(`editImageUrl${index}`);
+            if (pasteInput) {
+                pasteInput.focus();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请按 Ctrl+V 将截图粘贴到编辑框' : 'Press Ctrl+V to paste a screenshot into the edit input',
+                    'info'
+                );
+            } else {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无法触发编辑粘贴 - 未找到输入框' : 'Error: Cannot trigger edit paste - input not found',
+                    'error'
+                );
+                addLogEntry('编辑粘贴触发失败：未找到输入框', 'error');
             }
         }
 
@@ -548,7 +750,10 @@
             event.preventDefault();
             const items = event.clipboardData?.items;
             if (!items || items.length === 0) {
-                showFloatingMessage('剪贴板中无可用数据。请确保已复制图片', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '剪贴板中无可用数据。请确保已复制图片' : 'No data in clipboard. Ensure an image is copied',
+                    'warning'
+                );
                 addLogEntry('粘贴失败：剪贴板无数据', 'warning');
                 return;
             }
@@ -556,7 +761,10 @@
                 if (item.type.startsWith('image/')) {
                     const blob = item.getAsFile();
                     if (!blob) {
-                        showFloatingMessage('无法从剪贴板获取图片。请重试', 'error');
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '无法从剪贴板获取图片。请重试' : 'Cannot retrieve image from clipboard. Please try again',
+                            'error'
+                        );
                         addLogEntry('粘贴失败：无法获取图片', 'error');
                         return;
                     }
@@ -567,7 +775,10 @@
                     const content = document.getElementById('contentInput').value.trim() || '粘贴的图片';
                     checklist.push({ title, content, imagePath: dataUrl, imageId, done: false });
                     renderChecklist();
-                    showFloatingMessage('图片已粘贴，项目已添加成功！', 'success');
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '图片已粘贴，项目已添加成功！' : 'Image pasted, item added successfully!',
+                        'success'
+                    );
                     addLogEntry(`添加项目: ${title} (含图片)`, 'success');
                     document.getElementById('contentInput').value = '';
                     document.getElementById('imageUrlInput').value = '';
@@ -575,8 +786,67 @@
                     return;
                 }
             }
-            showFloatingMessage('剪贴板数据不是图片。请复制图片后重试', 'warning');
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '剪贴板数据不是图片。请复制图片后重试' : 'Clipboard data is not an image. Copy an image and try again',
+                'warning'
+            );
             addLogEntry('粘贴失败：非图片数据', 'warning');
+        }
+
+        function handleEditPaste(event) {
+            const index = parseInt(event.target.getAttribute('data-index'), 10);
+            if (isNaN(index) || !checklist[index]) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无效的编辑索引' : 'Error: Invalid edit index',
+                    'error'
+                );
+                addLogEntry('编辑粘贴失败：无效索引', 'error');
+                return;
+            }
+            event.preventDefault();
+            const items = event.clipboardData?.items;
+            if (!items || items.length === 0) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '剪贴板中无可用数据。请确保已复制图片' : 'No data in clipboard. Ensure an image is copied',
+                    'warning'
+                );
+                addLogEntry('编辑粘贴失败：剪贴板无数据', 'warning');
+                return;
+            }
+            for (let item of items) {
+                if (item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    if (!blob) {
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '无法从剪贴板获取图片。请重试' : 'Cannot retrieve image from clipboard. Please try again',
+                            'error'
+                        );
+                        addLogEntry('编辑粘贴失败：无法获取图片', 'error');
+                        return;
+                    }
+                    const imageId = `img_${Date.now()}_${imageIndex++}`;
+                    imageBlobs.set(imageId, blob);
+                    const dataUrl = URL.createObjectURL(blob);
+                    if (checklist[index].imageId && imageBlobs.has(checklist[index].imageId)) {
+                        URL.revokeObjectURL(checklist[index].imagePath);
+                        imageBlobs.delete(checklist[index].imageId);
+                    }
+                    checklist[index].imagePath = dataUrl;
+                    checklist[index].imageId = imageId;
+                    document.getElementById(`editImageUrl${index}`).value = dataUrl;
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '图片已粘贴到编辑项目！' : 'Image pasted to edited item!',
+                        'success'
+                    );
+                    addLogEntry(`编辑项目 ${checklist[index].title}：添加图片`, 'success');
+                    return;
+                }
+            }
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '剪贴板数据不是图片。请复制图片后重试' : 'Clipboard data is not an image. Copy an image and try again',
+                'warning'
+            );
+            addLogEntry('编辑粘贴失败：非图片数据', 'warning');
         }
 
         function addItem() {
@@ -588,21 +858,32 @@
             if (title && content) {
                 checklist.push({ title, content, imagePath: imageUrl || '', done: false });
                 renderChecklist();
-                showFloatingMessage('新项目已添加成功！', 'success');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '新项目已添加成功！' : 'New item added successfully!',
+                    'success'
+                );
                 addLogEntry(`添加项目: ${title}`, 'success');
                 document.getElementById('contentInput').value = '';
                 document.getElementById('imageUrlInput').value = '';
                 if (!titleIsLocked) titleInput.value = '';
             } else {
-                showFloatingMessage('请填写标题和内容字段', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请填写标题和内容字段' : 'Please fill in title and content fields',
+                    'warning'
+                );
                 addLogEntry('添加失败：标题或内容为空', 'warning');
             }
         }
 
+        // Commented out original exportChecklist function (kept for reference)
+        /*
         function exportChecklist() {
             if (imageBlobs.size === 0) {
                 exportJsonFile();
-                showFloatingMessage('导出成功（无图片数据）', 'success');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '导出成功（无图片数据）' : 'Export successful (no image data)',
+                    'success'
+                );
                 addLogEntry('导出清单（无图片）', 'success');
                 return;
             }
@@ -619,18 +900,25 @@
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    showFloatingMessage('导出完成！', 'success');
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '导出完成！' : 'Export completed!',
+                        'success'
+                    );
                     addLogEntry(`导出清单和 ${imageBlobs.size} 张图片`, 'success');
                 });
             };
             script.onerror = () => {
                 console.error('无法加载JSZip库');
-                showFloatingMessage('导出失败，降级为仅导出JSON', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '导出失败，降级为仅导出JSON' : 'Export failed, downgraded to JSON only',
+                    'warning'
+                );
                 addLogEntry('导出失败：JSZip加载错误', 'error');
                 exportJsonFile();
             };
             document.head.appendChild(script);
         }
+        */
 
         function exportJsonFile() {
             const data = JSON.stringify(checklist, null, 2);
@@ -645,14 +933,20 @@
 
         function saveChecklist() {
             if (checklist.length === 0) {
-                showFloatingMessage('清单为空，无需保存', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单为空，无需保存' : 'Checklist is empty, no need to save',
+                    'warning'
+                );
                 addLogEntry('保存失败：清单为空', 'warning');
                 return;
             }
 
             if (imageBlobs.size === 0) {
                 exportJsonFile();
-                showFloatingMessage('清单已保存为JSON文件', 'success');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单已保存为JSON文件' : 'Checklist saved as JSON file',
+                    'success'
+                );
                 addLogEntry('保存清单为JSON', 'success');
             } else {
                 const script = document.createElement('script');
@@ -668,13 +962,19 @@
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);
-                        showFloatingMessage('清单和图片已保存为ZIP文件', 'success');
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '清单和图片已保存为ZIP文件' : 'Checklist and images saved as ZIP file',
+                            'success'
+                        );
                         addLogEntry(`保存清单和 ${imageBlobs.size} 张图片为ZIP`, 'success');
                     });
                 };
                 script.onerror = () => {
                     console.error('无法加载JSZip库');
-                    showFloatingMessage('保存失败，降级为仅保存JSON', 'warning');
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '保存失败，降级为仅保存JSON' : 'Save failed, downgraded to JSON only',
+                        'warning'
+                    );
                     addLogEntry('保存失败：JSZip加载错误', 'error');
                     exportJsonFile();
                 };
@@ -695,10 +995,10 @@
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="6" class="text-center py-4">
-                            <div class="text-muted">清单中没有项目。使用上方表单添加项目。</div>
+                            <div class="text-muted">${getTranslation('noItems')}</div>
                             <div class="mt-3">
                                 <button class="btn btn-outline-primary" onclick="document.getElementById('titleInput').focus()">
-                                    添加第一个项目 <i class="bi bi-plus-lg"></i>
+                                    ${getTranslation('addFirstItem')} <i class="bi bi-plus-lg"></i>
                                 </button>
                             </div>
                         </td>
@@ -713,26 +1013,42 @@
                         <tr>
                             <td>
                                 <button class="btn btn-sm ${isDone ? 'btn-success' : 'btn-outline-secondary'} toggle-btn" 
-                                        data-action="toggle" data-index="${index}" title="${isDone ? '标记为未完成' : '标记为已完成'}">
-                                    ${isDone ? '<i class="bi bi-check-lg"></i> 已完成' : '<i class="bi bi-circle"></i> 未完成'}
+                                        data-action="toggle" data-index="${index}" 
+                                        data-tooltip-key="${isDone ? 'markIncomplete' : 'markComplete'}">
+                                    ${isDone ? '<i class="bi bi-check-lg"></i> ' + (currentLang === 'zh-CN' ? '已完成' : 'Done') : '<i class="bi bi-circle"></i> ' + (currentLang === 'zh-CN' ? '未完成' : 'To Do')}
                                 </button>
                             </td>
                             <td>${index + 1}</td>
                             <td class="${doneClass}">${item.title}</td>
                             <td class="${doneClass}">${item.content}</td>
-                            <td>${hasImage ? `<a href="${item.imagePath}" target="_blank"><img src="${item.imagePath}" alt="预览" class="preview-img"></a>` : '无图片'}</td>
+                            <td>${hasImage ? `<a href="${item.imagePath}" target="_blank"><img src="${item.imagePath}" alt="预览" class="preview-img"></a>` : (currentLang === 'zh-CN' ? '无图片' : 'No Image')}</td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-primary btn-sm" data-action="edit" data-index="${index}" title="编辑项目"><i class="bi bi-pencil"></i></button>
-                                    <button class="btn btn-danger btn-sm" data-action="remove" data-index="${index}" title="删除项目"><i class="bi bi-trash"></i></button>
+                                    <button class="btn btn-primary btn-sm" data-action="edit" data-index="${index}" 
+                                            data-tooltip-key="editBtn"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-danger btn-sm" data-action="remove" data-index="${index}" 
+                                            data-tooltip-key="removeBtn"><i class="bi bi-trash"></i></button>
                                 </div>
                                 <div class="edit-inputs d-none" id="editInputs${index}">
-                                    <input type="text" class="form-control form-control-sm" id="editTitle${index}" value="${item.title}" placeholder="编辑标题">
-                                    <input type="text" class="form-control form-control-sm" id="editContent${index}" value="${item.content}" placeholder="编辑内容">
-                                    <input type="text" class="form-control form-control-sm" id="editImageUrl${index}" value="${item.imagePath || ''}" placeholder="图片链接（可选）" readonly>
+                                    <input type="text" class="form-control form-control-sm" id="editTitle${index}" value="${item.title}" 
+                                           placeholder="${getTranslation('titleInput')}">
+                                    <input type="text" class="form-control form-control-sm" id="editContent${index}" value="${item.content}" 
+                                           placeholder="${getTranslation('contentInput')}">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control form-control-sm" id="editImageUrl${index}" value="${item.imagePath || ''}" 
+                                               placeholder="${getTranslation('imageUrlInput')}" data-index="${index}">
+                                        <button class="btn btn-warning btn-sm" data-action="editPaste" data-index="${index}" 
+                                                data-tooltip-key="editPasteBtn"><i class="bi bi-clipboard"></i></button>
+                                    </div>
                                     <div class="mt-2">
-                                        <button class="btn btn-info btn-sm" data-action="saveEdit" data-index="${index}"><i class="bi bi-check"></i> 保存</button>
-                                        <button class="btn btn-secondary btn-sm" data-action="cancelEdit" data-index="${index}"><i class="bi bi-x"></i> 取消</button>
+                                        <button class="btn btn-info btn-sm" data-action="saveEdit" data-index="${index}" 
+                                                data-tooltip-key="saveEditBtn">
+                                            <i class="bi bi-check"></i> ${currentLang === 'zh-CN' ? '保存' : 'Save'}
+                                        </button>
+                                        <button class="btn btn-secondary btn-sm" data-action="cancelEdit" data-index="${index}" 
+                                                data-tooltip-key="cancelEditBtn">
+                                            <i class="bi bi-x"></i> ${currentLang === 'zh-CN' ? '取消' : 'Cancel'}
+                                        </button>
                                     </div>
                                 </div>
                             </td>
@@ -747,13 +1063,18 @@
             if (checklist[index]) {
                 checklist[index].done = !checklist[index].done;
                 renderChecklist();
-                showFloatingMessage(`项目已${checklist[index].done ? '标记为已完成' : '标记为未完成'}`, 'success');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' 
+                        ? `项目已${checklist[index].done ? '标记为已完成' : '标记为未完成'}` 
+                        : `Item ${checklist[index].done ? 'marked as complete' : 'marked as incomplete'}`,
+                    'success'
+                );
                 addLogEntry(`项目 ${checklist[index].title} 状态改为${checklist[index].done ? '已完成' : '未完成'}`, 'success');
             }
         }
 
         function removeItem(index) {
-            if (confirm('确定要删除这个项目吗？')) {
+            if (confirm(currentLang === 'zh-CN' ? '确定要删除这个项目吗？' : 'Are you sure you want to delete this item?')) {
                 const item = checklist[index];
                 if (item.imageId && imageBlobs.has(item.imageId)) {
                     URL.revokeObjectURL(item.imagePath);
@@ -762,7 +1083,10 @@
                 const title = item.title;
                 checklist.splice(index, 1);
                 renderChecklist();
-                showFloatingMessage('项目已删除成功！', 'success');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '项目已删除成功！' : 'Item deleted successfully!',
+                    'success'
+                );
                 addLogEntry(`删除项目: ${title}`, 'success');
             }
         }
@@ -772,9 +1096,17 @@
             if (editInputs) {
                 editInputs.classList.remove('d-none');
                 document.getElementById(`editTitle${index}`).focus();
+                const editImageInput = document.getElementById(`editImageUrl${index}`);
+                if (editImageInput) {
+                    editImageInput.removeEventListener('paste', handleEditPaste);
+                    editImageInput.addEventListener('paste', handleEditPaste);
+                }
                 addLogEntry(`开始编辑项目: ${checklist[index].title}`, 'info');
             } else {
-                showFloatingMessage('错误：未找到编辑输入框', 'error');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：未找到编辑输入框' : 'Error: Edit inputs not found',
+                    'error'
+                );
                 addLogEntry('编辑失败：未找到输入框', 'error');
             }
         }
@@ -787,10 +1119,16 @@
                 checklist[index].title = newTitle;
                 checklist[index].content = newContent;
                 renderChecklist();
-                showFloatingMessage('项目更新成功！', 'success');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '项目更新成功！' : 'Item updated successfully!',
+                    'success'
+                );
                 addLogEntry(`编辑项目: ${oldTitle} -> ${newTitle}`, 'success');
             } else {
-                showFloatingMessage('标题和内容不能为空', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '标题和内容不能为空' : 'Title and content cannot be empty',
+                    'warning'
+                );
                 addLogEntry('编辑失败：标题或内容为空', 'warning');
             }
         }
@@ -808,17 +1146,23 @@
             const textToCopy = `${item.title}\n${item.content}`;
             navigator.clipboard.writeText(textToCopy)
                 .then(() => {
-                    showFloatingMessage('内容已复制到剪贴板', 'success');
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '内容已复制到剪贴板' : 'Content copied to clipboard',
+                        'success'
+                    );
                     addLogEntry(`复制项目内容: ${item.title}`, 'success');
                 })
                 .catch(() => {
-                    showFloatingMessage('复制失败，请手动选择并复制', 'warning');
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '复制失败，请手动选择并复制' : 'Copy failed, please select and copy manually',
+                        'warning'
+                    );
                     addLogEntry(`复制失败: ${item.title}`, 'warning');
                 });
         }
 
         function resetChecklist() {
-            if (confirm('确定要清空所有项目吗？此操作不可恢复！')) {
+            if (confirm(currentLang === 'zh-CN' ? '确定要清空所有项目吗？此操作不可恢复！' : 'Are you sure you want to clear all items? This action cannot be undone!')) {
                 imageBlobs.forEach((_, imageId) => {
                     const item = checklist.find(i => i.imageId === imageId);
                     if (item && item.imagePath) URL.revokeObjectURL(item.imagePath);
@@ -828,7 +1172,10 @@
                 checklist = [];
                 imageIndex = 1;
                 renderChecklist();
-                showFloatingMessage('清单已重置', 'warning');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单已重置' : 'Checklist reset',
+                    'warning'
+                );
                 addLogEntry(`重置清单，清空 ${itemCount} 个项目`, 'warning');
             }
         }
