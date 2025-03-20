@@ -4,13 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>清单工具箱 v1</title>
-    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         body {
             font-family: "Microsoft YaHei", Arial, sans-serif;
             background-color: #f8f9fa;
             padding-top: 130px;
+            min-height: 100vh;
+            position: relative;
         }
         .input-group-fixed {
             position: fixed;
@@ -26,6 +28,32 @@
             right: 0;
             border-bottom: 1px solid #dee2e6;
         }
+        .input-group-fixed h4 {
+            margin-bottom: 15px;
+            font-weight: 600;
+            color: #343a40;
+        }
+        .input-group-custom {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .input-group-custom .form-control {
+            border-radius: 4px;
+            height: 38px;
+        }
+        .input-group-custom .btn {
+            height: 38px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        .table-container {
+            margin-top: 20px;
+            padding-bottom: 250px;
+        }
         .preview-img {
             max-width: 100px;
             max-height: 100px;
@@ -35,8 +63,6 @@
         .preview-img:hover {
             transform: scale(1.5);
         }
-        
-        /* 悬浮消息区域 */
         #floating-message {
             position: fixed;
             top: 85px;
@@ -44,23 +70,20 @@
             transform: translateX(-50%);
             min-width: 300px;
             max-width: 80%;
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgba(0, 0, 0, 0.85);
             color: #fff;
             padding: 12px 20px;
             border-radius: 6px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            z-index: 2000; /* 最高层级 */
+            z-index: 2000;
             text-align: center;
             opacity: 0;
             transition: opacity 0.3s ease;
-            pointer-events: none; /* 允许点击穿透 */
+            pointer-events: none;
         }
-        
         #floating-message.show {
             opacity: 1;
         }
-        
-        /* 通知系统样式 */
         #notification-area {
             position: fixed;
             bottom: 20px;
@@ -72,12 +95,10 @@
             gap: 10px;
             pointer-events: none;
         }
-        
         .notification {
             padding: 12px 15px;
             border-radius: 6px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            margin-bottom: 10px;
             transform: translateX(110%);
             transition: transform 0.3s ease-out;
             opacity: 0.95;
@@ -87,39 +108,12 @@
             justify-content: space-between;
             pointer-events: auto;
         }
-        
-        @keyframes slide-in {
-            to { transform: translateX(0); }
-        }
-        
-        @keyframes fade-out {
-            to { opacity: 0; transform: translateY(10px); }
-        }
-        
-        .notification-success {
-            background-color: #d4edda;
-            border-left: 4px solid #28a745;
-            color: #155724;
-        }
-        
-        .notification-info {
-            background-color: #d1ecf1;
-            border-left: 4px solid #17a2b8;
-            color: #0c5460;
-        }
-        
-        .notification-warning {
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
-            color: #856404;
-        }
-        
-        .notification-danger {
-            background-color: #f8d7da;
-            border-left: 4px solid #dc3545;
-            color: #721c24;
-        }
-        
+        @keyframes slide-in { to { transform: translateX(0); } }
+        @keyframes fade-out { to { opacity: 0; transform: translateY(10px); } }
+        .notification-success { background-color: #d4edda; border-left: 4px solid #28a745; color: #155724; }
+        .notification-info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; color: #0c5460; }
+        .notification-warning { background-color: #fff3cd; border-left: 4px solid #ffc107; color: #856404; }
+        .notification-danger { background-color: #f8d7da; border-left: 4px solid #dc3545; color: #721c24; }
         .notification-close {
             cursor: pointer;
             font-size: 18px;
@@ -130,12 +124,7 @@
             opacity: 0.7;
             margin-left: 8px;
         }
-        
-        .notification-close:hover {
-            opacity: 1;
-        }
-        
-        /* 日志控制台样式 */
+        .notification-close:hover { opacity: 1; }
         #console-log {
             position: fixed;
             bottom: 20px;
@@ -143,7 +132,7 @@
             width: 350px;
             max-height: 200px;
             overflow-y: auto;
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: #343a40;
             color: #fff;
             padding: 10px;
             border-radius: 5px;
@@ -153,111 +142,16 @@
             display: none;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
-        
-        #console-log .log-entry {
-            margin: 3px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 3px;
-        }
-        
-        #console-log .log-time {
-            color: #aaa;
-            margin-right: 5px;
-        }
-        
-        #console-log .log-info {
-            color: #8adbff;
-        }
-        
-        #console-log .log-error {
-            color: #ff8a8a;
-        }
-        
-        #console-log .log-warning {
-            color: #ffcc66;
-        }
-        
-        #console-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        #console-header button {
-            background: none;
-            border: none;
-            color: #ccc;
-            cursor: pointer;
-            padding: 0 5px;
-            font-size: 14px;
-        }
-        
-        #console-header button:hover {
-            color: #fff;
-        }
-        
-        .icon-btn {
-            width: 40px;
-            text-align: center;
-            position: relative;
-        }
-        
-        .toggle-btn {
-            padding: 2px 8px;
-            min-width: 80px;
-            text-align: center;
-        }
-        
-        .btn-purple {
-            background-color: #6f42c1;
-            color: white;
-        }
-        
-        .btn-purple:hover {
-            background-color: #5a32a3;
-            color: white;
-        }
-        
-        .edit-inputs {
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #f8f9fa;
-            margin-top: 10px;
-        }
-        
-        .table-container {
-            overflow-x: auto;
-            margin-top: 20px;
-        }
-        
-        .table thead {
-            background-color: #f8f9fa;
-            font-weight: 600;
-        }
-        
-        .table th {
-            background-color: #f8f9fa;
-        }
-        
-        .table td {
-            vertical-align: middle;
-            padding: 0.75rem;
-        }
-        
-        .table-striped > tbody > tr:nth-of-type(odd) {
-            background-color: rgba(0, 0, 0, 0.02);
-        }
-        
-        .table-container .table {
-            border-radius: 8px;
-            overflow: hidden;
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-        
-        /* 页面锁定指示器 */
+        #console-log.active { display: block; }
+        #console-log .log-entry { margin: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 3px; }
+        #console-log .log-time { color: #adb5bd; margin-right: 5px; }
+        #console-log .log-info { color: #8adbff; }
+        #console-log .log-error { color: #ff8a8a; }
+        #console-log .log-warning { color: #ffcc66; }
+        #console-header { display: flex; justify-content: space-between; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); }
+        #console-header button { background: none; border: none; color: #ccc; cursor: pointer; padding: 0 5px; font-size: 14px; }
+        #console-header button:hover { color: #fff; }
+        .toggle-btn { padding: 2px 8px; min-width: 80px; text-align: center; }
         .page-lock-indicator {
             position: fixed;
             top: 15px;
@@ -266,83 +160,87 @@
             font-size: 1.25rem;
             color: #495057;
             cursor: pointer;
-            width: 40px;
-            height: 40px;
+            width: 38px;
+            height: 38px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 4px;
+            background-color: #fff;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             transition: all 0.2s ease;
         }
-        
         .page-lock-indicator:hover {
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: #e9ecef;
             transform: scale(1.05);
         }
-        
-        .page-locked {
+        .page-lock-indicator.locked {
             color: #dc3545;
+            background-color: #f8d7da;
         }
-        
+        .title-lock-btn {
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .title-lock-btn.locked {
+            color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .btn-group .btn {
+            padding: 4px 8px;
+            font-size: 0.875rem;
+        }
+        .edit-inputs .form-control {
+            margin-bottom: 5px;
+        }
         @media (max-width: 768px) {
-            body {
-                padding-top: 170px;
-            }
-            .input-group-fixed {
-                padding: 10px;
-            }
-            .table-container {
-                margin-top: 30px;
-            }
-            #notification-area {
-                width: calc(100% - 40px);
-                max-width: 500px;
-            }
-            #floating-message {
-                width: 90%;
-                max-width: none;
-                top: 120px;
-            }
+            body { padding-top: 170px; }
+            .input-group-fixed { padding: 10px; }
+            .table-container { margin-top: 30px; }
+            #notification-area { width: calc(100% - 40px); max-width: 500px; }
+            #floating-message { width: 90%; max-width: none; top: 120px; }
+            #console-log { width: calc(100% - 40px); left: 20px; }
+            .input-group-custom { flex-wrap: wrap; }
+            .input-group-custom .btn { margin-top: 5px; }
         }
+        #jsonFileInput, #imageFilesInput { display: none; }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- 固定在顶部的输入组 -->
         <div class="input-group-fixed">
-            <h4 class="mb-3">清单工具箱 v1</h4>
-            <div class="input-group mb-2">
-                <button class="btn btn-primary icon-btn" id="loadBtn" title="加载已保存的清单">📂</button>
+            <h4>清单工具箱 v1</h4>
+            <div class="input-group-custom">
+                <button class="btn btn-primary" id="loadBtn" title="导入清单文件 (.json)"><i class="bi bi-folder2-open"></i></button>
                 <input type="text" class="form-control" id="titleInput" placeholder="输入标题">
+                <button class="btn btn-outline-secondary title-lock-btn" id="titleLockBtn" title="锁定/解锁标题"><i class="bi bi-unlock"></i></button>
                 <input type="text" class="form-control" id="contentInput" placeholder="输入内容">
                 <input type="text" class="form-control" id="imageUrlInput" placeholder="图片链接（或使用粘贴截图按钮）" readonly>
-                <button class="btn btn-warning icon-btn" id="pasteBtn" title="粘贴截图">📋</button>
-                <button class="btn btn-success icon-btn" id="addBtn" title="添加项目">➕</button>
-                <button class="btn btn-info icon-btn" id="saveBtn" title="保存清单">💾</button>
-                <button class="btn btn-secondary icon-btn" id="resetBtn" title="重置清单">🔄</button>
-                <button class="btn btn-outline-secondary icon-btn" id="toggleLogBtn" title="显示/隐藏日志">🔍</button>
-                <button class="btn btn-outline-success icon-btn" id="exportBtn" title="导出清单与图片">📤</button>
+                <button class="btn btn-warning" id="pasteBtn" title="粘贴截图"><i class="bi bi-clipboard"></i></button>
+                <button class="btn btn-success" id="addBtn" title="添加项目"><i class="bi bi-plus-lg"></i></button>
+                <button class="btn btn-info" id="saveBtn" title="保存清单到文件"><i class="bi bi-floppy"></i></button>
+                <button class="btn btn-secondary" id="resetBtn" title="重置清单"><i class="bi bi-arrow-repeat"></i></button>
+                <button class="btn btn-outline-secondary" id="toggleLogBtn" title="显示/隐藏日志"><i class="bi bi-terminal"></i></button>
+                <button class="btn btn-outline-success" id="exportBtn" title="导出清单与图片"><i class="bi bi-box-arrow-up"></i></button>
             </div>
+            <input type="file" id="jsonFileInput" accept=".json">
+            <input type="file" id="imageFilesInput" accept="image/*" multiple>
         </div>
         
-        <!-- 页面锁定按钮 -->
-        <div class="page-lock-indicator" id="pageLockBtn" title="锁定/解锁页面">🔓</div>
-        
-        <!-- 浮动消息 (用于显示重要日志) -->
+        <div class="page-lock-indicator" id="pageLockBtn" title="锁定/解锁页面"><i class="bi bi-unlock"></i></div>
         <div id="floating-message"></div>
-        
-        <!-- 通知区域 -->
         <div id="notification-area"></div>
-        
-        <!-- 日志控制台区域 -->
         <div id="console-log">
             <div id="console-header">
                 <span>控制台日志</span>
                 <div>
-                    <button id="clearLogBtn" title="清空日志">🗑️</button>
-                    <button id="closeLogBtn" title="关闭">✖</button>
+                    <button id="clearLogBtn" title="清空日志"><i class="bi bi-trash"></i></button>
+                    <button id="closeLogBtn" title="关闭"><i class="bi bi-x"></i></button>
                 </div>
             </div>
             <div id="console-content"></div>
@@ -360,36 +258,35 @@
                         <th style="width: 25%;">操作</th>
                     </tr>
                 </thead>
-                <tbody id="checklistBody">
-                </tbody>
+                <tbody id="checklistBody"></tbody>
             </table>
         </div>
     </div>
 
-    <!-- Bootstrap JS and Popper.js -->
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"></script>
     <script>
-        // 全局变量
         let checklist = [];
         let imageIndex = 1;
         let logVisible = false;
         let floatingMessageTimeout = null;
         let pageIsLocked = false;
-        let imageBlobs = new Map(); // 存储图片blob的映射
-        let tooltips = []; // 存储所有tooltip实例的数组，用于手动处理
-        
-        // 确保DOM完全加载后再执行JavaScript
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM完全加载，初始化清单...');
+        let imageBlobs = new Map();
+        let tooltips = [];
+        let titleIsLocked = false;
 
-            // 加载之前保存的清单
-            checklist = JSON.parse(localStorage.getItem('checklist')) || [];
-            
-            // 初始化工具提示            initTooltips();
-            
-            // 按钮事件绑定
-            document.getElementById('loadBtn').onclick = loadChecklist;
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM已加载，开始初始化...');
+
+            const checklistBody = document.getElementById('checklistBody');
+            if (!checklistBody) {
+                console.error('未找到checklistBody元素');
+                document.body.innerHTML += '<p style="color:red;">错误：无法找到表格主体</p>';
+                return;
+            }
+
+            initTooltips();
+            document.getElementById('loadBtn').onclick = () => document.getElementById('jsonFileInput').click();
             document.getElementById('pasteBtn').onclick = triggerPaste;
             document.getElementById('addBtn').onclick = addItem;
             document.getElementById('saveBtn').onclick = saveChecklist;
@@ -399,74 +296,44 @@
             document.getElementById('closeLogBtn').onclick = hideLogConsole;
             document.getElementById('exportBtn').onclick = exportChecklist;
             document.getElementById('pageLockBtn').onclick = togglePageLock;
-            
-            // 为图片输入添加粘贴监听器
+            document.getElementById('titleLockBtn').onclick = toggleTitleLock;
+
             const imageUrlInput = document.getElementById('imageUrlInput');
-            if (imageUrlInput) {
-                imageUrlInput.addEventListener('paste', handlePaste);
-            }
-            
-            // 添加表格事件委托
-            document.getElementById('checklistBody').addEventListener('click', handleTableEvents);
-            
-            // 添加离开页面前提示
+            if (imageUrlInput) imageUrlInput.addEventListener('paste', handlePaste);
+
+            checklistBody.addEventListener('click', handleTableEvents);
             window.addEventListener('beforeunload', handleBeforeUnload);
-            
-            // 首次渲染清单
+
+            document.getElementById('jsonFileInput').addEventListener('change', loadChecklist);
+            document.getElementById('imageFilesInput').addEventListener('change', handleImageFilesUpload);
+
+            console.log('初次渲染，checklist长度:', checklist.length);
             renderChecklist();
             showFloatingMessage('系统初始化完成！', 'success', 2000);
+            addLogEntry('系统初始化完成', 'info');
         });
-        
-        // 初始化工具提示
+
         function initTooltips() {
-            // 销毁先前的工具提示
             if (tooltips.length > 0) {
-                tooltips.forEach(tooltip => {
-                    if (tooltip && typeof tooltip.dispose === 'function') {
-                        tooltip.dispose();
-                    }
-                });
+                tooltips.forEach(tooltip => tooltip.dispose && tooltip.dispose());
                 tooltips = [];
             }
-            
-            // 创建新的工具提示实例
             const tooltipTriggerList = document.querySelectorAll('[title]');
-            tooltips = [...tooltipTriggerList].map(element => {
-                return new bootstrap.Tooltip(element, {
-                    trigger: 'hover focus',
-                    delay: { show: 500, hide: 100 }
-                });
-            });
+            tooltips = [...tooltipTriggerList].map(el => new bootstrap.Tooltip(el, { trigger: 'hover focus', delay: { show: 500, hide: 100 } }));
         }
-        
-        // 显示浮动消息
+
         function showFloatingMessage(message, type = 'info', duration = 3000) {
             const messageEl = document.getElementById('floating-message');
             if (!messageEl) return;
-            
-            // 清除之前的计时器
-            if (floatingMessageTimeout) {
-                clearTimeout(floatingMessageTimeout);
-            }
-            
-            // 设置消息颜色
-            let color = '#17a2b8'; // info
-            if (type === 'error') color = '#dc3545';
-            if (type === 'warning') color = '#ffc107';
-            if (type === 'success') color = '#28a745';
-            
-            messageEl.style.backgroundColor = `rgba(0, 0, 0, 0.85)`;
+            if (floatingMessageTimeout) clearTimeout(floatingMessageTimeout);
+            let color = { info: '#17a2b8', error: '#dc3545', warning: '#ffc107', success: '#28a745' }[type] || '#17a2b8';
+            messageEl.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
             messageEl.style.borderLeft = `4px solid ${color}`;
             messageEl.textContent = message;
             messageEl.classList.add('show');
-            
-            // 设置自动隐藏
-            floatingMessageTimeout = setTimeout(() => {
-                messageEl.classList.remove('show');
-            }, duration);
+            floatingMessageTimeout = setTimeout(() => messageEl.classList.remove('show'), duration);
         }
-        
-        // 阻止页面刷新提示
+
         function handleBeforeUnload(event) {
             if (pageIsLocked || imageBlobs.size > 0) {
                 const message = '警告：您有未保存的图片。请在离开前导出。';
@@ -474,91 +341,198 @@
                 return message;
             }
         }
-        
-        // 切换页面锁定状态
+
         function togglePageLock() {
             pageIsLocked = !pageIsLocked;
             const lockBtn = document.getElementById('pageLockBtn');
-            
-            if (pageIsLocked) {
-                lockBtn.textContent = '🔒';
-                lockBtn.classList.add('page-locked');
-                showFloatingMessage('页面已锁定。刷新将被阻止。', 'info');
+            if (lockBtn) {
+                lockBtn.innerHTML = pageIsLocked ? '<i class="bi bi-lock"></i>' : '<i class="bi bi-unlock"></i>';
+                lockBtn.classList.toggle('locked', pageIsLocked);
+                lockBtn.title = pageIsLocked ? '解锁页面' : '锁定页面';
+                showFloatingMessage(pageIsLocked ? '页面已锁定。刷新将被阻止。' : '页面已解锁。', 'info');
+                console.log('页面锁定状态:', pageIsLocked);
+                addLogEntry(`页面${pageIsLocked ? '锁定' : '解锁'}`, 'info');
             } else {
-                lockBtn.textContent = '🔓';
-                lockBtn.classList.remove('page-locked');
-                showFloatingMessage('页面已解锁。', 'info');
+                console.error('未找到pageLockBtn元素');
             }
         }
-        
-        // 日志控制台功能
+
+        function toggleTitleLock() {
+            const titleInput = document.getElementById('titleInput');
+            const lockBtn = document.getElementById('titleLockBtn');
+            if (!titleInput || !lockBtn) {
+                console.error('未找到titleInput或titleLockBtn元素');
+                addLogEntry('标题锁定失败：未找到元素', 'error');
+                return;
+            }
+
+            titleIsLocked = !titleIsLocked;
+            titleInput.readOnly = titleIsLocked;
+            lockBtn.innerHTML = titleIsLocked ? '<i class="bi bi-lock"></i>' : '<i class="bi bi-unlock"></i>';
+            lockBtn.classList.toggle('locked', titleIsLocked);
+            lockBtn.title = titleIsLocked ? '解锁标题' : '锁定标题';
+            showFloatingMessage(titleIsLocked ? '标题已锁定' : '标题已解锁', 'info');
+            addLogEntry(`标题${titleIsLocked ? '锁定' : '解锁'}: ${titleInput.value || '空'}`, 'info');
+
+            if (titleIsLocked && !titleInput.value.trim()) {
+                showFloatingMessage('警告：锁定了一个空标题', 'warning');
+                addLogEntry('标题锁定警告：空标题', 'warning');
+            }
+        }
+
         function toggleLogConsole() {
             const logConsole = document.getElementById('console-log');
-            logVisible = !logVisible;
-            logConsole.style.display = logVisible ? 'block' : 'none';
+            if (logConsole) {
+                logVisible = !logVisible;
+                logConsole.classList.toggle('active', logVisible);
+                console.log('日志控制台状态:', logVisible ? '显示' : '隐藏');
+                addLogEntry(`日志控制台${logVisible ? '显示' : '隐藏'}`, 'info');
+            } else {
+                console.error('未找到console-log元素');
+                showFloatingMessage('错误：无法显示日志控制台', 'error');
+            }
         }
-        
+
         function hideLogConsole() {
             const logConsole = document.getElementById('console-log');
-            logVisible = false;
-            logConsole.style.display = 'none';
+            if (logConsole) {
+                logVisible = false;
+                logConsole.classList.remove('active');
+                console.log('日志控制台已关闭');
+                addLogEntry('日志控制台关闭', 'info');
+            }
         }
-        
+
         function clearLogConsole() {
             const consoleContent = document.getElementById('console-content');
             if (consoleContent) {
                 consoleContent.innerHTML = '';
+                addLogEntry('日志已清空', 'info');
             }
         }
-        
-        // 添加日志条目
+
         function addLogEntry(message, type = 'info') {
             const consoleContent = document.getElementById('console-content');
             if (!consoleContent) return;
-            
             const now = new Date();
             const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-            
             const logEntry = document.createElement('div');
             logEntry.className = `log-entry log-${type}`;
             logEntry.innerHTML = `<span class="log-time">${timeStr}</span> ${message}`;
-            
             consoleContent.appendChild(logEntry);
             consoleContent.scrollTop = consoleContent.scrollHeight;
         }
-        
-        // 处理表格事件
+
         function handleTableEvents(event) {
-            const target = event.target;
-            const button = target.closest('button');
+            const button = event.target.closest('button');
             if (!button) return;
-            
             const action = button.getAttribute('data-action');
             const index = parseInt(button.getAttribute('data-index'), 10);
-            
-            if (action === 'toggle') {
-                toggleDone(index);
-            } else if (action === 'edit') {
-                editItem(index);
-            } else if (action === 'remove') {
-                removeItem(index);
-            } else if (action === 'copy') {
-                copyItem(index);
-            } else if (action === 'saveEdit') {
-                saveEdit(index);
-            } else if (action === 'cancelEdit') {
-                cancelEdit(index);
+            if (action === 'toggle') toggleDone(index);
+            else if (action === 'edit') editItem(index);
+            else if (action === 'remove') removeItem(index);
+            else if (action === 'copy') copyItem(index);
+            else if (action === 'saveEdit') saveEdit(index);
+            else if (action === 'cancelEdit') cancelEdit(index);
+        }
+
+        function loadChecklist(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                showFloatingMessage('未选择文件，请选择一个 .json 文件', 'warning');
+                addLogEntry('导入取消：未选择文件', 'warning');
+                return;
             }
+
+            if (!file.name.endsWith('.json')) {
+                showFloatingMessage('请选择一个有效的 .json 文件', 'warning');
+                addLogEntry('导入失败：无效文件类型', 'warning');
+                event.target.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (!Array.isArray(importedData)) {
+                        throw new Error('文件内容不是有效的清单数组');
+                    }
+
+                    checklist = importedData;
+                    console.log('导入清单:', checklist);
+                    addLogEntry(`导入清单成功，项目数: ${checklist.length}`, 'success');
+
+                    const itemsWithImages = checklist.filter(item => item.imageId && item.imagePath);
+                    if (itemsWithImages.length > 0) {
+                        imageBlobs.clear();
+                        showFloatingMessage('清单中包含图片引用，请选择对应的图片文件', 'info', 5000);
+                        document.getElementById('imageFilesInput').click();
+                    } else {
+                        renderChecklist();
+                        showFloatingMessage('清单导入成功！', 'success');
+                    }
+                } catch (error) {
+                    console.error('导入JSON失败:', error);
+                    showFloatingMessage('导入失败：无效的JSON文件', 'error');
+                    addLogEntry('导入失败：无效JSON', 'error');
+                    checklist = [];
+                    renderChecklist();
+                }
+                event.target.value = '';
+            };
+            reader.onerror = function() {
+                showFloatingMessage('读取文件失败，请重试', 'error');
+                addLogEntry('导入失败：文件读取错误', 'error');
+                event.target.value = '';
+            };
+            reader.readAsText(file);
         }
 
-        // 从localStorage加载清单
-        function loadChecklist() {
-            checklist = JSON.parse(localStorage.getItem('checklist')) || [];
-            renderChecklist();
-            showFloatingMessage('清单已从本地存储加载成功！', 'success');
+        function handleImageFilesUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) {
+                showFloatingMessage('未选择图片文件，清单已导入但无图片', 'warning');
+                addLogEntry('图片导入取消：未选择文件', 'warning');
+                renderChecklist();
+                return;
+            }
+
+            let loadedImages = 0;
+            for (let file of files) {
+                if (!file.type.startsWith('image/')) {
+                    console.warn(`跳过非图片文件: ${file.name}`);
+                    addLogEntry(`跳过非图片文件: ${file.name}`, 'warning');
+                    continue;
+                }
+
+                const imageId = `img_${Date.now()}_${imageIndex++}`;
+                const dataUrl = URL.createObjectURL(file);
+                imageBlobs.set(imageId, file);
+
+                const matchingItem = checklist.find(item => item.imageId && file.name.includes(item.imageId));
+                if (matchingItem) {
+                    matchingItem.imagePath = dataUrl;
+                    matchingItem.imageId = imageId;
+                    loadedImages++;
+                } else {
+                    console.warn(`未找到匹配的imageId for ${file.name}`);
+                    addLogEntry(`未匹配图片: ${file.name}`, 'warning');
+                }
+            }
+
+            if (loadedImages > 0) {
+                renderChecklist();
+                showFloatingMessage(`成功导入清单和 ${loadedImages} 张图片！`, 'success');
+                addLogEntry(`导入 ${loadedImages} 张图片成功`, 'success');
+            } else {
+                renderChecklist();
+                showFloatingMessage('清单已导入，但未匹配到有效图片', 'warning');
+                addLogEntry('图片导入失败：无匹配', 'warning');
+            }
+            event.target.value = '';
         }
 
-        // 触发粘贴功能
         function triggerPaste() {
             const pasteInput = document.getElementById('imageUrlInput');
             if (pasteInput) {
@@ -566,331 +540,307 @@
                 showFloatingMessage('请按 Ctrl+V 将截图粘贴到输入框', 'info');
             } else {
                 showFloatingMessage('错误：无法触发粘贴 - 未找到输入框', 'error');
+                addLogEntry('粘贴触发失败：未找到输入框', 'error');
             }
         }
 
-        // 处理粘贴事件
         function handlePaste(event) {
             event.preventDefault();
-            const items = event.clipboardData.items;
+            const items = event.clipboardData?.items;
             if (!items || items.length === 0) {
                 showFloatingMessage('剪贴板中无可用数据。请确保已复制图片', 'warning');
+                addLogEntry('粘贴失败：剪贴板无数据', 'warning');
                 return;
             }
-
             for (let item of items) {
                 if (item.type.startsWith('image/')) {
                     const blob = item.getAsFile();
                     if (!blob) {
                         showFloatingMessage('无法从剪贴板获取图片。请重试', 'error');
+                        addLogEntry('粘贴失败：无法获取图片', 'error');
                         return;
                     }
-                    
-                    // 生成唯一标识符作为图片ID
-                    const imageId = `img_${Date.now()}_${imageIndex}`;
-                    imageIndex++;
-                    
-                    // 存储Blob到映射中
+                    const imageId = `img_${Date.now()}_${imageIndex++}`;
                     imageBlobs.set(imageId, blob);
-                    
-                    // 创建临时URL用于显示
                     const dataUrl = URL.createObjectURL(blob);
-                    
-                    // 捕获当前标题和内容作为上下文
                     const title = document.getElementById('titleInput').value.trim() || '截图';
                     const content = document.getElementById('contentInput').value.trim() || '粘贴的图片';
-                    
-                    checklist.push({ 
-                        title, 
-                        content, 
-                        imagePath: dataUrl, 
-                        imageId: imageId,
-                        done: false 
-                    });
-                    
-                    saveChecklist();
+                    checklist.push({ title, content, imagePath: dataUrl, imageId, done: false });
                     renderChecklist();
                     showFloatingMessage('图片已粘贴，项目已添加成功！', 'success');
-                    
-                    // 清空输入框
-                    document.getElementById('titleInput').value = '';
+                    addLogEntry(`添加项目: ${title} (含图片)`, 'success');
                     document.getElementById('contentInput').value = '';
                     document.getElementById('imageUrlInput').value = '';
+                    if (!titleIsLocked) document.getElementById('titleInput').value = '';
                     return;
                 }
             }
-            
             showFloatingMessage('剪贴板数据不是图片。请复制图片后重试', 'warning');
+            addLogEntry('粘贴失败：非图片数据', 'warning');
         }
 
-        // 添加新项目
         function addItem() {
-            const title = document.getElementById('titleInput').value.trim();
+            const titleInput = document.getElementById('titleInput');
             const content = document.getElementById('contentInput').value.trim();
             const imageUrl = document.getElementById('imageUrlInput').value.trim();
+            const title = titleInput.value.trim();
 
             if (title && content) {
-                checklist.push({ 
-                    title, 
-                    content, 
-                    imagePath: imageUrl || '',
-                    done: false 
-                });
-                
-                saveChecklist();
+                checklist.push({ title, content, imagePath: imageUrl || '', done: false });
                 renderChecklist();
                 showFloatingMessage('新项目已添加成功！', 'success');
-                
-                // 清空输入
-                document.getElementById('titleInput').value = '';
+                addLogEntry(`添加项目: ${title}`, 'success');
                 document.getElementById('contentInput').value = '';
                 document.getElementById('imageUrlInput').value = '';
+                if (!titleIsLocked) titleInput.value = '';
             } else {
                 showFloatingMessage('请填写标题和内容字段', 'warning');
+                addLogEntry('添加失败：标题或内容为空', 'warning');
             }
         }
 
-        // 导出清单和图片
         function exportChecklist() {
-            // 如果没有图片数据，只导出JSON
             if (imageBlobs.size === 0) {
                 exportJsonFile();
                 showFloatingMessage('导出成功（无图片数据）', 'success');
+                addLogEntry('导出清单（无图片）', 'success');
                 return;
             }
-            
-            // 加载JSZip库并创建ZIP
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
             script.onload = function() {
                 const zip = new JSZip();
-                
-                // 添加清单数据
-                const checklistData = JSON.stringify(checklist, null, 2);
-                zip.file('checklist.json', checklistData);
-                
-                // 添加图片文件
-                imageBlobs.forEach((blob, imageId) => {
-                    zip.file(`images/${imageId}.png`, blob);
-                });
-                
-                // 生成ZIP文件并下载
-                zip.generateAsync({type: 'blob'}).then(function(content) {
+                zip.file('checklist.json', JSON.stringify(checklist, null, 2));
+                imageBlobs.forEach((blob, imageId) => zip.file(`images/${imageId}.png`, blob));
+                zip.generateAsync({ type: 'blob' }).then(content => {
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(content);
                     link.download = `checklist_export_${new Date().toISOString().slice(0, 10)}.zip`;
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    
                     showFloatingMessage('导出完成！', 'success');
+                    addLogEntry(`导出清单和 ${imageBlobs.size} 张图片`, 'success');
                 });
             };
-            
-            script.onerror = function() {
+            script.onerror = () => {
                 console.error('无法加载JSZip库');
                 showFloatingMessage('导出失败，降级为仅导出JSON', 'warning');
+                addLogEntry('导出失败：JSZip加载错误', 'error');
                 exportJsonFile();
             };
-            
             document.head.appendChild(script);
         }
-        
-        // 仅导出JSON文件
+
         function exportJsonFile() {
             const data = JSON.stringify(checklist, null, 2);
-            const blob = new Blob([data], {type: 'application/json'});
+            const blob = new Blob([data], { type: 'application/json' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = `checklist_export_${new Date().toISOString().slice(0, 10)}.json`;
+            link.download = `checklist_save_${new Date().toISOString().slice(0, 10)}.json`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
 
-        // 渲染清单
+        function saveChecklist() {
+            if (checklist.length === 0) {
+                showFloatingMessage('清单为空，无需保存', 'warning');
+                addLogEntry('保存失败：清单为空', 'warning');
+                return;
+            }
+
+            if (imageBlobs.size === 0) {
+                exportJsonFile();
+                showFloatingMessage('清单已保存为JSON文件', 'success');
+                addLogEntry('保存清单为JSON', 'success');
+            } else {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                script.onload = function() {
+                    const zip = new JSZip();
+                    zip.file('checklist.json', JSON.stringify(checklist, null, 2));
+                    imageBlobs.forEach((blob, imageId) => zip.file(`images/${imageId}.png`, blob));
+                    zip.generateAsync({ type: 'blob' }).then(content => {
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(content);
+                        link.download = `checklist_save_${new Date().toISOString().slice(0, 10)}.zip`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        showFloatingMessage('清单和图片已保存为ZIP文件', 'success');
+                        addLogEntry(`保存清单和 ${imageBlobs.size} 张图片为ZIP`, 'success');
+                    });
+                };
+                script.onerror = () => {
+                    console.error('无法加载JSZip库');
+                    showFloatingMessage('保存失败，降级为仅保存JSON', 'warning');
+                    addLogEntry('保存失败：JSZip加载错误', 'error');
+                    exportJsonFile();
+                };
+                document.head.appendChild(script);
+            }
+        }
+
         function renderChecklist() {
             const tbody = document.getElementById('checklistBody');
             if (!tbody) {
-                showFloatingMessage('错误: 未找到清单表格主体', 'error');
+                console.error('未找到checklistBody元素');
+                document.body.innerHTML += '<p style="color:red;">错误：无法渲染表格</p>';
                 return;
             }
-            
             tbody.innerHTML = '';
-            
+            console.log('渲染清单，长度:', checklist.length);
             if (checklist.length === 0) {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td colspan="6" class="text-center py-4">
-                        <div class="text-muted">清单中没有项目。使用上方表单添加项目。</div>
-                        <div class="mt-3">
-                            <button class="btn btn-outline-primary" onclick="document.getElementById('titleInput').focus()">
-                                添加第一个项目 ➕
-                            </button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-                return;
-            }
-            
-            checklist.forEach((item, index) => {
-                const isDone = item.done || false;
-                const doneClass = isDone ? 'text-decoration-line-through text-muted' : '';
-                const hasImage = item.imagePath && item.imagePath.trim() !== '';
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>
-                        <button class="btn btn-sm ${isDone ? 'btn-success' : 'btn-outline-secondary'} toggle-btn" 
-                                data-action="toggle" data-index="${index}" title="${isDone ? '标记为未完成' : '标记为已完成'}">
-                            ${isDone ? '✓ 已完成' : '◯ 未完成'}
-                        </button>
-                    </td>
-                    <td>${index + 1}</td>
-                    <td class="${doneClass}">${item.title}</td>
-                    <td class="${doneClass}">${item.content}</td>
-                    <td>${hasImage ? `<a href="${item.imagePath}" target="_blank"><img src="${item.imagePath}" alt="预览" class="preview-img"></a>` : '无图片'}</td>
-                    <td>
-                        <div class="btn-group">
-                            <button class="btn btn-primary btn-sm" data-action="edit" data-index="${index}" title="编辑项目">✏️</button>
-                            <button class="btn btn-danger btn-sm" data-action="remove" data-index="${index}" title="删除项目">🗑️</button>
-                        </div>
-                        <div class="edit-inputs d-none" id="editInputs${index}">
-                            <input type="text" class="form-control form-control-sm mb-2" id="editTitle${index}" value="${item.title}" placeholder="编辑标题">
-                            <input type="text" class="form-control form-control-sm mb-2" id="editContent${index}" value="${item.content}" placeholder="编辑内容">
-                            <input type="text" class="form-control form-control-sm mb-2" id="editImageUrl${index}" value="${item.imagePath || ''}" placeholder="图片链接（可选）" readonly>
-                            <div class="mt-2">
-                                <button class="btn btn-info btn-sm" data-action="saveEdit" data-index="${index}">保存</button>
-                                <button class="btn btn-secondary btn-sm" data-action="cancelEdit" data-index="${index}">取消</button>
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            <div class="text-muted">清单中没有项目。使用上方表单添加项目。</div>
+                            <div class="mt-3">
+                                <button class="btn btn-outline-primary" onclick="document.getElementById('titleInput').focus()">
+                                    添加第一个项目 <i class="bi bi-plus-lg"></i>
+                                </button>
                             </div>
-                        </div>
-                    </td>
+                        </td>
+                    </tr>
                 `;
-                tbody.appendChild(row);
-            });
-            
-            // 重新初始化工具提示
+            } else {
+                checklist.forEach((item, index) => {
+                    const isDone = item.done || false;
+                    const doneClass = isDone ? 'text-decoration-line-through text-muted' : '';
+                    const hasImage = item.imagePath && item.imagePath.trim() !== '';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>
+                                <button class="btn btn-sm ${isDone ? 'btn-success' : 'btn-outline-secondary'} toggle-btn" 
+                                        data-action="toggle" data-index="${index}" title="${isDone ? '标记为未完成' : '标记为已完成'}">
+                                    ${isDone ? '<i class="bi bi-check-lg"></i> 已完成' : '<i class="bi bi-circle"></i> 未完成'}
+                                </button>
+                            </td>
+                            <td>${index + 1}</td>
+                            <td class="${doneClass}">${item.title}</td>
+                            <td class="${doneClass}">${item.content}</td>
+                            <td>${hasImage ? `<a href="${item.imagePath}" target="_blank"><img src="${item.imagePath}" alt="预览" class="preview-img"></a>` : '无图片'}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-primary btn-sm" data-action="edit" data-index="${index}" title="编辑项目"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-danger btn-sm" data-action="remove" data-index="${index}" title="删除项目"><i class="bi bi-trash"></i></button>
+                                </div>
+                                <div class="edit-inputs d-none" id="editInputs${index}">
+                                    <input type="text" class="form-control form-control-sm" id="editTitle${index}" value="${item.title}" placeholder="编辑标题">
+                                    <input type="text" class="form-control form-control-sm" id="editContent${index}" value="${item.content}" placeholder="编辑内容">
+                                    <input type="text" class="form-control form-control-sm" id="editImageUrl${index}" value="${item.imagePath || ''}" placeholder="图片链接（可选）" readonly>
+                                    <div class="mt-2">
+                                        <button class="btn btn-info btn-sm" data-action="saveEdit" data-index="${index}"><i class="bi bi-check"></i> 保存</button>
+                                        <button class="btn btn-secondary btn-sm" data-action="cancelEdit" data-index="${index}"><i class="bi bi-x"></i> 取消</button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
             initTooltips();
         }
 
-        // 切换完成状态
         function toggleDone(index) {
             if (checklist[index]) {
                 checklist[index].done = !checklist[index].done;
-                saveChecklist();
                 renderChecklist();
                 showFloatingMessage(`项目已${checklist[index].done ? '标记为已完成' : '标记为未完成'}`, 'success');
+                addLogEntry(`项目 ${checklist[index].title} 状态改为${checklist[index].done ? '已完成' : '未完成'}`, 'success');
             }
         }
 
-        // 删除项目
         function removeItem(index) {
             if (confirm('确定要删除这个项目吗？')) {
-                // 如果有关联的图片，释放资源
                 const item = checklist[index];
                 if (item.imageId && imageBlobs.has(item.imageId)) {
                     URL.revokeObjectURL(item.imagePath);
                     imageBlobs.delete(item.imageId);
                 }
-                
+                const title = item.title;
                 checklist.splice(index, 1);
-                saveChecklist();
                 renderChecklist();
                 showFloatingMessage('项目已删除成功！', 'success');
+                addLogEntry(`删除项目: ${title}`, 'success');
             }
         }
 
-        // 编辑项目
         function editItem(index) {
             const editInputs = document.getElementById(`editInputs${index}`);
             if (editInputs) {
                 editInputs.classList.remove('d-none');
                 document.getElementById(`editTitle${index}`).focus();
+                addLogEntry(`开始编辑项目: ${checklist[index].title}`, 'info');
             } else {
                 showFloatingMessage('错误：未找到编辑输入框', 'error');
+                addLogEntry('编辑失败：未找到输入框', 'error');
             }
         }
 
-        // 保存编辑
         function saveEdit(index) {
             const newTitle = document.getElementById(`editTitle${index}`).value.trim();
             const newContent = document.getElementById(`editContent${index}`).value.trim();
-            
             if (newTitle && newContent) {
+                const oldTitle = checklist[index].title;
                 checklist[index].title = newTitle;
                 checklist[index].content = newContent;
-                saveChecklist();
                 renderChecklist();
                 showFloatingMessage('项目更新成功！', 'success');
+                addLogEntry(`编辑项目: ${oldTitle} -> ${newTitle}`, 'success');
             } else {
                 showFloatingMessage('标题和内容不能为空', 'warning');
+                addLogEntry('编辑失败：标题或内容为空', 'warning');
             }
         }
 
-        // 取消编辑
         function cancelEdit(index) {
             const editInputs = document.getElementById(`editInputs${index}`);
             if (editInputs) {
                 editInputs.classList.add('d-none');
+                addLogEntry(`取消编辑项目: ${checklist[index].title}`, 'info');
             }
         }
 
-        // 复制项目内容
         function copyItem(index) {
             const item = checklist[index];
             const textToCopy = `${item.title}\n${item.content}`;
             navigator.clipboard.writeText(textToCopy)
-                .then(() => showFloatingMessage('内容已复制到剪贴板', 'success'))
-                .catch(err => {
+                .then(() => {
+                    showFloatingMessage('内容已复制到剪贴板', 'success');
+                    addLogEntry(`复制项目内容: ${item.title}`, 'success');
+                })
+                .catch(() => {
                     showFloatingMessage('复制失败，请手动选择并复制', 'warning');
+                    addLogEntry(`复制失败: ${item.title}`, 'warning');
                 });
         }
 
-        // 保存清单到localStorage
-        function saveChecklist() {
-            localStorage.setItem('checklist', JSON.stringify(checklist));
-        }
-
-        // 重置清单
         function resetChecklist() {
             if (confirm('确定要清空所有项目吗？此操作不可恢复！')) {
-                // 释放所有图片资源
                 imageBlobs.forEach((_, imageId) => {
                     const item = checklist.find(i => i.imageId === imageId);
-                    if (item && item.imagePath) {
-                        URL.revokeObjectURL(item.imagePath);
-                    }
+                    if (item && item.imagePath) URL.revokeObjectURL(item.imagePath);
                 });
-                
+                const itemCount = checklist.length;
                 imageBlobs.clear();
                 checklist = [];
                 imageIndex = 1;
-                saveChecklist();
                 renderChecklist();
                 showFloatingMessage('清单已重置', 'warning');
+                addLogEntry(`重置清单，清空 ${itemCount} 个项目`, 'warning');
             }
         }
 
-        // 显示通知
         function showNotification(message, type = 'info') {
             const notificationArea = document.getElementById('notification-area');
             if (!notificationArea) return;
-            
             const notification = document.createElement('div');
             notification.className = `notification notification-${type}`;
-            notification.innerHTML = `
-                <span>${message}</span>
-                <button class="notification-close" onclick="this.parentElement.remove()">×</button>
-            `;
+            notification.innerHTML = `<span>${message}</span><button class="notification-close" onclick="this.parentElement.remove()">×</button>`;
             notificationArea.appendChild(notification);
-            
-            // 自动移除通知
-            setTimeout(() => {
-                if (notification && notification.parentElement) {
-                    notification.remove();
-                }
-            }, 3000);
+            setTimeout(() => notification.parentElement && notification.remove(), 3000);
         }
     </script>
 </body>
