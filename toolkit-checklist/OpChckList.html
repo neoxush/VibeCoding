@@ -13,6 +13,7 @@
             padding-top: 130px;
             min-height: 100vh;
             position: relative;
+            transition: background-color 0.3s, color 0.3s;
         }
         .input-group-fixed {
             position: fixed;
@@ -27,11 +28,13 @@
             left: 0;
             right: 0;
             border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.3s, border-color 0.3s;
         }
         .input-group-fixed h4 {
             margin-bottom: 15px;
             font-weight: 600;
             color: #343a40;
+            transition: color 0.3s;
         }
         .input-group-custom {
             display: flex;
@@ -41,6 +44,7 @@
         .input-group-custom .form-control {
             border-radius: 4px;
             height: 38px;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
         }
         .input-group-custom .btn {
             height: 38px;
@@ -54,6 +58,7 @@
             background-color: #e9ecef;
             color: #6c757d;
             pointer-events: none;
+            transition: background-color 0.3s, color 0.3s;
         }
         .table-container {
             margin-top: 20px;
@@ -112,6 +117,7 @@
             align-items: center;
             justify-content: space-between;
             pointer-events: auto;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
         }
         @keyframes slide-in { to { transform: translateX(0); } }
         @keyframes fade-out { to { opacity: 0; transform: translateY(10px); } }
@@ -146,6 +152,7 @@
             z-index: 1400;
             display: none;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.3s, color 0.3s;
         }
         #console-log.active { display: block; }
         #console-log .log-entry { margin: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 3px; }
@@ -157,7 +164,7 @@
         #console-header button { background: none; border: none; color: #ccc; cursor: pointer; padding: 0 5px; font-size: 14px; }
         #console-header button:hover { color: #fff; }
         .toggle-btn { padding: 2px 8px; min-width: 80px; text-align: center; }
-        .page-lock-indicator, .lang-switcher {
+        .page-lock-indicator, .lang-switcher, .night-mode-toggle {
             position: fixed;
             top: 15px;
             z-index: 2100;
@@ -172,11 +179,12 @@
             border-radius: 4px;
             background-color: #fff;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            transition: all 0.2s ease;
+            transition: all 0.2s ease, background-color 0.3s, color 0.3s;
         }
         .page-lock-indicator { right: 20px; }
         .lang-switcher { right: 65px; }
-        .page-lock-indicator:hover, .lang-switcher:hover {
+        .night-mode-toggle { right: 110px; }
+        .page-lock-indicator:hover, .lang-switcher:hover, .night-mode-toggle:hover {
             background-color: #e9ecef;
             transform: scale(1.05);
         }
@@ -218,8 +226,80 @@
             .input-group-custom { flex-wrap: wrap; }
             .input-group-custom .btn { margin-top: 5px; }
             .lang-switcher { right: 55px; }
+            .night-mode-toggle { right: 100px; }
         }
         #jsonFileInput, #imageFilesInput { display: none; }
+
+        /* Night Mode Styles */
+        body.night-mode {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .night-mode .input-group-fixed {
+            background-color: #2c2c2c;
+            border-bottom: 1px solid #444;
+        }
+        .night-mode .input-group-fixed h4 {
+            color: #e0e0e0;
+        }
+        .night-mode .input-group-custom .form-control {
+            background-color: #333;
+            color: #e0e0e0;
+            border-color: #555;
+        }
+        .night-mode .input-group-custom .form-control::placeholder {
+            color: #aaa;
+        }
+        .night-mode .title-locked {
+            background-color: #444;
+            color: #999;
+        }
+        .night-mode .table {
+            color: #e0e0e0;
+        }
+        .night-mode .table-striped tbody tr:nth-of-type(odd) {
+            background-color: #2a2a2a;
+        }
+        .night-mode .table-bordered {
+            border-color: #444;
+        }
+        .night-mode .table-bordered th,
+        .night-mode .table-bordered td {
+            border-color: #444;
+        }
+        .night-mode .notification-success { background-color: #2d6b3b; color: #c3e6cb; }
+        .night-mode .notification-info { background-color: #2b6770; color: #bee5eb; }
+        .night-mode .notification-warning { background-color: #856404; color: #ffeeba; }
+        .night-mode .notification-danger { background-color: #721c24; color: #f5c6cb; }
+        .night-mode #console-log {
+            background-color: #1f2526;
+            color: #e0e0e0;
+        }
+        .night-mode #console-header { border-bottom: 1px solid rgba(255, 255, 255, 0.15); }
+        .night-mode #console-header button { color: #bbb; }
+        .night-mode #console-header button:hover { color: #fff; }
+        .night-mode .page-lock-indicator,
+        .night-mode .lang-switcher,
+        .night-mode .night-mode-toggle {
+            background-color: #333;
+            color: #e0e0e0;
+        }
+        .night-mode .page-lock-indicator:hover,
+        .night-mode .lang-switcher:hover,
+        .night-mode .night-mode-toggle:hover {
+            background-color: #444;
+        }
+        .night-mode .page-lock-indicator.locked {
+            color: #ff6b6b;
+            background-color: #4a2c2e;
+        }
+        .night-mode .title-lock-btn.locked {
+            color: #ff6b6b;
+            background-color: #4a2c2e;
+        }
+        .night-mode .text-muted {
+            color: #aaa !important;
+        }
     </style>
 </head>
 <body>
@@ -244,6 +324,7 @@
         
         <div class="page-lock-indicator" id="pageLockBtn" data-tooltip-key="pageLockBtn"><i class="bi bi-unlock"></i></div>
         <div class="lang-switcher" id="langSwitcher" data-tooltip-key="langSwitcher"><i class="bi bi-globe"></i></div>
+        <div class="night-mode-toggle" id="nightModeBtn" data-tooltip-key="nightModeBtn"><i class="bi bi-moon-stars"></i></div>
         <div id="floating-message"></div>
         <div id="notification-area"></div>
         <div id="console-log">
@@ -286,6 +367,7 @@
         let tooltips = [];
         let titleIsLocked = false;
         let currentLang = 'zh-CN';
+        let isNightMode = localStorage.getItem('nightMode') === 'true';
 
         const translations = {
             'zh-CN': {
@@ -313,6 +395,7 @@
                 toggleLogBtn: '显示/隐藏日志',
                 pageLockBtn: '锁定/解锁页面',
                 langSwitcher: '切换语言',
+                nightModeBtn: '切换夜间模式',
                 clearLogBtn: '清空日志',
                 closeLogBtn: '关闭',
                 editBtn: '编辑项目',
@@ -348,6 +431,7 @@
                 toggleLogBtn: 'Show/Hide Log',
                 pageLockBtn: 'Lock/Unlock Page',
                 langSwitcher: 'Switch Language',
+                nightModeBtn: 'Toggle Night Mode',
                 clearLogBtn: 'Clear Log',
                 closeLogBtn: 'Close',
                 editBtn: 'Edit Item',
@@ -370,6 +454,7 @@
                 return;
             }
 
+            applyNightMode();
             initTooltips();
             document.getElementById('loadBtn').onclick = () => document.getElementById('jsonFileInput').click();
             document.getElementById('pasteBtn').onclick = triggerPaste;
@@ -382,6 +467,7 @@
             document.getElementById('pageLockBtn').onclick = togglePageLock;
             document.getElementById('titleLockBtn').onclick = toggleTitleLock;
             document.getElementById('langSwitcher').onclick = toggleLanguage;
+            document.getElementById('nightModeBtn').onclick = toggleNightMode;
 
             const imageUrlInput = document.getElementById('imageUrlInput');
             if (imageUrlInput) imageUrlInput.addEventListener('paste', handlePaste);
@@ -406,6 +492,32 @@
             showFloatingMessage(getTranslation('systemInitialized'), 'success', 2000);
             addLogEntry('系统初始化完成', 'info');
         });
+
+        function applyNightMode() {
+            const body = document.body;
+            const nightModeBtn = document.getElementById('nightModeBtn');
+            if (isNightMode) {
+                body.classList.add('night-mode');
+                nightModeBtn.innerHTML = '<i class="bi bi-sun"></i>';
+            } else {
+                body.classList.remove('night-mode');
+                nightModeBtn.innerHTML = '<i class="bi bi-moon-stars"></i>';
+            }
+            initTooltips(); // Refresh tooltips after mode change
+        }
+
+        function toggleNightMode() {
+            isNightMode = !isNightMode;
+            localStorage.setItem('nightMode', isNightMode);
+            applyNightMode();
+            showFloatingMessage(
+                currentLang === 'zh-CN' 
+                    ? (isNightMode ? '已启用夜间模式' : '已禁用夜间模式') 
+                    : (isNightMode ? 'Night mode enabled' : 'Night mode disabled'),
+                'info'
+            );
+            addLogEntry(`夜间模式${isNightMode ? '启用' : '禁用'}`, 'info');
+        }
 
         function initTooltips() {
             if (tooltips.length > 0) {
@@ -874,51 +986,6 @@
                 addLogEntry('添加失败：标题或内容为空', 'warning');
             }
         }
-
-        // Commented out original exportChecklist function (kept for reference)
-        /*
-        function exportChecklist() {
-            if (imageBlobs.size === 0) {
-                exportJsonFile();
-                showFloatingMessage(
-                    currentLang === 'zh-CN' ? '导出成功（无图片数据）' : 'Export successful (no image data)',
-                    'success'
-                );
-                addLogEntry('导出清单（无图片）', 'success');
-                return;
-            }
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-            script.onload = function() {
-                const zip = new JSZip();
-                zip.file('checklist.json', JSON.stringify(checklist, null, 2));
-                imageBlobs.forEach((blob, imageId) => zip.file(`images/${imageId}.png`, blob));
-                zip.generateAsync({ type: 'blob' }).then(content => {
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(content);
-                    link.download = `checklist_export_${new Date().toISOString().slice(0, 10)}.zip`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    showFloatingMessage(
-                        currentLang === 'zh-CN' ? '导出完成！' : 'Export completed!',
-                        'success'
-                    );
-                    addLogEntry(`导出清单和 ${imageBlobs.size} 张图片`, 'success');
-                });
-            };
-            script.onerror = () => {
-                console.error('无法加载JSZip库');
-                showFloatingMessage(
-                    currentLang === 'zh-CN' ? '导出失败，降级为仅导出JSON' : 'Export failed, downgraded to JSON only',
-                    'warning'
-                );
-                addLogEntry('导出失败：JSZip加载错误', 'error');
-                exportJsonFile();
-            };
-            document.head.appendChild(script);
-        }
-        */
 
         function exportJsonFile() {
             const data = JSON.stringify(checklist, null, 2);
