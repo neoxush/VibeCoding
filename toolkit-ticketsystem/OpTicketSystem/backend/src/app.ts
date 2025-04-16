@@ -4,25 +4,20 @@ import helmet from 'helmet'
 import dotenv from 'dotenv'
 import path from 'path'
 
+// Import routes
+import authRoutes from './routes/auth'
+import userRoutes from './routes/users'
+import ticketRoutes from './routes/tickets'
+import commentRoutes from './routes/comments'
+import statusRoutes from './routes/statuses'
+import customFieldRoutes from './routes/customFields'
+import attachmentRoutes from './routes/attachments'
+
+// Import middleware
+import { errorHandler, notFound } from './middleware/errorHandler'
+
 // Load environment variables
 dotenv.config()
-
-// Create a simple router for initial testing
-const router = express.Router()
-
-// Health check route
-router.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' })
-})
-
-// Simple auth routes for testing
-router.post('/auth/register', (req, res) => {
-  res.status(200).json({ message: 'Registration endpoint (to be implemented)' })
-})
-
-router.post('/auth/login', (req, res) => {
-  res.status(200).json({ message: 'Login endpoint (to be implemented)' })
-})
 
 // Create Express app
 const app = express()
@@ -37,16 +32,23 @@ app.use(express.urlencoded({ extended: true }))
 // Static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
 
+// Health check route
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok' })
+})
+
 // API routes
-app.use('/api', router)
+app.use('/api/auth', authRoutes)
+app.use('/api/users', userRoutes)
+app.use('/api/tickets', ticketRoutes)
+app.use('/api/comments', commentRoutes)
+app.use('/api/statuses', statusRoutes)
+app.use('/api/custom-fields', customFieldRoutes)
+app.use('/api/attachments', attachmentRoutes)
 
 // Error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack)
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal Server Error',
-  })
-})
+app.use(notFound)
+app.use(errorHandler)
 
 // Start server
 app.listen(PORT, () => {

@@ -1,6 +1,23 @@
 import { Request, Response } from 'express'
 import bcrypt from 'bcrypt'
 import prisma from '../utils/prisma'
+import { ApiError } from '../middleware/errorHandler'
+import { z } from 'zod'
+
+// Validation schemas
+const UserCreateSchema = z.object({
+  username: z.string().min(3).max(50),
+  email: z.string().email(),
+  password: z.string().min(6),
+  role: z.enum(['admin', 'manager', 'agent', 'user']),
+})
+
+const UserUpdateSchema = z.object({
+  username: z.string().min(3).max(50).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(6).optional(),
+  role: z.enum(['admin', 'manager', 'agent', 'user']).optional(),
+})
 
 // Get all users (admin only)
 export const getAllUsers = async (req: Request, res: Response) => {
@@ -19,7 +36,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
     res.json(users)
   } catch (error) {
     console.error('Get all users error:', error)
-    res.status(500).json({ message: 'Server error' })
+    throw new ApiError(500, 'Failed to retrieve users')
   }
 }
 
@@ -41,20 +58,25 @@ export const getUserById = async (req: Request, res: Response) => {
     })
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' })
+      throw new ApiError(404, 'User not found')
     }
 
     res.json(user)
   } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
     console.error('Get user by ID error:', error)
-    res.status(500).json({ message: 'Server error' })
+    throw new ApiError(500, 'Failed to retrieve user')
   }
 }
 
 // Create user (admin only)
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { username, email, password, role } = req.body
+    // Validate input
+    const validatedData = UserCreateSchema.parse(req.body)
+    const { username, email, password, role } = validatedData
 
     // Check if user already exists
     const existingUser = await prisma.user.findFirst({
@@ -67,7 +89,7 @@ export const createUser = async (req: Request, res: Response) => {
     })
 
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' })
+      throw new ApiError(400, 'User already exists')
     }
 
     // Hash password
@@ -94,8 +116,14 @@ export const createUser = async (req: Request, res: Response) => {
       updatedAt: user.updatedAt,
     })
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new ApiError(400, 'Validation error', false)
+    }
+    if (error instanceof ApiError) {
+      throw error
+    }
     console.error('Create user error:', error)
-    res.status(500).json({ message: 'Server error' })
+    throw new ApiError(500, 'Failed to create user')
   }
 }
 
@@ -103,7 +131,10 @@ export const createUser = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
-    const { username, email, role, password } = req.body
+
+    // Validate input
+    const validatedData = UserUpdateSchema.parse(req.body)
+    const { username, email, role, password } = validatedData
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -111,12 +142,12 @@ export const updateUser = async (req: Request, res: Response) => {
     })
 
     if (!existingUser) {
-      return res.status(404).json({ message: 'User not found' })
+      throw new ApiError(404, 'User not found')
     }
 
     // Check if user is trying to update their own role (not allowed)
     if (req.user.id === id && role && role !== req.user.role) {
-      return res.status(403).json({ message: 'Cannot change your own role' })
+      throw new ApiError(403, 'Cannot change your own role')
     }
 
     // Prepare update data
@@ -124,7 +155,7 @@ export const updateUser = async (req: Request, res: Response) => {
     if (username) updateData.username = username
     if (email) updateData.email = email
     if (role) updateData.role = role
-    
+
     // Hash password if provided
     if (password) {
       const salt = await bcrypt.genSalt(10)
@@ -147,8 +178,14 @@ export const updateUser = async (req: Request, res: Response) => {
 
     res.json(updatedUser)
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new ApiError(400, 'Validation error', false)
+    }
+    if (error instanceof ApiError) {
+      throw error
+    }
     console.error('Update user error:', error)
-    res.status(500).json({ message: 'Server error' })
+    throw new ApiError(500, 'Failed to update user')
   }
 }
 
@@ -163,12 +200,12 @@ export const deleteUser = async (req: Request, res: Response) => {
     })
 
     if (!existingUser) {
-      return res.status(404).json({ message: 'User not found' })
+      throw new ApiError(404, 'User not found')
     }
 
     // Prevent self-deletion
     if (req.user.id === id) {
-      return res.status(403).json({ message: 'Cannot delete your own account' })
+      throw new ApiError(403, 'Cannot delete your own account')
     }
 
     // Delete user
@@ -178,7 +215,10 @@ export const deleteUser = async (req: Request, res: Response) => {
 
     res.json({ message: 'User deleted successfully' })
   } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
     console.error('Delete user error:', error)
-    res.status(500).json({ message: 'Server error' })
+    throw new ApiError(500, 'Failed to delete user')
   }
 }

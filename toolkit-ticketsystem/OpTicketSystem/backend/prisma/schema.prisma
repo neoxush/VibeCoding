@@ -5,26 +5,41 @@ generator client {
   provider = "prisma-client-js"
 }
 
+generator seed {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id             String    @id @default(uuid())
-  username       String    @unique
-  email          String    @unique
+  id             String        @id @default(uuid())
+  username       String        @unique
+  email          String        @unique
   password       String
-  role           String    @default("user") // admin, manager, agent, user
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  createdTickets Ticket[]  @relation("TicketCreator")
-  assignedTickets Ticket[] @relation("TicketAssignee")
+  role           String        @default("user") // admin, manager, agent, user
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdTickets Ticket[]      @relation("TicketCreator")
+  assignedTickets Ticket[]     @relation("TicketAssignee")
   comments       Comment[]
   attachments    Attachment[]
   polls          Poll[]
   pollResponses  PollResponse[]
   ticketHistory  TicketHistory[]
+  refreshTokens  RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Ticket {
