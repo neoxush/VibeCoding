@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pending Approvals - Ticket System</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="css/ui-fixes.css">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="navbar-container"></div>
+
+    <div class="container mx-auto px-4 py-8">
+        <div id="alert-container"></div>
+
+        <div class="flex items-center mb-8">
+            <a href="dashboard.html" class="text-blue-600 hover:text-blue-800 mr-4">
+                &larr; Back to Dashboard
+            </a>
+            <h1 class="text-3xl font-bold">Pending Approvals</h1>
+        </div>
+
+        <div id="authorization-error" style="display: none;" class="bg-red-50 p-4 rounded-md">
+            <p class="text-red-700">
+                You do not have permission to access this page.
+            </p>
+        </div>
+
+        <div id="pending-approvals-container" class="bg-white shadow-md rounded-lg overflow-hidden">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Tickets Pending Approval</h2>
+                <p class="mt-1 max-w-2xl text-sm text-gray-500">
+                    Review and approve or reject these tickets
+                </p>
+            </div>
+            <div class="border-t border-gray-200">
+                <div id="pending-approvals-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/tickets.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/shared-data.js"></script>
+    <!-- Load network-client.js first to ensure toolbar is created before other components -->
+    <script src="js/network-client.js"></script>
+    <script src="js/notifications.js"></script>
+    <script src="js/activity-feed.js"></script>
+    <script>
+        // Function to update pending approvals
+        function updatePendingApprovals() {
+            // Get pending approval tickets
+            const pendingTickets = getPendingApprovalTickets();
+
+            // Update count in title
+            const titleElement = document.querySelector('#pending-approvals-container h2');
+            if (titleElement) {
+                titleElement.textContent = `Tickets Pending Approval (${pendingTickets.length})`;
+            }
+
+            // Render pending approvals
+            renderPendingApprovals(pendingTickets, 'pending-approvals-list');
+            console.log('Pending approvals updated:', pendingTickets.length);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if user is authenticated
+            if (!requireAuth()) return;
+
+            // Update navbar
+            updateNavbar();
+
+            // Check if user can approve tickets
+            if (!canApproveTickets()) {
+                document.getElementById('authorization-error').style.display = 'block';
+                document.getElementById('pending-approvals-container').style.display = 'none';
+                return;
+            }
+
+            // Initial update
+            updatePendingApprovals();
+
+            // Listen for data changes
+            document.addEventListener('dataChanged', function() {
+                console.log('Data changed, updating pending approvals...');
+                updatePendingApprovals();
+                showToast('Pending approvals updated with latest data', 'info');
+            });
+        });
+    </script>
+</body>
+</html>

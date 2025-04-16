@@ -1,0 +1,35 @@
+[
+  {
+    "id": "superadmin-fixed",
+    "name": "System Administrator",
+    "email": "admin@admin",
+    "password": "admin",
+    "role": "admin",
+    "createdAt": "2025-04-14T06:13:43.859Z",
+    "isSuperAdmin": true
+  },
+  {
+    "id": "admin-fixed",
+    "name": "Admin User",
+    "email": "admin@example.com",
+    "password": "password",
+    "role": "admin",
+    "createdAt": "2025-04-14T06:13:43.860Z"
+  },
+  {
+    "id": "approver-fixed",
+    "name": "Approver User",
+    "email": "approver@example.com",
+    "password": "password",
+    "role": "approver",
+    "createdAt": "2025-04-14T06:13:43.860Z"
+  },
+  {
+    "id": "user-fixed",
+    "name": "Regular User",
+    "email": "user@example.com",
+    "password": "password",
+    "role": "user",
+    "createdAt": "2025-04-14T06:13:43.860Z"
+  }
+]
