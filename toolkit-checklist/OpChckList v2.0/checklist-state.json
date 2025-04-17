@@ -1,5 +1,12 @@
 {
-  "checklist": [],
-  "nextUserId": 33,
-  "timestamp": 1744854447396
+  "checklist": [
+    {
+      "title": "123123123123124",
+      "content": "14124124124",
+      "imagePath": "",
+      "done": false
+    }
+  ],
+  "nextUserId": 45,
+  "timestamp": 1744858183307
 }
