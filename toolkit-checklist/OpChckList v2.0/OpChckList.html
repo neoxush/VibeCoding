@@ -793,6 +793,13 @@
                 publicIp: '公共IP',
                 publicIpHelp: '公共IP可能需要端口转发才能从外部访问。',
                 fetchingIp: '获取IP中...',
+                useManualIp: '使用此IP',
+                manualIpInput: '手动输入IP',
+                manualIpHelp: '如果自动检测不正确，请手动输入您的IP地址',
+                autoDetectedIp: '自动检测到的本地IP',
+                manuallySpecifiedIp: '手动指定的IP地址',
+                saveManualIp: '保存',
+                editManualIp: '编辑',
                 sessionConnection: '会话连接',
                 createSession: '创建会话',
                 joinSession: '加入会话',
@@ -881,6 +888,13 @@
                 publicIp: 'Public IP',
                 publicIpHelp: 'Public IP may require port forwarding to be accessible from outside.',
                 fetchingIp: 'Fetching IP...',
+                useManualIp: 'Use this IP',
+                manualIpInput: 'Enter IP manually',
+                manualIpHelp: 'If automatic detection is incorrect, please enter your IP address manually',
+                autoDetectedIp: 'Auto-detected local IP',
+                manuallySpecifiedIp: 'Manually specified IP address',
+                saveManualIp: 'Save',
+                editManualIp: 'Edit',
                 sessionConnection: 'Session Connection',
                 createSession: 'Create Session',
                 joinSession: 'Join Session',
@@ -905,36 +919,59 @@
         // Function to detect local IP address
         async function detectLocalIpAddress() {
             try {
-                // Try to use WebRTC to get local IP
-                const pc = new RTCPeerConnection({ iceServers: [] });
-                pc.createDataChannel('');
-                await pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                // Try multiple methods to get the local IP
+                // Method 1: Use WebRTC (most reliable for browser environments)
+                try {
+                    const pc = new RTCPeerConnection({ iceServers: [] });
+                    pc.createDataChannel('');
+                    await pc.createOffer().then(offer => pc.setLocalDescription(offer));
 
-                return new Promise((resolve) => {
-                    pc.onicecandidate = (ice) => {
-                        if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+                    // Collect all non-loopback IPs
+                    const ips = [];
 
-                        const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
-                        const ipMatch = ipRegex.exec(ice.candidate.candidate);
+                    return new Promise((resolve) => {
+                        pc.onicecandidate = (ice) => {
+                            if (!ice || !ice.candidate || !ice.candidate.candidate) return;
 
-                        if (ipMatch && ipMatch[1]) {
-                            const ip = ipMatch[1];
-                            if (!ip.startsWith('127.')) {
-                                pc.onicecandidate = null;
-                                pc.close();
-                                resolve(ip);
+                            const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
+                            const ipMatch = ipRegex.exec(ice.candidate.candidate);
+
+                            if (ipMatch && ipMatch[1]) {
+                                const ip = ipMatch[1];
+                                // Skip loopback addresses
+                                if (!ip.startsWith('127.') && !ips.includes(ip)) {
+                                    ips.push(ip);
+
+                                    // Prefer IPs in common private network ranges
+                                    if (ip.startsWith('10.') || ip.startsWith('192.168.') || ip.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+                                        pc.onicecandidate = null;
+                                        pc.close();
+                                        console.log('Detected local IPs:', ips, 'Selected:', ip);
+                                        resolve(ip);
+                                    }
+                                }
                             }
-                        }
-                    };
+                        };
 
-                    // Fallback if no candidates with IP are found
-                    setTimeout(() => {
-                        pc.close();
-                        resolve('localhost');
-                    }, 1000);
-                });
+                        // Fallback if no candidates with preferred IP are found
+                        setTimeout(() => {
+                            pc.close();
+                            // If we found any non-loopback IPs, use the first one
+                            if (ips.length > 0) {
+                                console.log('Using first available IP:', ips[0], 'from', ips);
+                                resolve(ips[0]);
+                            } else {
+                                console.log('No local IPs detected, falling back to localhost');
+                                resolve('localhost');
+                            }
+                        }, 1500);
+                    });
+                } catch (rtcError) {
+                    console.error('WebRTC method failed:', rtcError);
+                    throw rtcError; // Let the outer catch handle it
+                }
             } catch (error) {
-                console.error('Error detecting local IP:', error);
+                console.error('All IP detection methods failed:', error);
                 return 'localhost';
             }
         }
@@ -1255,6 +1292,84 @@
                                 currentLang === 'zh-CN' ? '已更新服务器地址' : 'Server address updated',
                                 'success'
                             );
+                        }
+                    });
+                }
+
+                // Add functionality for manual IP handling
+                const useManualIpBtn = document.getElementById('useManualIpBtn');
+                const manualIpInput = document.getElementById('manualIpInput');
+                const manualIpDisplay = document.getElementById('manualIpDisplay');
+                const editManualIpBtn = document.getElementById('editManualIpBtn');
+                const saveManualIpBtn = document.getElementById('saveManualIpBtn');
+
+                // Function to use the manual IP
+                function useManualIp() {
+                    const manualIp = manualIpDisplay.textContent.trim();
+                    if (serverUrlInput && manualIp) {
+                        // Validate IP format
+                        const ipRegex = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
+                        if (ipRegex.test(manualIp)) {
+                            serverUrlInput.value = `ws://${manualIp}:8080`;
+                            serverUrl = serverUrlInput.value;
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? '已使用手动输入的IP地址' : 'Using manually entered IP address',
+                                'success'
+                            );
+                            addLogEntry(`使用手动IP: ${manualIp}`, 'info');
+                        } else {
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? 'IP地址格式不正确' : 'Invalid IP address format',
+                                'error'
+                            );
+                        }
+                    }
+                }
+
+                // Use manual IP button click handler
+                if (useManualIpBtn) {
+                    useManualIpBtn.addEventListener('click', useManualIp);
+                }
+
+                // Edit manual IP button click handler
+                if (editManualIpBtn && manualIpInput) {
+                    editManualIpBtn.addEventListener('click', function() {
+                        // Show the input field and hide the display
+                        manualIpInput.value = manualIpDisplay.textContent.trim();
+                        manualIpInput.parentElement.classList.remove('d-none');
+                        manualIpInput.focus();
+                        manualIpInput.select();
+                    });
+                }
+
+                // Save manual IP button click handler
+                if (saveManualIpBtn && manualIpInput && manualIpDisplay) {
+                    saveManualIpBtn.addEventListener('click', function() {
+                        const newIp = manualIpInput.value.trim();
+                        // Validate IP format
+                        const ipRegex = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
+                        if (ipRegex.test(newIp)) {
+                            manualIpDisplay.textContent = newIp;
+                            manualIpInput.parentElement.classList.add('d-none');
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? '手动IP已更新' : 'Manual IP updated',
+                                'success'
+                            );
+                        } else {
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? 'IP地址格式不正确' : 'Invalid IP address format',
+                                'error'
+                            );
+                        }
+                    });
+                }
+
+                // Also allow pressing Enter in the input field
+                if (manualIpInput && saveManualIpBtn) {
+                    manualIpInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            saveManualIpBtn.click();
                         }
                     });
                 }
@@ -2535,6 +2650,12 @@
                     document.getElementById('connectBtn').classList.add('d-none');
                     document.getElementById('disconnectBtn').classList.remove('d-none');
                     document.getElementById('activeUsersCount').parentElement.classList.remove('d-none');
+
+                    // Activate page lock to prevent accidental refresh/navigation
+                    if (!pageIsLocked) {
+                        togglePageLock();
+                        addLogEntry('已自动锁定页面以防止意外刷新', 'info');
+                    }
                 };
 
                 socket.onmessage = function(event) {
@@ -2605,6 +2726,12 @@
                 if (shareSessionBtn) {
                     shareSessionBtn.classList.add('d-none');
                 }
+            }
+
+            // Deactivate page lock if it was automatically activated
+            if (pageIsLocked) {
+                togglePageLock();
+                addLogEntry('已自动解除页面锁定', 'info');
             }
 
             // Show connect button, hide disconnect button
@@ -3340,19 +3467,54 @@
                         </h2>
                         <div id="localIpCollapse" class="accordion-collapse collapse show" data-bs-parent="#ipAccordion">
                             <div class="accordion-body">
-                                <div class="d-flex align-items-center mb-2">
-                                    <span id="localIpDisplay" class="ip-display flex-grow-1">获取IP中...</span>
-                                    <button class="btn btn-sm btn-outline-secondary ms-2" id="copyLocalIpBtn" data-tooltip-key="copyToClipboard">
-                                        <i class="bi bi-clipboard"></i>
-                                    </button>
-                                </div>
-                                <div class="d-grid">
-                                    <button class="btn btn-sm btn-outline-primary" id="useLocalIpBtn">
+                                <div class="mb-3">
+                                    <!-- Section title -->
+                                    <div class="small text-muted mb-2">
+                                        <i class="bi bi-info-circle me-1"></i> <span data-lang-key="autoDetectedIp">自动检测到的本地IP</span>
+                                    </div>
+
+                                    <!-- Local IP display with copy button -->
+                                    <div class="bg-light p-2 mb-2 rounded d-flex align-items-center">
+                                        <span id="localIpDisplay" class="ip-display flex-grow-1 text-primary fw-bold">获取IP中...</span>
+                                        <button class="btn btn-sm btn-outline-secondary" id="copyLocalIpBtn" data-tooltip-key="copyToClipboard">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Use IP button -->
+                                    <button class="btn btn-outline-primary w-100 mb-3" id="useLocalIpBtn">
                                         <i class="bi bi-arrow-right-circle me-1"></i> <span data-lang-key="useThisIp">使用此IP</span>
                                     </button>
+
+                                    <!-- Manual IP section title -->
+                                    <div class="small text-muted mb-2 mt-4">
+                                        <i class="bi bi-info-circle me-1"></i> <span data-lang-key="manuallySpecifiedIp">手动指定的IP地址</span>
+                                    </div>
+
+                                    <!-- Manual IP input -->
+                                    <div>
+                                        <div class="bg-light p-2 mb-2 rounded d-flex align-items-center">
+                                            <span id="manualIpDisplay" class="flex-grow-1 text-primary fw-bold">10.219.148.59</span>
+                                            <button class="btn btn-sm btn-outline-secondary" id="editManualIpBtn" data-tooltip-key="editManualIp">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                        </div>
+                                        <button class="btn btn-outline-primary w-100 mb-2" id="useManualIpBtn">
+                                            <i class="bi bi-check-circle me-1"></i> <span data-lang-key="useManualIp">使用此IP</span>
+                                        </button>
+                                        <div class="input-group input-group-sm mb-2 d-none">
+                                            <input type="text" class="form-control" id="manualIpInput" placeholder="手动输入IP" value="10.219.148.59">
+                                            <button class="btn btn-outline-primary" id="saveManualIpBtn">
+                                                <i class="bi bi-check me-1"></i> <span data-lang-key="saveManualIp">保存</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="mt-2 small text-muted">
-                                    <i class="bi bi-info-circle me-1"></i> 适用于同一网络内的连接
+
+                                <!-- Help text -->
+                                <div class="small text-muted mb-2">
+                                    <div><i class="bi bi-info-circle me-1"></i> <span data-lang-key="manualIpHelp">如果自动检测不正确，请手动输入您的IP地址</span></div>
+                                    <div class="mt-1"><i class="bi bi-info-circle me-1"></i> <span>适用于同一网络内的连接</span></div>
                                 </div>
                             </div>
                         </div>
@@ -3367,14 +3529,17 @@
                         </h2>
                         <div id="publicIpCollapse" class="accordion-collapse collapse" data-bs-parent="#ipAccordion">
                             <div class="accordion-body">
-                                <div class="d-flex align-items-center mb-2">
-                                    <span id="publicIpDisplay" class="ip-display flex-grow-1">获取IP中...</span>
-                                    <button class="btn btn-sm btn-outline-secondary ms-2" id="copyPublicIpBtn" data-tooltip-key="copyToClipboard">
-                                        <i class="bi bi-clipboard"></i>
-                                    </button>
-                                </div>
-                                <div class="d-grid">
-                                    <button class="btn btn-sm btn-outline-primary" id="usePublicIpBtn">
+                                <div class="mb-3">
+                                    <!-- Public IP display with copy button -->
+                                    <div class="bg-light p-2 mb-2 rounded d-flex align-items-center">
+                                        <span id="publicIpDisplay" class="ip-display flex-grow-1 text-primary fw-bold">获取IP中...</span>
+                                        <button class="btn btn-sm btn-outline-secondary" id="copyPublicIpBtn" data-tooltip-key="copyToClipboard">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Use IP button -->
+                                    <button class="btn btn-outline-primary w-100 mb-2" id="usePublicIpBtn">
                                         <i class="bi bi-arrow-right-circle me-1"></i> <span data-lang-key="useThisIp">使用此IP</span>
                                     </button>
                                 </div>
