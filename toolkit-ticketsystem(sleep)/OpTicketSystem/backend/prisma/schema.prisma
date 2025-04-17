@@ -1,0 +1,161 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator seed {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String        @id @default(uuid())
+  username       String        @unique
+  email          String        @unique
+  password       String
+  role           String        @default("user") // admin, manager, agent, user
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdTickets Ticket[]      @relation("TicketCreator")
+  assignedTickets Ticket[]     @relation("TicketAssignee")
+  comments       Comment[]
+  attachments    Attachment[]
+  polls          Poll[]
+  pollResponses  PollResponse[]
+  ticketHistory  TicketHistory[]
+  refreshTokens  RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Ticket {
+  id             String    @id @default(uuid())
+  title          String
+  content        String
+  statusId       String
+  creatorId      String
+  assigneeId     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  creator        User      @relation("TicketCreator", fields: [creatorId], references: [id])
+  assignee       User?     @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  status         TicketStatus @relation(fields: [statusId], references: [id])
+  comments       Comment[]
+  attachments    Attachment[]
+  polls          Poll[]
+  history        TicketHistory[]
+  customFieldValues TicketCustomFieldValue[]
+}
+
+model TicketStatus {
+  id                  String    @id @default(uuid())
+  name                String    @unique
+  description         String?
+  color               String    @default("#808080")
+  order               Int       @default(0)
+  autoTransitionTo    String?
+  transitionCondition String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  tickets             Ticket[]
+}
+
+model Comment {
+  id        String    @id @default(uuid())
+  ticketId  String
+  userId    String
+  content   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  ticket    Ticket    @relation(fields: [ticketId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+}
+
+model Attachment {
+  id        String    @id @default(uuid())
+  ticketId  String
+  userId    String
+  fileName  String
+  filePath  String
+  fileType  String
+  fileSize  Int
+  createdAt DateTime  @default(now())
+  ticket    Ticket    @relation(fields: [ticketId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+}
+
+model Poll {
+  id        String    @id @default(uuid())
+  ticketId  String
+  creatorId String
+  question  String
+  options   String    // JSON string of options
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  ticket    Ticket    @relation(fields: [ticketId], references: [id])
+  creator   User      @relation(fields: [creatorId], references: [id])
+  responses PollResponse[]
+}
+
+model PollResponse {
+  id            String    @id @default(uuid())
+  pollId        String
+  userId        String
+  selectedOption String
+  createdAt     DateTime  @default(now())
+  poll          Poll      @relation(fields: [pollId], references: [id])
+  user          User      @relation(fields: [userId], references: [id])
+
+  @@unique([pollId, userId])
+}
+
+model TicketHistory {
+  id           String    @id @default(uuid())
+  ticketId     String
+  userId       String
+  action       String
+  previousValue String?
+  newValue     String?
+  createdAt    DateTime  @default(now())
+  ticket       Ticket    @relation(fields: [ticketId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
+}
+
+model CustomField {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  fieldType String    // text, number, select, date, etc.
+  options   String?   // JSON string of options for select fields
+  required  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  values    TicketCustomFieldValue[]
+}
+
+model TicketCustomFieldValue {
+  id            String    @id @default(uuid())
+  ticketId      String
+  customFieldId String
+  value         String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  ticket        Ticket    @relation(fields: [ticketId], references: [id])
+  customField   CustomField @relation(fields: [customFieldId], references: [id])
+
+  @@unique([ticketId, customFieldId])
+}
