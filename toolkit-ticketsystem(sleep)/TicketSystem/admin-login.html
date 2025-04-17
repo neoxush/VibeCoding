@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f3f4f6;
+        }
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .status-message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1 class="text-2xl font-bold mb-6 text-center">Admin Login</h1>
+        
+        <form id="login-form">
+            <div class="mb-4">
+                <label for="email" class="block text-gray-700 mb-2">Email</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    value="admin@admin"
+                    readonly
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+            </div>
+            
+            <div class="mb-6">
+                <label for="password" class="block text-gray-700 mb-2">Password</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    value="admin"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+            </div>
+            
+            <button 
+                type="submit" 
+                class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+                Login
+            </button>
+        </form>
+        
+        <div id="status-message" class="status-message hidden"></div>
+        
+        <div class="mt-4 text-center">
+            <a href="index.html" class="text-blue-600 hover:underline">Back to Home</a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginForm = document.getElementById('login-form');
+            const statusMessage = document.getElementById('status-message');
+            
+            loginForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                // Simple direct login for admin
+                if (email === 'admin@admin' && password === 'admin') {
+                    // Create admin user object
+                    const adminUser = {
+                        id: 'superadmin-fixed',
+                        name: 'System Administrator',
+                        email: 'admin@admin',
+                        role: 'admin',
+                        isSuperAdmin: true
+                    };
+                    
+                    // Save to localStorage
+                    localStorage.setItem('currentUser', JSON.stringify(adminUser));
+                    
+                    // Show success message
+                    statusMessage.textContent = 'Login successful! Redirecting...';
+                    statusMessage.className = 'status-message success';
+                    statusMessage.classList.remove('hidden');
+                    
+                    // Redirect to dashboard
+                    setTimeout(() => {
+                        window.location.href = 'dashboard.html';
+                    }, 1500);
+                } else {
+                    // Show error message
+                    statusMessage.textContent = 'Invalid email or password. Please use admin@admin / admin';
+                    statusMessage.className = 'status-message error';
+                    statusMessage.classList.remove('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
