@@ -1102,6 +1102,16 @@
             addLogEntry(`加入会话: ${sessionId}`, 'info');
         }
 
+        // Simple function to format connection info for sharing
+        function formatConnectionInfo(serverUrl) {
+            return `Server URL: ${serverUrl}`;
+        }
+
+        // Simple function to format session info for sharing
+        function formatSessionInfo(sessionId) {
+            return `Session ID: ${sessionId}`;
+        }
+
         // Function to share the current session
         function shareSession() {
             if (!isConnected || !sessionId) {
@@ -1112,10 +1122,8 @@
                 return;
             }
 
-            // Create a shareable URL with the session ID
-            const currentUrl = new URL(window.location.href.split('?')[0], window.location.href);
-            currentUrl.searchParams.set('session', sessionId);
-            const shareableUrl = currentUrl.toString();
+            // Format the session info for sharing
+            const shareableInfo = formatSessionInfo(sessionId);
 
             // Create a modal to show the session info
             // First, check if there's already a share modal and remove it
@@ -1154,16 +1162,12 @@
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
+                        <small class="text-muted">${currentLang === 'zh-CN' ? '其他用户可以使用此ID直接加入您的会话' : 'Other users can use this ID to join your session directly'}</small>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" data-lang-key="shareConnection">${getTranslation('shareConnection')}</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" value="${shareableUrl}" readonly>
-                            <button class="btn btn-outline-secondary copy-btn" data-copy-text="${shareableUrl}">
-                                <i class="bi bi-clipboard"></i>
-                            </button>
-                        </div>
-                        <small class="text-muted">${currentLang === 'zh-CN' ? '分享此链接给其他用户以加入您的会话' : 'Share this link with other users to join your session'}</small>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <small>${currentLang === 'zh-CN' ? '分享此会话 ID 给其他用户，他们可以在“加入会话”面板中输入此 ID 来加入您的会话' : 'Share this Session ID with other users. They can enter this ID in the "Join Session" panel to join your session'}</small>
                     </div>
                 </div>
                 <div class="custom-modal-footer">
@@ -1602,30 +1606,26 @@
             // Check if there's a connection parameter in the URL
             try {
                 const urlParams = new URLSearchParams(window.location.search);
-                const connectParam = urlParams.get('connect');
+                const serverUrlParam = urlParams.get('serverUrl');
                 const sessionParam = urlParams.get('session');
 
-                if (connectParam) {
-                    const connectionInfo = JSON.parse(atob(connectParam));
-                    console.log('Found connection info in URL:', connectionInfo);
+                if (serverUrlParam) {
+                    // Set the server URL
+                    document.getElementById('serverUrlInput').value = serverUrlParam;
+                    serverUrl = serverUrlParam;
 
-                    if (connectionInfo.serverUrl) {
-                        // Set the server URL
-                        document.getElementById('serverUrlInput').value = connectionInfo.serverUrl;
-                        serverUrl = connectionInfo.serverUrl;
+                    // Show a notification
+                    showFloatingMessage(
+                        currentLang === 'zh-CN'
+                            ? '已从 URL 加载服务器地址，点击连接按钮连接到服务器'
+                            : 'Server URL loaded from URL, click Connect to join the server',
+                        'info',
+                        5000
+                    );
 
-                        // Show a notification
-                        showFloatingMessage(
-                            currentLang === 'zh-CN'
-                                ? '已从 URL 加载连接信息，点击连接按钮连接到服务器'
-                                : 'Connection info loaded from URL, click Connect to join the server',
-                            'info',
-                            5000
-                        );
-
-                        // Open the collaboration modal
-                        showCollabModal();
-                    }
+                    // Open the collaboration modal and switch to direct connection tab
+                    showCollabModal();
+                    document.getElementById('direct-tab').click();
                 } else if (sessionParam) {
                     // Set the session ID
                     const sessionIdInput = document.getElementById('sessionIdInput');
@@ -1644,8 +1644,9 @@
                         5000
                     );
 
-                    // Open the collaboration modal
+                    // Open the collaboration modal and ensure session tab is active
                     showCollabModal();
+                    document.getElementById('session-tab').click();
                 }
             } catch (error) {
                 console.error('Error parsing connection info from URL:', error);
@@ -3197,20 +3198,8 @@
             // Determine if we're sharing a host connection or client connection
             const isHostConnection = serverUrl.includes(localIpAddress) || serverUrl.includes('localhost');
 
-            // Create a connection info object
-            const connectionInfo = {
-                serverUrl: serverUrl,
-                appName: 'OpChckList v2.0',
-                timestamp: Date.now(),
-                isHost: isHostConnection
-            };
-
-            // Convert to JSON and encode for sharing
-            const connectionString = btoa(JSON.stringify(connectionInfo));
-
-            // Create a shareable URL
-            const currentUrl = window.location.href.split('?')[0]; // Remove any existing query params
-            const shareableUrl = `${currentUrl}?connect=${connectionString}`;
+            // Format the connection info for sharing
+            const shareableInfo = formatConnectionInfo(serverUrl);
 
             // Create a modal to show the connection info
             // First, check if there's already a share modal and remove it
@@ -3229,16 +3218,16 @@
             shareModalBackdrop.id = 'shareModalBackdrop';
             document.body.appendChild(shareModalBackdrop);
 
+            // Determine connection type title
+            const connectionTypeTitle = isHostConnection
+                ? getTranslation('hostConnection')
+                : getTranslation('clientConnection');
+
             // Create modal
             const shareModal = document.createElement('div');
             shareModal.className = 'custom-modal';
             shareModal.id = 'shareConnectionModal';
             shareModal.setAttribute('tabindex', '-1');
-
-            // Determine the connection type title
-            const connectionTypeTitle = isHostConnection
-                ? getTranslation('hostConnection')
-                : getTranslation('clientConnection');
 
             shareModal.innerHTML = `
                 <div class="custom-modal-header">
@@ -3254,23 +3243,20 @@
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
+                        <small class="text-muted">${currentLang === 'zh-CN' ? '其他用户可以使用此服务器地址直接连接' : 'Other users can use this server address to connect directly'}</small>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">${getTranslation('shareConnection')}</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" value="${shareableUrl}" readonly>
-                            <button class="btn btn-outline-secondary copy-btn" data-copy-text="${shareableUrl}">
-                                <i class="bi bi-clipboard"></i>
-                            </button>
-                        </div>
-                        <small class="text-muted">${currentLang === 'zh-CN' ? '分享此链接给其他用户以连接到相同的服务器' : 'Share this link with other users to connect to the same server'}</small>
-                    </div>
-                    ${isHostConnection ? `
+
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle me-2"></i>
-                        ${currentLang === 'zh-CN'
+                        <small>${currentLang === 'zh-CN' ? '分享此服务器地址给其他用户，他们可以在“直接连接”面板中输入此地址来连接到您的服务器' : 'Share this server address with other users. They can enter this address in the "Direct Connection" panel to connect to your server'}</small>
+                    </div>
+
+                    ${isHostConnection ? `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <small>${currentLang === 'zh-CN'
                             ? '您正在分享主机连接。确保服务器正在运行，并且其他用户可以访问您的IP地址。'
-                            : 'You are sharing a host connection. Make sure the server is running and your IP address is accessible to other users.'}
+                            : 'You are sharing a host connection. Make sure the server is running and your IP address is accessible to other users.'}</small>
                     </div>
                     ` : ''}
                 </div>
