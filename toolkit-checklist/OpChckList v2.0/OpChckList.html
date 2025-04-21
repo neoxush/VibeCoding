@@ -342,6 +342,28 @@
             color: #aaa !important;
         }
 
+        .night-mode .nav-link.disabled {
+            color: #aaa;
+            background-color: transparent;
+        }
+
+        .night-mode .nav-link.disabled .badge {
+            background-color: #555;
+            color: #ddd;
+        }
+
+        /* Disabled tab styles */
+        .nav-link.disabled {
+            color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .nav-link.disabled .badge {
+            font-size: 0.65em;
+            padding: 0.25em 0.5em;
+        }
+
         /* Collaboration Styles */
         .connection-indicator {
             display: inline-block;
@@ -763,7 +785,7 @@
                 connectBtn: '连接到服务器',
                 disconnectBtn: '断开连接',
                 usernameInput: '输入用户名',
-                serverUrlInput: '服务器地址',
+                serverUrlInput: '完整连接地址',
                 connected: '已连接',
                 disconnected: '未连接',
                 connecting: '连接中...',
@@ -816,6 +838,19 @@
                 shareSession: '分享会话',
                 directConnection: '直接连接',
                 directConnectionWarning: '直接连接需要网络可访问性，可能不适用于所有网络环境。如果可能，请使用会话连接。',
+                publicConnection: '公共连接',
+                localNetworkInfo: '本地网络连接允许您在同一网络上的设备之间进行协作。',
+                useLocalIp: '使用本地IP',
+                hostIpAddress: '主机IP地址',
+                enterHostIp: '输入主机IP地址',
+                enterHostIpPlaceholder: '输入主机IP地址',
+                hostIpHelp: '其他用户可以使用此IP地址连接到您的服务器',
+                serverUrlHelp: '请将此完整连接地址分享给其他用户，他们可以直接将其粘贴到连接输入框中',
+                connectionShareInfo: '其他用户需要使用完整的WebSocket地址（包含ws://协议和端口）来连接',
+                ipSetupInstructions: '请先运行 start-server.bat 文件，然后将显示的IP地址复制到下面的输入框中。',
+                ipAddressExample: '例如: 192.168.1.100',
+                manualIpInstructions: '请从服务器窗口中复制您的本地IP地址，然后粘贴到上面的输入框中。',
+                invalidIpFormat: 'IP地址格式不正确，应为四个数字组用点分隔，例如: 192.168.1.100',
                 // Image sharing
                 shareImageBtn: '共享图片',
                 sharedImage: '已共享图片',
@@ -862,7 +897,7 @@
                 connectBtn: 'Connect to server',
                 disconnectBtn: 'Disconnect',
                 usernameInput: 'Enter username',
-                serverUrlInput: 'Server address',
+                serverUrlInput: 'Complete Connection Address',
                 connected: 'Connected',
                 disconnected: 'Disconnected',
                 connecting: 'Connecting...',
@@ -915,6 +950,19 @@
                 shareSession: 'Share Session',
                 directConnection: 'Direct Connection',
                 directConnectionWarning: 'Direct connections require network accessibility and may not work in all network environments. Use session connections if possible.',
+                publicConnection: 'Public Connection',
+                localNetworkInfo: 'Local network connection allows collaboration between devices on the same network.',
+                useLocalIp: 'Use Local IP',
+                hostIpAddress: 'Host IP Address',
+                enterHostIp: 'Enter host IP address',
+                enterHostIpPlaceholder: 'Enter host IP address',
+                hostIpHelp: 'Other users can use this IP address to connect to your server',
+                serverUrlHelp: 'Share this complete connection address with other users. They can paste it directly into their connection input field',
+                connectionShareInfo: 'Other users need to use the complete WebSocket address (with ws:// protocol and port) to connect',
+                ipSetupInstructions: 'Please run the start-server.bat file first, then copy the displayed IP address to the input field below.',
+                ipAddressExample: 'Example: 192.168.1.100',
+                manualIpInstructions: 'Please copy your local IP address from the server window and paste it into the input field above.',
+                invalidIpFormat: 'Invalid IP address format. Should be four numbers separated by dots, e.g., 192.168.1.100',
                 // Image sharing
                 shareImageBtn: 'Share image',
                 sharedImage: 'Shared image',
@@ -1036,8 +1084,18 @@
         /**
          * Creates a new session and connects to the server
          * This function generates a new session ID, sets up the UI, and initiates the connection
+         *
+         * NOTE: Session connection functionality is currently disabled
          */
         function createSession() {
+            // Session connection is disabled in this version
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '会话连接功能即将推出，敬请期待' : 'Session connection feature coming soon',
+                'info'
+            );
+            return;
+
+            /* Commented out session connection functionality
             if (isConnected) {
                 showFloatingMessage(
                     currentLang === 'zh-CN' ? '请先断开当前连接' : 'Please disconnect from the current session first',
@@ -1067,13 +1125,24 @@
 
             // Log the action
             addLogEntry(`创建会话: ${sessionId}`, 'info');
+            */
         }
 
         /**
          * Joins an existing session using the provided session ID
          * This function validates the session ID, sets up the UI, and initiates the connection
+         *
+         * NOTE: Session connection functionality is currently disabled
          */
         function joinSession() {
+            // Session connection is disabled in this version
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '会话连接功能即将推出，敬请期待' : 'Session connection feature coming soon',
+                'info'
+            );
+            return;
+
+            /* Commented out session connection functionality
             if (isConnected) {
                 showFloatingMessage(
                     currentLang === 'zh-CN' ? '请先断开当前连接' : 'Please disconnect from the current session first',
@@ -1100,11 +1169,19 @@
 
             // Log the action
             addLogEntry(`加入会话: ${sessionId}`, 'info');
+            */
         }
 
         // Simple function to format connection info for sharing
         function formatConnectionInfo(serverUrl) {
             return `Server URL: ${serverUrl}`;
+        }
+
+        // Function to format connection URL for sharing
+        function formatHostIpInfo(hostIp) {
+            return currentLang === 'zh-CN'
+                ? `连接地址: ws://${hostIp}:8080`
+                : `Connection URL: ws://${hostIp}:8080`;
         }
 
         // Simple function to format session info for sharing
@@ -1114,6 +1191,14 @@
 
         // Function to share the current session
         function shareSession() {
+            // Session connection is disabled in this version
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '会话连接功能即将推出，敬请期待' : 'Session connection feature coming soon',
+                'info'
+            );
+            return;
+
+            /* Commented out session sharing functionality
             if (!isConnected || !sessionId) {
                 showFloatingMessage(
                     currentLang === 'zh-CN' ? '没有活动的会话可分享' : 'No active session to share',
@@ -1233,6 +1318,7 @@
 
             // Show the modal
             showShareModal();
+            */
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -1285,11 +1371,8 @@
                     ipDisplay.textContent = autoDetectedIp;
                 }
 
-                // Update the server URL input with the detected IP
-                if (serverUrlInput && localIpAddress !== 'localhost') {
-                    serverUrlInput.value = `ws://${localIpAddress}:8080`;
-                    serverUrl = serverUrlInput.value;
-                }
+                // We're now using manual IP input from the server.bat output
+                // No need to automatically update the host IP input
             });
 
             // Function definitions for IP handling
@@ -1304,12 +1387,12 @@
             // Function to use the current IP
             function useCurrentIp() {
                 const ip = currentIpSource === 'auto' ? autoDetectedIp : manualIp;
-                if (serverUrlInput && ip) {
+                const hostIpInput = document.getElementById('hostIpInput');
+                if (hostIpInput && ip) {
                     // Validate IP format - allow both standard IP format and 'localhost'
                     const ipRegex = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
                     if (ipRegex.test(ip) || ip === 'localhost') {
-                        serverUrlInput.value = `ws://${ip}:8080`;
-                        serverUrl = serverUrlInput.value;
+                        hostIpInput.value = ip;
                         const msgType = currentIpSource === 'auto' ? '自动检测' : '手动输入';
                         showFloatingMessage(
                             currentLang === 'zh-CN'
@@ -1531,7 +1614,8 @@
                 hideCollabModal();
             });
 
-            // Add event listeners for session buttons
+            // Add event listeners for session buttons (disabled in this version)
+            /* Session buttons are disabled in this version
             document.getElementById('createSessionBtn').addEventListener('click', function() {
                 createSession();
             });
@@ -1543,17 +1627,14 @@
             document.getElementById('shareSessionBtn').addEventListener('click', function() {
                 shareSession();
             });
+            */
 
             // Add event listeners for connection tabs
             document.getElementById('direct-tab').addEventListener('click', function() {
-                // Show IP information section when direct connection tab is selected
-                document.getElementById('localIpInfoSection').classList.remove('d-none');
+                // Direct tab is now the only active tab, no need to show/hide sections
             });
 
-            document.getElementById('session-tab').addEventListener('click', function() {
-                // Hide IP information section when session tab is selected
-                document.getElementById('localIpInfoSection').classList.add('d-none');
-            });
+            // No automatic IP detection - users will manually input IP from the server.bat output
 
             // Hide modal when clicking the close button in footer
             closeModalBtn.addEventListener('click', function() {
@@ -2596,9 +2677,9 @@
 
             // Get connection parameters
             const usernameInput = document.getElementById('usernameInput');
-            const serverUrlInput = document.getElementById('serverUrlInput');
+            const hostIpInput = document.getElementById('hostIpInput');
             username = usernameInput.value.trim();
-            serverUrl = serverUrlInput.value.trim();
+            const hostIp = hostIpInput.value.trim();
 
             // Validate username
             if (!username) {
@@ -2610,15 +2691,29 @@
                 return;
             }
 
-            // Validate server URL
-            if (!serverUrl) {
+            // Validate host IP
+            if (!hostIp) {
                 showFloatingMessage(
-                    currentLang === 'zh-CN' ? '请输入服务器地址' : 'Please enter a server address',
+                    currentLang === 'zh-CN' ? '请输入主机IP地址' : 'Please enter a host IP address',
                     'warning'
                 );
-                serverUrlInput.focus();
+                hostIpInput.focus();
                 return;
             }
+
+            // Validate IP format
+            const ipRegex = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
+            if (!ipRegex.test(hostIp) && hostIp !== 'localhost') {
+                showFloatingMessage(
+                    getTranslation('invalidIpFormat'),
+                    'warning'
+                );
+                hostIpInput.focus();
+                return;
+            }
+
+            // Generate WebSocket URL from host IP
+            serverUrl = `ws://${hostIp}:8080`;
 
             // Save username to localStorage
             localStorage.setItem('checklist_username', username);
@@ -3184,22 +3279,27 @@
         }
 
         function shareConnectionInfo() {
-            const serverUrlInput = document.getElementById('serverUrlInput');
-            const serverUrl = serverUrlInput.value.trim();
+            const hostIpInput = document.getElementById('hostIpInput');
+            const hostIp = hostIpInput.value.trim();
 
-            if (!serverUrl) {
+            if (!hostIp) {
                 showFloatingMessage(
-                    currentLang === 'zh-CN' ? '请先输入服务器地址' : 'Please enter a server address first',
+                    currentLang === 'zh-CN' ? '请先输入主机IP地址' : 'Please enter a host IP address first',
                     'warning'
                 );
                 return;
             }
 
-            // Determine if we're sharing a host connection or client connection
-            const isHostConnection = serverUrl.includes(localIpAddress) || serverUrl.includes('localhost');
+            // Generate WebSocket URL from host IP
+            const serverUrl = `ws://${hostIp}:8080`;
+
+            // For local network connections
+            const isHostConnection = true; // Always assume this is a host connection
+
+            // No need for localhost warning since we're using manual IP input
 
             // Format the connection info for sharing
-            const shareableInfo = formatConnectionInfo(serverUrl);
+            const shareableInfo = formatHostIpInfo(hostIp);
 
             // Create a modal to show the connection info
             // First, check if there's already a share modal and remove it
@@ -3243,7 +3343,7 @@
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
-                        <small class="text-muted">${currentLang === 'zh-CN' ? '其他用户可以使用此服务器地址直接连接' : 'Other users can use this server address to connect directly'}</small>
+                        <small class="text-muted">${getTranslation('serverUrlHelp')}</small>
                     </div>
 
                     <div class="alert alert-info">
@@ -3320,6 +3420,14 @@
 
             // Close when clicking on backdrop
             shareModalBackdrop.addEventListener('click', hideShareModal);
+
+            // No need for connection message with manual IP input
+
+            // Update the alert message to use the translation key
+            const infoAlert = shareModal.querySelector('.alert-info small');
+            if (infoAlert) {
+                infoAlert.textContent = getTranslation('connectionShareInfo');
+            }
 
             // Show the modal
             showShareModal();
@@ -3573,26 +3681,35 @@
             <!-- Connection Tabs -->
             <ul class="nav nav-tabs mb-3" id="connectionTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="session-tab" data-bs-toggle="tab" data-bs-target="#session-tab-pane" type="button" role="tab" aria-controls="session-tab-pane" aria-selected="true">
+                    <button class="nav-link disabled text-muted" id="session-tab" type="button" role="tab" aria-selected="false">
                         <i class="bi bi-people me-1"></i> <span data-lang-key="sessionConnection">会话连接</span>
+                        <small class="badge bg-secondary ms-1">未发布</small>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="direct-tab" data-bs-toggle="tab" data-bs-target="#direct-tab-pane" type="button" role="tab" aria-controls="direct-tab-pane" aria-selected="false">
+                    <button class="nav-link active" id="direct-tab" data-bs-toggle="tab" data-bs-target="#direct-tab-pane" type="button" role="tab" aria-controls="direct-tab-pane" aria-selected="true">
                         <i class="bi bi-hdd-network me-1"></i> <span data-lang-key="directConnection">直接连接</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link disabled text-muted" id="public-tab" type="button" role="tab" aria-selected="false">
+                        <i class="bi bi-globe me-1"></i> <span data-lang-key="publicConnection">公共连接</span>
+                        <small class="badge bg-secondary ms-1">未发布</small>
                     </button>
                 </li>
             </ul>
 
             <!-- Tab Content -->
             <div class="tab-content" id="connectionTabContent">
-                <!-- Session Connection Tab -->
-                <div class="tab-pane fade show active" id="session-tab-pane" role="tabpanel" aria-labelledby="session-tab" tabindex="0">
+                <!-- Session Connection Tab (Disabled) -->
+                <div class="tab-pane fade" id="session-tab-pane" role="tabpanel" aria-labelledby="session-tab" tabindex="0">
                     <div class="mb-3" id="sessionConnectionSection">
-                        <div class="alert alert-info py-2 mb-3">
-                            <small data-lang-key="sessionHelp">使用会话 ID 可以更容易地连接，而无需手动输入 IP 地址。</small>
+                        <div class="alert alert-secondary py-3 mb-3 text-center">
+                            <i class="bi bi-clock-history fs-4 d-block mb-2"></i>
+                            <h6>会话连接功能即将推出</h6>
+                            <small>此功能正在开发中，敬请期待。目前请使用直接连接方式。</small>
                         </div>
-
+                        <!-- Session connection content is commented out but kept for future implementation
                         <div class="ip-info-card mb-3">
                             <div class="ip-info-header">
                                 <span data-lang-key="sessionId">会话 ID</span>
@@ -3616,27 +3733,42 @@
                                 </div>
                             </div>
                         </div>
+                        -->
                     </div>
                 </div>
 
-                <!-- Direct Connection Tab -->
-                <div class="tab-pane fade" id="direct-tab-pane" role="tabpanel" aria-labelledby="direct-tab" tabindex="0">
+                <!-- Public Connection Tab (Disabled) -->
+                <div class="tab-pane fade" id="public-tab-pane" role="tabpanel" aria-labelledby="public-tab" tabindex="0">
                     <div class="mb-3">
-                        <div class="alert alert-warning py-2 mb-3">
-                            <small data-lang-key="directConnectionWarning">直接连接需要网络可访问性，可能不适用于所有网络环境。如果可能，请使用会话连接。</small>
+                        <div class="alert alert-secondary py-3 mb-3 text-center">
+                            <i class="bi bi-globe fs-4 d-block mb-2"></i>
+                            <h6>公共连接功能即将推出</h6>
+                            <small>此功能将允许通过互联网进行连接，目前正在开发中。请使用直接连接方式。</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Direct Connection Tab (Active) -->
+                <div class="tab-pane fade show active" id="direct-tab-pane" role="tabpanel" aria-labelledby="direct-tab" tabindex="0">
+                    <div class="mb-3">
+                        <div class="alert alert-info py-2 mb-3">
+                            <small><i class="bi bi-info-circle me-1"></i> <span data-lang-key="localNetworkInfo">本地网络连接允许您在同一网络上的设备之间进行协作。</span></small>
                         </div>
 
                         <div class="card mb-3">
                             <div class="card-header">
-                                <span data-lang-key="serverUrlInput">服务器地址</span>
+                                <span data-lang-key="hostIpAddress">主机IP地址</span>
                             </div>
                             <div class="card-body">
-                                <div class="input-group mb-2">
-                                    <span class="input-group-text"><i class="bi bi-hdd-network"></i></span>
-                                    <input type="text" class="form-control" id="serverUrlInput" value="ws://localhost:8080" placeholder="服务器地址" data-lang-placeholder="serverUrlInput">
+                                <div class="alert alert-info py-2 mb-3">
+                                    <small><i class="bi bi-info-circle me-1"></i> <span data-lang-key="ipSetupInstructions">请先运行 start-server.bat 文件，然后将显示的IP地址复制到下面的输入框中。</span></small>
+                                </div>
+                                <div class="input-group mb-3">
+                                    <span class="input-group-text"><i class="bi bi-pc-display"></i></span>
+                                    <input type="text" class="form-control" id="hostIpInput" placeholder="例如: 192.168.1.100" data-lang-placeholder="ipAddressExample">
                                 </div>
                                 <small class="text-muted" id="hostInfoText">
-                                    <span data-lang-key="hostInfo">要启动主机，请运行服务器并使用上面的地址</span>
+                                    <i class="bi bi-info-circle me-1"></i> <span data-lang-key="manualIpInstructions">请从服务器窗口中复制您的本地IP地址，然后粘贴到上面的输入框中。</span>
                                 </small>
                             </div>
                         </div>
