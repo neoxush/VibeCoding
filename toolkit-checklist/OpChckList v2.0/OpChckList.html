@@ -6,6 +6,7 @@
     <title>清单工具箱 v2.0 - 协作版</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <style>
         body {
             font-family: "Microsoft YaHei", Arial, sans-serif;
@@ -841,16 +842,29 @@
                 publicConnection: '公共连接',
                 localNetworkInfo: '本地网络连接允许您在同一网络上的设备之间进行协作。',
                 useLocalIp: '使用本地IP',
-                hostIpAddress: '主机IP地址',
-                enterHostIp: '输入主机IP地址',
-                enterHostIpPlaceholder: '输入主机IP地址',
-                hostIpHelp: '其他用户可以使用此IP地址连接到您的服务器',
-                serverUrlHelp: '请将此完整连接地址分享给其他用户，他们可以直接将其粘贴到连接输入框中',
-                connectionShareInfo: '其他用户需要使用完整的WebSocket地址（包含ws://协议和端口）来连接',
-                ipSetupInstructions: '请先运行 start-server.bat 文件，然后将显示的IP地址复制到下面的输入框中。',
-                ipAddressExample: '例如: 192.168.1.100',
-                manualIpInstructions: '请从服务器窗口中复制您的本地IP地址，然后粘贴到上面的输入框中。',
-                invalidIpFormat: 'IP地址格式不正确，应为四个数字组用点分隔，例如: 192.168.1.100',
+                hostIpAddress: '主机IP地址 / Host IP Address',
+                enterHostIp: '输入主机IP地址 / Enter host IP address',
+                connectionSetup: '连接设置 / Connection Setup',
+                hostRole: '主机 / Host',
+                clientRole: '客户端 / Client',
+                hostRoleTooltip: '如果您要为其他人提供服务，请选择此项。您需要运行 start-server.bat。 / Choose this if you\'re hosting for others. You\'ll need to run start-server.bat.',
+                clientRoleTooltip: '如果您要连接到他人的服务器，请选择此项。您需要主机的IP地址。 / Choose this if you\'re connecting to someone else\'s server. You\'ll need their IP address.',
+                hostInstructions: '请先运行 start-server.bat 文件，然后将显示的IP地址输入下面。 / Please run start-server.bat first, then enter the displayed IP address below.',
+                clientInstructions: '请输入主机提供给您的IP地址。 / Please enter the IP address provided by the host.',
+                ipInputTooltip: '输入IP地址，例如: 192.168.1.100 / Enter IP address, e.g., 192.168.1.100',
+                connectionInstructions: '输入IP地址连接到服务器。如果您是主机，请先运行 start-server.bat。 / Enter IP address to connect to server. If you\'re hosting, run start-server.bat first.',
+                ipAddress: 'IP地址 / IP Address',
+                ipAddressShareHelp: '分享此IP地址给其他用户，他们可以在连接面板中输入此地址。 / Share this IP address with other users. They can enter it in the connection panel.',
+                connectionShareTip: '确保服务器正在运行，并且其他用户可以访问您的网络。 / Make sure the server is running and other users can access your network.',
+                enterHostIpPlaceholder: '输入主机IP地址 / Enter host IP address',
+                hostIpHelp: '其他用户可以使用此IP地址连接到您的服务器。Other users can use this IP address to connect to your server.',
+                serverUrlHelp: '请将此完整连接地址分享给其他用户，他们可以直接将其粘贴到连接输入框中。Share this complete connection address with other users. They can paste it directly into their connection input field.',
+                connectionShareInfo: '其他用户需要使用完整的WebSocket地址（包含ws://协议和端口）来连接。Other users need to use the complete WebSocket address (with ws:// protocol and port) to connect.',
+                ipSetupInstructions: '请先运行 start-server.bat 文件，然后将IP地址复制到下面的输入框中。Please run start-server.bat first, then copy the IP address to the input field below.',
+                ipAddressExample: '例如/Example: 192.168.1.100',
+                ipAddressPlaceholder: 'IP地址/IP Address',
+                manualIpInstructions: '请从服务器窗口中复制IP地址并粘贴到上面的输入框中。Copy the IP address from the server window and paste it here.',
+                invalidIpFormat: 'IP地址格式不正确。Invalid IP address format.',
                 // Image sharing
                 shareImageBtn: '共享图片',
                 sharedImage: '已共享图片',
@@ -959,9 +973,9 @@
                 hostIpHelp: 'Other users can use this IP address to connect to your server',
                 serverUrlHelp: 'Share this complete connection address with other users. They can paste it directly into their connection input field',
                 connectionShareInfo: 'Other users need to use the complete WebSocket address (with ws:// protocol and port) to connect',
-                ipSetupInstructions: 'Please run the start-server.bat file first, then copy the displayed IP address to the input field below.',
+                ipSetupInstructions: 'Please run the start-server.bat file first, select the correct IP address from the list (usually starting with 192.168, 10., or 172.), then copy it to the input field below.',
                 ipAddressExample: 'Example: 192.168.1.100',
-                manualIpInstructions: 'Please copy your local IP address from the server window and paste it into the input field above.',
+                manualIpInstructions: 'Please select and copy your local IP address from the server window (usually starting with 192.168, 10., or 172.) and paste it into the input field above.',
                 invalidIpFormat: 'Invalid IP address format. Should be four numbers separated by dots, e.g., 192.168.1.100',
                 // Image sharing
                 shareImageBtn: 'Share image',
@@ -1177,11 +1191,9 @@
             return `Server URL: ${serverUrl}`;
         }
 
-        // Function to format connection URL for sharing
+        // Function to format host IP for sharing
         function formatHostIpInfo(hostIp) {
-            return currentLang === 'zh-CN'
-                ? `连接地址: ws://${hostIp}:8080`
-                : `Connection URL: ws://${hostIp}:8080`;
+            return hostIp; // Just return the IP address directly
         }
 
         // Simple function to format session info for sharing
@@ -1634,7 +1646,11 @@
                 // Direct tab is now the only active tab, no need to show/hide sections
             });
 
-            // No automatic IP detection - users will manually input IP from the server.bat output
+            // Initialize tooltips
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
 
             // Hide modal when clicking the close button in footer
             closeModalBtn.addEventListener('click', function() {
@@ -3284,22 +3300,19 @@
 
             if (!hostIp) {
                 showFloatingMessage(
-                    currentLang === 'zh-CN' ? '请先输入主机IP地址' : 'Please enter a host IP address first',
+                    currentLang === 'zh-CN' ? '请先输入IP地址' : 'Please enter an IP address first',
                     'warning'
                 );
                 return;
             }
-
-            // Generate WebSocket URL from host IP
-            const serverUrl = `ws://${hostIp}:8080`;
 
             // For local network connections
             const isHostConnection = true; // Always assume this is a host connection
 
             // No need for localhost warning since we're using manual IP input
 
-            // Format the connection info for sharing
-            const shareableInfo = formatHostIpInfo(hostIp);
+            // Just use the IP address directly for sharing
+            const shareableInfo = hostIp;
 
             // Create a modal to show the connection info
             // First, check if there's already a share modal and remove it
@@ -3318,10 +3331,7 @@
             shareModalBackdrop.id = 'shareModalBackdrop';
             document.body.appendChild(shareModalBackdrop);
 
-            // Determine connection type title
-            const connectionTypeTitle = isHostConnection
-                ? getTranslation('hostConnection')
-                : getTranslation('clientConnection');
+            // No need for connection type title anymore
 
             // Create modal
             const shareModal = document.createElement('div');
@@ -3331,19 +3341,19 @@
 
             shareModal.innerHTML = `
                 <div class="custom-modal-header">
-                    <h5 class="custom-modal-title" data-lang-key="connectionInfo">${getTranslation('connectionInfo')} - ${connectionTypeTitle}</h5>
+                    <h5 class="custom-modal-title" data-lang-key="connectionInfo">${getTranslation('connectionInfo')}</h5>
                     <button type="button" class="custom-modal-close" id="shareModalClose">&times;</button>
                 </div>
                 <div class="custom-modal-body">
                     <div class="mb-3">
-                        <label class="form-label">${getTranslation('serverUrlInput')}</label>
+                        <label class="form-label" data-lang-key="ipAddress">IP地址 / IP Address</label>
                         <div class="input-group">
-                            <input type="text" class="form-control" value="${serverUrl}" readonly>
-                            <button class="btn btn-outline-secondary copy-btn" data-copy-text="${serverUrl}">
+                            <input type="text" class="form-control" value="${hostIp}" readonly>
+                            <button class="btn btn-outline-secondary copy-btn" data-copy-text="${hostIp}">
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
-                        <small class="text-muted">${getTranslation('serverUrlHelp')}</small>
+                        <small class="text-muted" data-lang-key="ipAddressShareHelp">分享此IP地址给其他用户，他们可以在连接面板中输入此地址。 / Share this IP address with other users. They can enter it in the connection panel.</small>
                     </div>
 
                     <div class="alert alert-info">
@@ -3426,7 +3436,8 @@
             // Update the alert message to use the translation key
             const infoAlert = shareModal.querySelector('.alert-info small');
             if (infoAlert) {
-                infoAlert.textContent = getTranslation('connectionShareInfo');
+                infoAlert.textContent = getTranslation('connectionShareTip');
+                infoAlert.setAttribute('data-lang-key', 'connectionShareTip');
             }
 
             // Show the modal
@@ -3757,19 +3768,17 @@
 
                         <div class="card mb-3">
                             <div class="card-header">
-                                <span data-lang-key="hostIpAddress">主机IP地址</span>
+                                <span data-lang-key="connectionSetup">连接设置 / Connection Setup</span>
                             </div>
                             <div class="card-body">
-                                <div class="alert alert-info py-2 mb-3">
-                                    <small><i class="bi bi-info-circle me-1"></i> <span data-lang-key="ipSetupInstructions">请先运行 start-server.bat 文件，然后将显示的IP地址复制到下面的输入框中。</span></small>
+                                <div class="mb-2">
+                                    <small class="text-muted"><i class="bi bi-info-circle me-1"></i> <span data-lang-key="connectionInstructions">输入IP地址连接到服务器。如果您是主机，请先运行 start-server.bat。 / Enter IP address to connect to server. If you're hosting, run start-server.bat first.</span></small>
                                 </div>
+
                                 <div class="input-group mb-3">
                                     <span class="input-group-text"><i class="bi bi-pc-display"></i></span>
-                                    <input type="text" class="form-control" id="hostIpInput" placeholder="例如: 192.168.1.100" data-lang-placeholder="ipAddressExample">
+                                    <input type="text" class="form-control" id="hostIpInput" placeholder="IP地址/IP Address" data-lang-placeholder="ipAddressPlaceholder" data-bs-toggle="tooltip" data-bs-placement="top" title="输入IP地址，例如: 192.168.1.100 / Enter IP address, e.g., 192.168.1.100">
                                 </div>
-                                <small class="text-muted" id="hostInfoText">
-                                    <i class="bi bi-info-circle me-1"></i> <span data-lang-key="manualIpInstructions">请从服务器窗口中复制您的本地IP地址，然后粘贴到上面的输入框中。</span>
-                                </small>
                             </div>
                         </div>
                     </div>
