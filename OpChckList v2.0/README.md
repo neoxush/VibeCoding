@@ -26,6 +26,7 @@ This is a collaborative checklist tool based on OpChckList v1.0, supporting real
    node server.js
    ```
 4. 服务器将在端口 8080 上运行 (The server will run on port 8080)
+5. 运行start-server.bat开启一个主机
 
 ### 客户端连接 (Client Connection)
 
