@@ -1,0 +1,3818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>清单工具箱 v2.0 - 协作版</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            background-color: #f8f9fa;
+            padding-top: 130px;
+            min-height: 100vh;
+            position: relative;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .input-group-fixed {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            max-width: 1200px;
+            background-color: #fff;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1030;
+            margin: 0 auto;
+            left: 0;
+            right: 0;
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .input-group-fixed h4 {
+            margin-bottom: 15px;
+            font-weight: 600;
+            color: #343a40;
+            transition: color 0.3s;
+        }
+        .input-group-custom {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .input-group-custom .form-control {
+            border-radius: 4px;
+            height: 38px;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+        .input-group-custom .btn {
+            height: 38px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        .title-locked {
+            background-color: #e9ecef;
+            color: #6c757d;
+            pointer-events: none;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .table-container {
+            margin-top: 20px;
+            padding-bottom: 250px;
+        }
+        .preview-img {
+            max-width: 100px;
+            max-height: 100px;
+            border-radius: 4px;
+            transition: transform 0.2s;
+        }
+        .preview-img:hover {
+            transform: scale(1.5);
+        }
+
+        .image-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .share-image-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            padding: 2px 5px;
+            font-size: 0.75rem;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .image-container:hover .share-image-btn {
+            opacity: 1;
+        }
+
+        .image-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            padding: 2px 5px;
+            font-size: 0.75rem;
+            border-radius: 3px;
+        }
+
+        .shared-badge {
+            background-color: rgba(40, 167, 69, 0.8);
+            color: white;
+        }
+
+        .shared-image {
+            border: 2px solid #28a745;
+        }
+
+        .night-mode .shared-image {
+            border-color: #2d6b3b;
+        }
+        #floating-message {
+            position: fixed;
+            top: 85px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 300px;
+            max-width: 80%;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 6px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            z-index: 2000;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        #floating-message.show {
+            opacity: 1;
+        }
+        #notification-area {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            z-index: 1500;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .notification {
+            padding: 12px 15px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateX(110%);
+            transition: transform 0.3s ease-out;
+            opacity: 0.95;
+            animation: slide-in 0.3s forwards, fade-out 0.5s 2.5s forwards;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            pointer-events: auto;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+        @keyframes slide-in { to { transform: translateX(0); } }
+        @keyframes fade-out { to { opacity: 0; transform: translateY(10px); } }
+        .notification-success { background-color: #d4edda; border-left: 4px solid #28a745; color: #155724; }
+        .notification-info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; color: #0c5460; }
+        .notification-warning { background-color: #fff3cd; border-left: 4px solid #ffc107; color: #856404; }
+        .notification-danger { background-color: #f8d7da; border-left: 4px solid #dc3545; color: #721c24; }
+        .notification-close {
+            cursor: pointer;
+            font-size: 18px;
+            color: inherit;
+            background: none;
+            border: none;
+            padding: 0 5px;
+            opacity: 0.7;
+            margin-left: 8px;
+        }
+        .notification-close:hover { opacity: 1; }
+        #console-log {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 350px;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #343a40;
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 1400;
+            display: none;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        #console-log.active { display: block; }
+        #console-log .log-entry { margin: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 3px; }
+        #console-log .log-time { color: #adb5bd; margin-right: 5px; }
+        #console-log .log-info { color: #8adbff; }
+        #console-log .log-error { color: #ff8a8a; }
+        #console-log .log-warning { color: #ffcc66; }
+        #console-header { display: flex; justify-content: space-between; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); }
+        #console-header button { background: none; border: none; color: #ccc; cursor: pointer; padding: 0 5px; font-size: 14px; }
+        #console-header button:hover { color: #fff; }
+        .toggle-btn { padding: 2px 8px; min-width: 80px; text-align: center; }
+        .page-lock-indicator, .lang-switcher, .night-mode-toggle {
+            position: fixed;
+            top: 15px;
+            z-index: 2100;
+            font-size: 1.25rem;
+            color: #495057;
+            cursor: pointer;
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease, background-color 0.3s, color 0.3s;
+        }
+        .page-lock-indicator { right: 20px; }
+        .lang-switcher { right: 65px; }
+        .night-mode-toggle { right: 110px; }
+        .page-lock-indicator:hover, .lang-switcher:hover, .night-mode-toggle:hover {
+            background-color: #e9ecef;
+            transform: scale(1.05);
+        }
+        .page-lock-indicator.locked {
+            color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .title-lock-btn {
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .title-lock-btn.locked {
+            color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .btn-group .btn {
+            padding: 4px 8px;
+            font-size: 0.875rem;
+        }
+        .edit-inputs .form-control {
+            margin-bottom: 5px;
+        }
+        .edit-inputs .input-group {
+            display: flex;
+            gap: 5px;
+        }
+        @media (max-width: 768px) {
+            body { padding-top: 170px; }
+            .input-group-fixed { padding: 10px; }
+            .table-container { margin-top: 30px; }
+            #notification-area { width: calc(100% - 40px); max-width: 500px; }
+            #floating-message { width: 90%; max-width: none; top: 120px; }
+            #console-log { width: calc(100% - 40px); left: 20px; }
+            .input-group-custom { flex-wrap: wrap; }
+            .input-group-custom .btn { margin-top: 5px; }
+            .lang-switcher { right: 55px; }
+            .night-mode-toggle { right: 100px; }
+        }
+        #jsonFileInput, #imageFilesInput { display: none; }
+
+        /* Night Mode Styles */
+        body.night-mode {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .night-mode .input-group-fixed {
+            background-color: #2c2c2c;
+            border-bottom: 1px solid #444;
+        }
+        .night-mode .input-group-fixed h4 {
+            color: #e0e0e0;
+        }
+        .night-mode .input-group-custom .form-control {
+            background-color: #333;
+            color: #e0e0e0;
+            border-color: #555;
+        }
+        .night-mode .input-group-custom .form-control::placeholder {
+            color: #aaa;
+        }
+        .night-mode .title-locked {
+            background-color: #444;
+            color: #999;
+        }
+        .night-mode .table {
+            color: #e0e0e0;
+        }
+        .night-mode .table-striped tbody tr:nth-of-type(odd) {
+            background-color: #2a2a2a;
+        }
+        .night-mode .table-bordered {
+            border-color: #444;
+        }
+        .night-mode .table-bordered th,
+        .night-mode .table-bordered td {
+            border-color: #444;
+        }
+        .night-mode .notification-success { background-color: #2d6b3b; color: #c3e6cb; }
+        .night-mode .notification-info { background-color: #2b6770; color: #bee5eb; }
+        .night-mode .notification-warning { background-color: #856404; color: #ffeeba; }
+        .night-mode .notification-danger { background-color: #721c24; color: #f5c6cb; }
+        .night-mode #console-log {
+            background-color: #1f2526;
+            color: #e0e0e0;
+        }
+        .night-mode #console-header { border-bottom: 1px solid rgba(255, 255, 255, 0.15); }
+        .night-mode #console-header button { color: #bbb; }
+        .night-mode #console-header button:hover { color: #fff; }
+        .night-mode .page-lock-indicator,
+        .night-mode .lang-switcher,
+        .night-mode .night-mode-toggle {
+            background-color: #333;
+            color: #e0e0e0;
+        }
+        .night-mode .page-lock-indicator:hover,
+        .night-mode .lang-switcher:hover,
+        .night-mode .night-mode-toggle:hover {
+            background-color: #444;
+        }
+        .night-mode .page-lock-indicator.locked {
+            color: #ff6b6b;
+            background-color: #4a2c2e;
+        }
+        .night-mode .title-lock-btn.locked {
+            color: #ff6b6b;
+            background-color: #4a2c2e;
+        }
+        .night-mode .text-muted {
+            color: #aaa !important;
+        }
+
+        .night-mode .nav-link.disabled {
+            color: #aaa;
+            background-color: transparent;
+        }
+
+        .night-mode .nav-link.disabled .badge {
+            background-color: #555;
+            color: #ddd;
+        }
+
+        /* Disabled tab styles */
+        .nav-link.disabled {
+            color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .nav-link.disabled .badge {
+            font-size: 0.65em;
+            padding: 0.25em 0.5em;
+        }
+
+        /* Collaboration Styles */
+        .connection-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .connection-indicator.connected { background-color: #28a745; }
+        .connection-indicator.connecting { background-color: #ffc107; }
+        .connection-indicator.disconnected { background-color: #dc3545; }
+        .connection-indicator.error { background-color: #dc3545; animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .active-users-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 10px;
+            background-color: #f8f9fa;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #dee2e6;
+        }
+
+        .active-users-indicator:hover {
+            background-color: #e9ecef;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .night-mode .active-users-indicator {
+            background-color: #343a40;
+            color: #e0e0e0;
+            border-color: #495057;
+        }
+
+        .night-mode .active-users-indicator:hover {
+            background-color: #495057;
+        }
+
+        /* IP info styles */
+        .ip-display {
+            font-family: monospace;
+            font-weight: bold;
+            color: #0d6efd;
+            padding: 2px 6px;
+            background-color: rgba(13, 110, 253, 0.1);
+            border-radius: 4px;
+            flex-grow: 1;
+        }
+
+        .night-mode .ip-display {
+            color: #6ea8fe;
+            background-color: rgba(13, 110, 253, 0.2);
+        }
+
+        #localIpInfoSection .alert {
+            margin-bottom: 0.5rem;
+        }
+
+        #localIpInfoSection .btn-outline-secondary {
+            padding: 0.25rem 0.5rem;
+        }
+
+        .ip-info-card {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .night-mode .ip-info-card {
+            border-color: #495057;
+        }
+
+        .ip-info-header {
+            background-color: #f8f9fa;
+            padding: 8px 12px;
+            font-weight: 600;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .night-mode .ip-info-header {
+            background-color: #343a40;
+            border-bottom-color: #495057;
+        }
+
+        .ip-info-body {
+            padding: 12px;
+        }
+
+        .editing-indicator {
+            display: inline-block;
+            padding: 2px 6px;
+            background-color: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 5px;
+            color: #856404;
+        }
+
+        .night-mode .editing-indicator {
+            background-color: rgba(255, 193, 7, 0.15);
+            color: #ffeeba;
+        }
+
+        .collab-controls {
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        .title-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .connection-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #showCollabBtn {
+            position: relative;
+            padding: 6px 12px;
+        }
+
+        #showCollabBtn .connection-indicator {
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .active-users-area {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .night-mode .active-users-area {
+            border-top-color: #444;
+        }
+
+        #activeUsersList {
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        /* Custom Modal styles */
+        .custom-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1050;
+            display: none;
+        }
+
+        .custom-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            z-index: 1051;
+            width: 90%;
+            max-width: 500px;
+            display: none;
+        }
+
+        .night-mode .custom-modal {
+            background-color: #2c2c2c;
+            color: #e0e0e0;
+            border: 1px solid #444;
+        }
+
+        .custom-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .night-mode .custom-modal-header {
+            border-bottom-color: #444;
+        }
+
+        .custom-modal-title {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .custom-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .custom-modal-body {
+            padding: 15px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .custom-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding: 15px;
+            border-top: 1px solid #dee2e6;
+            gap: 10px;
+        }
+
+        .night-mode .custom-modal-footer {
+            border-top-color: #444;
+        }
+
+        .custom-modal.show,
+        .custom-modal-backdrop.show {
+            display: block;
+        }
+
+        /* Tooltip customization */
+        .tooltip {
+            position: absolute;
+            z-index: 1070;
+            display: block;
+            margin: 0;
+            font-family: var(--bs-font-sans-serif);
+            font-style: normal;
+            font-weight: 400;
+            line-height: 1.5;
+            text-align: left;
+            text-decoration: none;
+            text-shadow: none;
+            text-transform: none;
+            letter-spacing: normal;
+            word-break: normal;
+            word-spacing: normal;
+            white-space: pre-line;
+            font-size: 0.875rem;
+            opacity: 0;
+            transition: opacity 0.15s linear;
+        }
+
+        .tooltip.show {
+            opacity: 0.9;
+        }
+
+        .tooltip .tooltip-inner {
+            max-width: 200px;
+            padding: 0.5rem 1rem;
+            color: #fff;
+            text-align: left;
+            background-color: #000;
+            border-radius: 0.25rem;
+            white-space: pre-line;
+        }
+
+        .night-mode .tooltip .tooltip-inner {
+            background-color: #495057;
+            color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="input-group-fixed">
+            <div class="title-bar">
+                <h4 data-lang-key="title">清单工具箱 v2.0 - 协作版</h4>
+                <div class="connection-controls">
+                    <button class="btn btn-outline-primary" id="showCollabBtn" data-tooltip-key="showCollabBtn">
+                        <i class="bi bi-wifi"></i>
+                        <span class="connection-indicator disconnected"></span>
+                    </button>
+                    <div class="active-users-indicator d-none" id="activeUsersIndicator">
+                        <i class="bi bi-people-fill"></i> <span id="activeUsersCount">0</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Main Controls -->
+            <div class="input-group-custom">
+                <button class="btn btn-primary" id="loadBtn" data-tooltip-key="loadBtn"><i class="bi bi-folder2-open"></i></button>
+                <input type="text" class="form-control" id="titleInput" placeholder="输入标题" data-lang-placeholder="titleInput">
+                <button class="btn btn-outline-secondary title-lock-btn" id="titleLockBtn" data-tooltip-key="titleLockBtn"><i class="bi bi-unlock"></i></button>
+                <input type="text" class="form-control" id="contentInput" placeholder="输入内容" data-lang-placeholder="contentInput">
+                <input type="text" class="form-control" id="imageUrlInput" placeholder="图片链接（或使用粘贴截图按钮）" readonly data-lang-placeholder="imageUrlInput">
+                <button class="btn btn-warning" id="pasteBtn" data-tooltip-key="pasteBtn"><i class="bi bi-clipboard"></i></button>
+                <button class="btn btn-success" id="addBtn" data-tooltip-key="addBtn"><i class="bi bi-plus-lg"></i></button>
+                <button class="btn btn-info" id="saveBtn" data-tooltip-key="saveBtn"><i class="bi bi-floppy"></i></button>
+                <button class="btn btn-secondary" id="resetBtn" data-tooltip-key="resetBtn"><i class="bi bi-arrow-repeat"></i></button>
+                <button class="btn btn-outline-secondary" id="toggleLogBtn" data-tooltip-key="toggleLogBtn"><i class="bi bi-terminal"></i></button>
+            </div>
+            <input type="file" id="jsonFileInput" accept=".json">
+            <input type="file" id="imageFilesInput" accept="image/*" multiple>
+        </div>
+
+        <div class="page-lock-indicator" id="pageLockBtn" data-tooltip-key="pageLockBtn"><i class="bi bi-unlock"></i></div>
+        <div class="lang-switcher" id="langSwitcher" data-tooltip-key="langSwitcher"><i class="bi bi-globe"></i></div>
+        <div class="night-mode-toggle" id="nightModeBtn" data-tooltip-key="nightModeBtn"><i class="bi bi-moon-stars"></i></div>
+        <div id="floating-message"></div>
+        <div id="notification-area"></div>
+        <div id="console-log">
+            <div id="console-header">
+                <span data-lang-key="consoleLog">控制台日志</span>
+                <div>
+                    <button id="clearLogBtn" data-tooltip-key="clearLogBtn"><i class="bi bi-trash"></i></button>
+                    <button id="closeLogBtn" data-tooltip-key="closeLogBtn"><i class="bi bi-x"></i></button>
+                </div>
+            </div>
+            <div id="console-content"></div>
+        </div>
+
+        <div class="table-container">
+            <table class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th style="width: 10%;" data-lang-key="status">状态</th>
+                        <th style="width: 5%;" data-lang-key="index">序号</th>
+                        <th style="width: 20%;" data-lang-key="titleHeader">标题</th>
+                        <th style="width: 25%;" data-lang-key="contentHeader">内容</th>
+                        <th style="width: 15%;" data-lang-key="preview">预览</th>
+                        <th style="width: 25%;" data-lang-key="actions">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="checklistBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"></script>
+    <script>
+        let checklist = [];
+        let imageIndex = 1;
+        let logVisible = false;
+        let floatingMessageTimeout = null;
+        let pageIsLocked = false;
+        let imageBlobs = new Map();
+        let tooltips = [];
+        let titleIsLocked = false;
+        let currentLang = 'zh-CN';
+        let isNightMode = localStorage.getItem('nightMode') === 'true';
+
+        // Collaboration variables
+        let socket = null;
+        let userId = null;
+        let username = '';
+        let isConnected = false;
+        let activeUsers = new Map(); // Map of userId -> {username, lastActive}
+        let editingItems = new Map(); // Map of itemIndex -> userId
+        let serverUrl = 'ws://localhost:8080'; // Default WebSocket server URL
+        let localIpAddress = ''; // Store the detected local IP address
+        let publicIpAddress = ''; // Store the public IP address
+        let sessionId = ''; // Store the current session ID
+        let isHosting = false; // Whether this client is hosting a session
+
+        const translations = {
+            'zh-CN': {
+                title: '清单工具箱 v2.0 - 协作版',
+                titleInput: '输入标题',
+                contentInput: '输入内容',
+                imageUrlInput: '图片链接（或使用粘贴截图按钮）',
+                consoleLog: '控制台日志',
+                status: '状态',
+                index: '序号',
+                titleHeader: '标题',
+                contentHeader: '内容',
+                preview: '预览',
+                actions: '操作',
+                noItems: '清单中没有项目。使用上方表单添加项目。',
+                addFirstItem: '添加第一个项目',
+                systemInitialized: '系统初始化完成！',
+                // Tooltips
+                loadBtn: '导入清单文件 (.json)',
+                titleLockBtn: '锁定/解锁标题',
+                pasteBtn: '粘贴截图',
+                addBtn: '添加项目',
+                saveBtn: '保存清单到文件',
+                resetBtn: '重置清单',
+                toggleLogBtn: '显示/隐藏日志',
+                pageLockBtn: '锁定/解锁页面',
+                langSwitcher: '切换语言',
+                nightModeBtn: '切换夜间模式',
+                clearLogBtn: '清空日志',
+                closeLogBtn: '关闭',
+                editBtn: '编辑项目',
+                removeBtn: '删除项目',
+                editPasteBtn: '粘贴截图',
+                saveEditBtn: '保存',
+                cancelEditBtn: '取消',
+                markComplete: '标记为已完成',
+                markIncomplete: '标记为未完成',
+                // Collaboration
+                connectBtn: '连接到服务器',
+                disconnectBtn: '断开连接',
+                usernameInput: '输入用户名',
+                serverUrlInput: '完整连接地址',
+                connected: '已连接',
+                disconnected: '未连接',
+                connecting: '连接中...',
+                connectionFailed: '连接失败',
+                userJoined: '{username} 加入了协作',
+                userLeft: '{username} 离开了协作',
+                editingBy: '{username} 正在编辑',
+                syncComplete: '同步完成',
+                activeUsers: '活跃用户',
+                collaborationHeader: '协作模式',
+                close: '关闭',
+                showCollabBtn: '协作设置',
+                connect: '连接',
+                disconnect: '断开',
+                shareConnection: '分享连接',
+                shareConnectionBtn: '分享连接信息',
+                connectionInfo: '连接信息',
+                copyToClipboard: '复制到剪贴板',
+                copied: '已复制!',
+                hostInfo: '要启动主机，请运行服务器并使用上面的地址',
+                hostConnection: '主机连接',
+                clientConnection: '客户端连接',
+                localIpInfo: '网络IP信息',
+                ipInfoHelp: '使用此IP地址来启动主机服务器。其他用户可以使用此地址连接到您的服务器。',
+                useThisIp: '使用此IP',
+                localNetworkIp: '本地网络IP',
+                publicIp: '公共IP',
+                publicIpHelp: '公共IP可能需要端口转发才能从外部访问。',
+                fetchingIp: '获取IP中...',
+                useManualIp: '使用此IP',
+                manualIpInput: '手动输入IP',
+                manualIpHelp: '如果自动检测不正确，请手动输入IP地址',
+                autoDetectedIp: '自动检测到的IP',
+                localIp: '本地IP',
+                manuallySpecifiedIp: '手动指定的IP地址',
+                saveManualIp: '保存',
+                editManualIp: '编辑',
+                editIp: '编辑IP',
+                manualIp: '手动输入',
+                ipHelp: '选择自动检测或手动输入IP地址，然后点击“使用此IP”',
+                sessionConnection: '会话连接',
+                createSession: '创建会话',
+                joinSession: '加入会话',
+                sessionId: '会话 ID',
+                enterSessionId: '输入会话 ID',
+                sessionCreated: '会话已创建',
+                sessionJoined: '已加入会话',
+                invalidSessionId: '无效的会话 ID',
+                sessionHelp: '使用会话 ID 可以更容易地连接，而无需手动输入 IP 地址。',
+                shareSession: '分享会话',
+                directConnection: '直接连接',
+                directConnectionWarning: '直接连接需要网络可访问性，可能不适用于所有网络环境。如果可能，请使用会话连接。',
+                publicConnection: '公共连接',
+                localNetworkInfo: '本地网络连接允许您在同一网络上的设备之间进行协作。',
+                useLocalIp: '使用本地IP',
+                hostIpAddress: '主机IP地址 / Host IP Address',
+                enterHostIp: '输入主机IP地址 / Enter host IP address',
+                connectionSetup: '连接设置 / Connection Setup',
+                hostRole: '主机 / Host',
+                clientRole: '客户端 / Client',
+                hostRoleTooltip: '如果您要为其他人提供服务，请选择此项。您需要运行 start-server.bat。 / Choose this if you\'re hosting for others. You\'ll need to run start-server.bat.',
+                clientRoleTooltip: '如果您要连接到他人的服务器，请选择此项。您需要主机的IP地址。 / Choose this if you\'re connecting to someone else\'s server. You\'ll need their IP address.',
+                hostInstructions: '请先运行 start-server.bat 文件，然后将显示的IP地址输入下面。 / Please run start-server.bat first, then enter the displayed IP address below.',
+                clientInstructions: '请输入主机提供给您的IP地址。 / Please enter the IP address provided by the host.',
+                ipInputTooltip: '输入IP地址，例如: 192.168.1.100 / Enter IP address, e.g., 192.168.1.100',
+                connectionInstructions: '输入IP地址连接到服务器。如果您是主机，请先运行 start-server.bat。 / Enter IP address to connect to server. If you\'re hosting, run start-server.bat first.',
+                ipAddress: 'IP地址 / IP Address',
+                ipAddressShareHelp: '分享此IP地址给其他用户，他们可以在连接面板中输入此地址。 / Share this IP address with other users. They can enter it in the connection panel.',
+                connectionShareTip: '确保服务器正在运行，并且其他用户可以访问您的网络。 / Make sure the server is running and other users can access your network.',
+                enterHostIpPlaceholder: '输入主机IP地址 / Enter host IP address',
+                hostIpHelp: '其他用户可以使用此IP地址连接到您的服务器。Other users can use this IP address to connect to your server.',
+                serverUrlHelp: '请将此完整连接地址分享给其他用户，他们可以直接将其粘贴到连接输入框中。Share this complete connection address with other users. They can paste it directly into their connection input field.',
+                connectionShareInfo: '其他用户需要使用完整的WebSocket地址（包含ws://协议和端口）来连接。Other users need to use the complete WebSocket address (with ws:// protocol and port) to connect.',
+                ipSetupInstructions: '请先运行 start-server.bat 文件，然后将IP地址复制到下面的输入框中。Please run start-server.bat first, then copy the IP address to the input field below.',
+                ipAddressExample: '例如/Example: 192.168.1.100',
+                ipAddressPlaceholder: 'IP地址/IP Address',
+                manualIpInstructions: '请从服务器窗口中复制IP地址并粘贴到上面的输入框中。Copy the IP address from the server window and paste it here.',
+                invalidIpFormat: 'IP地址格式不正确。Invalid IP address format.',
+                // Image sharing
+                shareImageBtn: '共享图片',
+                sharedImage: '已共享图片',
+                sharingImage: '正在共享图片...',
+                imageShared: '图片已共享',
+                imageShareFailed: '图片共享失败'
+            },
+            'en': {
+                title: 'Checklist Toolbox v2.0 - Collaborative',
+                titleInput: 'Enter Title',
+                contentInput: 'Enter Content',
+                imageUrlInput: 'Image URL (or use paste screenshot button)',
+                consoleLog: 'Console Log',
+                status: 'Status',
+                index: 'No.',
+                titleHeader: 'Title',
+                contentHeader: 'Content',
+                preview: 'Preview',
+                actions: 'Actions',
+                noItems: 'No items in the checklist. Use the form above to add items.',
+                addFirstItem: 'Add First Item',
+                systemInitialized: 'System initialized!',
+                // Tooltips
+                loadBtn: 'Import checklist file (.json)',
+                titleLockBtn: 'Lock/Unlock Title',
+                pasteBtn: 'Paste Screenshot',
+                addBtn: 'Add Item',
+                saveBtn: 'Save Checklist to File',
+                resetBtn: 'Reset Checklist',
+                toggleLogBtn: 'Show/Hide Log',
+                pageLockBtn: 'Lock/Unlock Page',
+                langSwitcher: 'Switch Language',
+                nightModeBtn: 'Toggle Night Mode',
+                clearLogBtn: 'Clear Log',
+                closeLogBtn: 'Close',
+                editBtn: 'Edit Item',
+                removeBtn: 'Delete Item',
+                editPasteBtn: 'Paste Screenshot',
+                saveEditBtn: 'Save',
+                cancelEditBtn: 'Cancel',
+                markComplete: 'Mark as complete',
+                markIncomplete: 'Mark as incomplete',
+                // Collaboration
+                connectBtn: 'Connect to server',
+                disconnectBtn: 'Disconnect',
+                usernameInput: 'Enter username',
+                serverUrlInput: 'Complete Connection Address',
+                connected: 'Connected',
+                disconnected: 'Disconnected',
+                connecting: 'Connecting...',
+                connectionFailed: 'Connection failed',
+                userJoined: '{username} joined the collaboration',
+                userLeft: '{username} left the collaboration',
+                editingBy: '{username} is editing',
+                syncComplete: 'Sync complete',
+                activeUsers: 'Active users',
+                collaborationHeader: 'Collaboration Mode',
+                close: 'Close',
+                showCollabBtn: 'Collaboration Settings',
+                connect: 'Connect',
+                disconnect: 'Disconnect',
+                shareConnection: 'Share Connection',
+                shareConnectionBtn: 'Share connection info',
+                connectionInfo: 'Connection Info',
+                copyToClipboard: 'Copy to clipboard',
+                copied: 'Copied!',
+                hostInfo: 'To host, run the server and use the address above',
+                hostConnection: 'Host Connection',
+                clientConnection: 'Client Connection',
+                localIpInfo: 'Network IP Information',
+                ipInfoHelp: 'Use this IP address to host a server. Other users can connect to your server using this address.',
+                useThisIp: 'Use this IP',
+                localNetworkIp: 'Local Network IP',
+                publicIp: 'Public IP',
+                publicIpHelp: 'Public IP may require port forwarding to be accessible from outside.',
+                fetchingIp: 'Fetching IP...',
+                useManualIp: 'Use this IP',
+                manualIpInput: 'Enter IP manually',
+                manualIpHelp: 'If automatic detection is incorrect, please enter IP address manually',
+                autoDetectedIp: 'Auto-detected IP',
+                localIp: 'Local IP',
+                manuallySpecifiedIp: 'Manually specified IP address',
+                saveManualIp: 'Save',
+                editManualIp: 'Edit',
+                editIp: 'Edit IP',
+                manualIp: 'Manual',
+                ipHelp: 'Choose auto-detected or manually entered IP, then click "Use this IP"',
+                sessionConnection: 'Session Connection',
+                createSession: 'Create Session',
+                joinSession: 'Join Session',
+                sessionId: 'Session ID',
+                enterSessionId: 'Enter Session ID',
+                sessionCreated: 'Session Created',
+                sessionJoined: 'Session Joined',
+                invalidSessionId: 'Invalid Session ID',
+                sessionHelp: 'Using a session ID makes it easier to connect without manually entering IP addresses.',
+                shareSession: 'Share Session',
+                directConnection: 'Direct Connection',
+                directConnectionWarning: 'Direct connections require network accessibility and may not work in all network environments. Use session connections if possible.',
+                publicConnection: 'Public Connection',
+                localNetworkInfo: 'Local network connection allows collaboration between devices on the same network.',
+                useLocalIp: 'Use Local IP',
+                hostIpAddress: 'Host IP Address',
+                enterHostIp: 'Enter host IP address',
+                enterHostIpPlaceholder: 'Enter host IP address',
+                hostIpHelp: 'Other users can use this IP address to connect to your server',
+                serverUrlHelp: 'Share this complete connection address with other users. They can paste it directly into their connection input field',
+                connectionShareInfo: 'Other users need to use the complete WebSocket address (with ws:// protocol and port) to connect',
+                ipSetupInstructions: 'Please run the start-server.bat file first, select the correct IP address from the list (usually starting with 192.168, 10., or 172.), then copy it to the input field below.',
+                ipAddressExample: 'Example: 192.168.1.100',
+                manualIpInstructions: 'Please select and copy your local IP address from the server window (usually starting with 192.168, 10., or 172.) and paste it into the input field above.',
+                invalidIpFormat: 'Invalid IP address format. Should be four numbers separated by dots, e.g., 192.168.1.100',
+                // Image sharing
+                shareImageBtn: 'Share image',
+                sharedImage: 'Shared image',
+                sharingImage: 'Sharing image...',
+                imageShared: 'Image shared',
+                imageShareFailed: 'Image sharing failed'
+            }
+        };
+
+        // Function to detect local IP address
+        async function detectLocalIpAddress() {
+            try {
+                // Try multiple methods to get the local IP
+                // Method 1: Use WebRTC (most reliable for browser environments)
+                try {
+                    const pc = new RTCPeerConnection({ iceServers: [] });
+                    pc.createDataChannel('');
+                    await pc.createOffer().then(offer => pc.setLocalDescription(offer));
+
+                    // Collect all non-loopback IPs
+                    const ips = [];
+
+                    return new Promise((resolve) => {
+                        pc.onicecandidate = (ice) => {
+                            if (!ice || !ice.candidate || !ice.candidate.candidate) return;
+
+                            const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
+                            const ipMatch = ipRegex.exec(ice.candidate.candidate);
+
+                            if (ipMatch && ipMatch[1]) {
+                                const ip = ipMatch[1];
+                                // Skip loopback addresses
+                                if (!ip.startsWith('127.') && !ips.includes(ip)) {
+                                    ips.push(ip);
+
+                                    // Prefer IPs in common private network ranges
+                                    if (ip.startsWith('10.') || ip.startsWith('192.168.') || ip.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+                                        pc.onicecandidate = null;
+                                        pc.close();
+                                        console.log('Detected local IPs:', ips, 'Selected:', ip);
+                                        resolve(ip);
+                                    }
+                                }
+                            }
+                        };
+
+                        // Fallback if no candidates with preferred IP are found
+                        setTimeout(() => {
+                            pc.close();
+                            // If we found any non-loopback IPs, use the first one
+                            if (ips.length > 0) {
+                                console.log('Using first available IP:', ips[0], 'from', ips);
+                                resolve(ips[0]);
+                            } else {
+                                console.log('No local IPs detected, falling back to localhost');
+                                resolve('localhost');
+                            }
+                        }, 1500);
+                    });
+                } catch (rtcError) {
+                    console.error('WebRTC method failed:', rtcError);
+                    throw rtcError; // Let the outer catch handle it
+                }
+            } catch (error) {
+                console.error('All IP detection methods failed:', error);
+                return 'localhost';
+            }
+        }
+
+        // Function to fetch public IP address
+        async function fetchPublicIpAddress() {
+            try {
+                // Try multiple services in case one fails
+                const services = [
+                    'https://api.ipify.org?format=json',
+                    'https://api.ipgeolocation.io/getip',
+                    'https://api.db-ip.com/v2/free/self'
+                ];
+
+                for (const service of services) {
+                    try {
+                        const response = await fetch(service);
+                        if (response.ok) {
+                            const data = await response.json();
+                            // Different APIs return IP in different fields
+                            const ip = data.ip || data.ipAddress || data.address;
+                            if (ip && /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/.test(ip)) {
+                                return ip;
+                            }
+                        }
+                    } catch (innerError) {
+                        console.warn(`Failed to fetch public IP from ${service}:`, innerError);
+                        // Continue to next service
+                    }
+                }
+
+                // If all services fail, return unknown
+                return 'Unknown';
+            } catch (error) {
+                console.error('Error fetching public IP:', error);
+                return 'Unknown';
+            }
+        }
+
+        // Function to generate a random session ID
+        function generateSessionId() {
+            // Generate a random 6-character alphanumeric string
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking characters
+            let result = '';
+            for (let i = 0; i < 6; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // Connection-related functions
+        // ============================
+
+        /**
+         * Creates a new session and connects to the server
+         * This function generates a new session ID, sets up the UI, and initiates the connection
+         *
+         * NOTE: Session connection functionality is currently disabled
+         */
+        function createSession() {
+            // Session connection is disabled in this version
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '会话连接功能即将推出，敬请期待' : 'Session connection feature coming soon',
+                'info'
+            );
+            return;
+
+            /* Commented out session connection functionality
+            if (isConnected) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请先断开当前连接' : 'Please disconnect from the current session first',
+                    'warning'
+                );
+                return;
+            }
+
+            // Generate a new session ID
+            sessionId = generateSessionId();
+            isHosting = true;
+
+            // Update the session ID input
+            const sessionIdInput = document.getElementById('sessionIdInput');
+            if (sessionIdInput) {
+                sessionIdInput.value = sessionId;
+            }
+
+            // Show the share session button
+            const shareSessionBtn = document.getElementById('shareSessionBtn');
+            if (shareSessionBtn) {
+                shareSessionBtn.classList.remove('d-none');
+            }
+
+            // Connect to the server
+            connectToServer();
+
+            // Log the action
+            addLogEntry(`创建会话: ${sessionId}`, 'info');
+            */
+        }
+
+        /**
+         * Joins an existing session using the provided session ID
+         * This function validates the session ID, sets up the UI, and initiates the connection
+         *
+         * NOTE: Session connection functionality is currently disabled
+         */
+        function joinSession() {
+            // Session connection is disabled in this version
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '会话连接功能即将推出，敬请期待' : 'Session connection feature coming soon',
+                'info'
+            );
+            return;
+
+            /* Commented out session connection functionality
+            if (isConnected) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请先断开当前连接' : 'Please disconnect from the current session first',
+                    'warning'
+                );
+                return;
+            }
+
+            // Get the session ID from the input
+            const sessionIdInput = document.getElementById('sessionIdInput');
+            if (!sessionIdInput || !sessionIdInput.value.trim()) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请输入会话 ID' : 'Please enter a session ID',
+                    'warning'
+                );
+                return;
+            }
+
+            sessionId = sessionIdInput.value.trim().toUpperCase();
+            isHosting = false;
+
+            // Connect to the server
+            connectToServer();
+
+            // Log the action
+            addLogEntry(`加入会话: ${sessionId}`, 'info');
+            */
+        }
+
+        // Simple function to format connection info for sharing
+        function formatConnectionInfo(serverUrl) {
+            return `Server URL: ${serverUrl}`;
+        }
+
+        // Function to format host IP for sharing
+        function formatHostIpInfo(hostIp) {
+            return hostIp; // Just return the IP address directly
+        }
+
+        // Simple function to format session info for sharing
+        function formatSessionInfo(sessionId) {
+            return `Session ID: ${sessionId}`;
+        }
+
+        // Function to share the current session
+        function shareSession() {
+            // Session connection is disabled in this version
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '会话连接功能即将推出，敬请期待' : 'Session connection feature coming soon',
+                'info'
+            );
+            return;
+
+            /* Commented out session sharing functionality
+            if (!isConnected || !sessionId) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '没有活动的会话可分享' : 'No active session to share',
+                    'warning'
+                );
+                return;
+            }
+
+            // Format the session info for sharing
+            const shareableInfo = formatSessionInfo(sessionId);
+
+            // Create a modal to show the session info
+            // First, check if there's already a share modal and remove it
+            const existingModal = document.getElementById('shareSessionModal');
+            if (existingModal) {
+                existingModal.parentNode.removeChild(existingModal);
+            }
+            const existingBackdrop = document.getElementById('shareModalBackdrop');
+            if (existingBackdrop) {
+                existingBackdrop.parentNode.removeChild(existingBackdrop);
+            }
+
+            // Create backdrop
+            const shareModalBackdrop = document.createElement('div');
+            shareModalBackdrop.className = 'custom-modal-backdrop';
+            shareModalBackdrop.id = 'shareModalBackdrop';
+            document.body.appendChild(shareModalBackdrop);
+
+            // Create modal
+            const shareModal = document.createElement('div');
+            shareModal.className = 'custom-modal';
+            shareModal.id = 'shareSessionModal';
+            shareModal.setAttribute('tabindex', '-1');
+
+            shareModal.innerHTML = `
+                <div class="custom-modal-header">
+                    <h5 class="custom-modal-title" data-lang-key="shareSession">${getTranslation('shareSession')}</h5>
+                    <button type="button" class="custom-modal-close" id="shareModalClose">&times;</button>
+                </div>
+                <div class="custom-modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" data-lang-key="sessionId">${getTranslation('sessionId')}</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" value="${sessionId}" readonly>
+                            <button class="btn btn-outline-secondary copy-btn" data-copy-text="${sessionId}">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">${currentLang === 'zh-CN' ? '其他用户可以使用此ID直接加入您的会话' : 'Other users can use this ID to join your session directly'}</small>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <small>${currentLang === 'zh-CN' ? '分享此会话 ID 给其他用户，他们可以在“加入会话”面板中输入此 ID 来加入您的会话' : 'Share this Session ID with other users. They can enter this ID in the "Join Session" panel to join your session'}</small>
+                    </div>
+                </div>
+                <div class="custom-modal-footer">
+                    <button type="button" class="btn btn-secondary" id="shareModalCloseBtn" data-lang-key="close">${getTranslation('close')}</button>
+                </div>
+            `;
+
+            // Add the modal to the document
+            document.body.appendChild(shareModal);
+
+            // Function to show the share modal
+            function showShareModal() {
+                shareModal.classList.add('show');
+                shareModalBackdrop.classList.add('show');
+            }
+
+            // Function to hide the share modal
+            function hideShareModal() {
+                shareModal.classList.remove('show');
+                shareModalBackdrop.classList.remove('show');
+
+                // Remove the modal after hiding
+                setTimeout(() => {
+                    if (shareModal.parentNode) {
+                        shareModal.parentNode.removeChild(shareModal);
+                    }
+                    if (shareModalBackdrop.parentNode) {
+                        shareModalBackdrop.parentNode.removeChild(shareModalBackdrop);
+                    }
+                }, 300);
+            }
+
+            // Add copy button functionality
+            const copyButtons = shareModal.querySelectorAll('.copy-btn');
+            copyButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const textToCopy = this.getAttribute('data-copy-text');
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        const originalHTML = this.innerHTML;
+                        this.innerHTML = `<i class="bi bi-check"></i> ${getTranslation('copied')}`;
+                        setTimeout(() => {
+                            this.innerHTML = originalHTML;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy text:', err);
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '复制失败，请手动复制' : 'Copy failed, please copy manually',
+                            'error'
+                        );
+                    });
+                });
+            });
+
+            // Add close button functionality
+            const shareModalClose = document.getElementById('shareModalClose');
+            shareModalClose.addEventListener('click', hideShareModal);
+
+            const shareModalCloseBtn = document.getElementById('shareModalCloseBtn');
+            shareModalCloseBtn.addEventListener('click', hideShareModal);
+
+            // Close when clicking on backdrop
+            shareModalBackdrop.addEventListener('click', hideShareModal);
+
+            // Show the modal
+            showShareModal();
+            */
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM已加载，开始初始化...');
+
+            const checklistBody = document.getElementById('checklistBody');
+            if (!checklistBody) {
+                console.error('未找到checklistBody元素');
+                document.body.innerHTML += '<p style="color:red;">错误：无法找到表格主体</p>';
+                return;
+            }
+
+            // Initialize IP displays with loading message
+            const localIpDisplay = document.getElementById('localIpDisplay');
+            const publicIpDisplay = document.getElementById('publicIpDisplay');
+            const serverUrlInput = document.getElementById('serverUrlInput');
+
+            if (localIpDisplay) {
+                localIpDisplay.textContent = getTranslation('fetchingIp');
+            }
+
+            if (publicIpDisplay) {
+                publicIpDisplay.textContent = getTranslation('fetchingIp');
+            }
+
+            // IP handling elements
+            const ipDisplay = document.getElementById('ipDisplay');
+            const copyIpBtn = document.getElementById('copyIpBtn');
+            const editIpBtn = document.getElementById('editIpBtn');
+            const useIpBtn = document.getElementById('useIpBtn');
+            const manualIpInput = document.getElementById('manualIpInput');
+            const saveManualIpBtn = document.getElementById('saveManualIpBtn');
+            const manualIpInputContainer = document.getElementById('manualIpInputContainer');
+            const autoDetectedRadio = document.getElementById('autoDetectedRadio');
+            const manualIpRadio = document.getElementById('manualIpRadio');
+
+            // Variables to store both types of IPs
+            let autoDetectedIp = '';
+            let manualIp = '10.219.148.59';
+            let currentIpSource = 'auto'; // 'auto' or 'manual'
+
+            // Detect local IP address
+            detectLocalIpAddress().then(ip => {
+                localIpAddress = ip;
+                autoDetectedIp = ip; // Set the auto-detected IP for our new UI
+                console.log('Detected local IP address:', localIpAddress);
+
+                // Update the IP display if in auto mode
+                if (ipDisplay && currentIpSource === 'auto') {
+                    ipDisplay.textContent = autoDetectedIp;
+                }
+
+                // We're now using manual IP input from the server.bat output
+                // No need to automatically update the host IP input
+            });
+
+            // Function definitions for IP handling
+
+            // Function to update the displayed IP
+            function updateIpDisplay() {
+                if (ipDisplay) {
+                    ipDisplay.textContent = currentIpSource === 'auto' ? autoDetectedIp : manualIp;
+                }
+            }
+
+            // Function to use the current IP
+            function useCurrentIp() {
+                const ip = currentIpSource === 'auto' ? autoDetectedIp : manualIp;
+                const hostIpInput = document.getElementById('hostIpInput');
+                if (hostIpInput && ip) {
+                    // Validate IP format - allow both standard IP format and 'localhost'
+                    const ipRegex = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
+                    if (ipRegex.test(ip) || ip === 'localhost') {
+                        hostIpInput.value = ip;
+                        const msgType = currentIpSource === 'auto' ? '自动检测' : '手动输入';
+                        showFloatingMessage(
+                            currentLang === 'zh-CN'
+                                ? `已使用${msgType}的IP地址`
+                                : `Using ${currentIpSource === 'auto' ? 'auto-detected' : 'manually entered'} IP address`,
+                            'success'
+                        );
+                        addLogEntry(`使用IP (${msgType}): ${ip}`, 'info');
+                    } else {
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? 'IP地址格式不正确' : 'Invalid IP address format',
+                            'error'
+                        );
+                    }
+                }
+            }
+
+            // Use IP button click handler
+            if (useIpBtn) {
+                useIpBtn.addEventListener('click', useCurrentIp);
+            }
+
+            // Copy IP button click handler
+            if (copyIpBtn && ipDisplay) {
+                copyIpBtn.addEventListener('click', function() {
+                    const ip = ipDisplay.textContent.trim();
+                    navigator.clipboard.writeText(ip).then(() => {
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? 'IP地址已复制到剪贴板' : 'IP address copied to clipboard',
+                            'success'
+                        );
+                    }).catch(err => {
+                        console.error('Failed to copy IP address:', err);
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '复制失败，请手动复制' : 'Copy failed, please copy manually',
+                            'error'
+                        );
+                    });
+                });
+            }
+
+            // Edit IP button click handler
+            if (editIpBtn && manualIpInputContainer) {
+                editIpBtn.addEventListener('click', function() {
+                    // Switch to manual mode and show input
+                    manualIpRadio.checked = true;
+                    currentIpSource = 'manual';
+                    manualIpInputContainer.classList.remove('d-none');
+                    manualIpInput.value = manualIp;
+                    manualIpInput.focus();
+                    manualIpInput.select();
+                    updateIpDisplay();
+                });
+            }
+
+            // Radio button handlers
+            if (autoDetectedRadio && manualIpRadio) {
+                autoDetectedRadio.addEventListener('change', function() {
+                    if (this.checked) {
+                        currentIpSource = 'auto';
+                        manualIpInputContainer.classList.add('d-none');
+                        updateIpDisplay();
+                    }
+                });
+
+                manualIpRadio.addEventListener('change', function() {
+                    if (this.checked) {
+                        currentIpSource = 'manual';
+                        manualIpInputContainer.classList.remove('d-none');
+                        updateIpDisplay();
+                    }
+                });
+            }
+
+            // Save manual IP button click handler
+            if (saveManualIpBtn && manualIpInput) {
+                saveManualIpBtn.addEventListener('click', function() {
+                    const newIp = manualIpInput.value.trim();
+                    // Validate IP format - allow both standard IP format and 'localhost'
+                    const ipRegex = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
+                    if (ipRegex.test(newIp) || newIp === 'localhost') {
+                        manualIp = newIp;
+                        updateIpDisplay();
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '手动IP已更新' : 'Manual IP updated',
+                            'success'
+                        );
+                    } else {
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? 'IP地址格式不正确' : 'Invalid IP address format',
+                            'error'
+                        );
+                    }
+                });
+            }
+
+            // Also allow pressing Enter in the input field
+            if (manualIpInput && saveManualIpBtn) {
+                manualIpInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveManualIpBtn.click();
+                    }
+                });
+            }
+            // Fetch public IP address
+            fetchPublicIpAddress().then(ip => {
+                publicIpAddress = ip;
+                console.log('Fetched public IP address:', publicIpAddress);
+
+                // Update the public IP display
+                if (publicIpDisplay) {
+                    publicIpDisplay.textContent = publicIpAddress;
+                }
+
+                // Add copy button functionality for public IP
+                const copyPublicIpBtn = document.getElementById('copyPublicIpBtn');
+                if (copyPublicIpBtn) {
+                    copyPublicIpBtn.addEventListener('click', function() {
+                        navigator.clipboard.writeText(publicIpAddress).then(() => {
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? 'IP地址已复制到剪贴板' : 'IP address copied to clipboard',
+                                'success'
+                            );
+                        }).catch(err => {
+                            console.error('Failed to copy IP address:', err);
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? '复制失败，请手动复制' : 'Copy failed, please copy manually',
+                                'error'
+                            );
+                        });
+                    });
+                }
+
+                // Add functionality to use public IP button
+                const usePublicIpBtn = document.getElementById('usePublicIpBtn');
+                if (usePublicIpBtn) {
+                    usePublicIpBtn.addEventListener('click', function() {
+                        if (serverUrlInput && publicIpAddress !== 'Unknown') {
+                            serverUrlInput.value = `ws://${publicIpAddress}:8080`;
+                            serverUrl = serverUrlInput.value;
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? '已更新服务器地址' : 'Server address updated',
+                                'success'
+                            );
+                        } else {
+                            showFloatingMessage(
+                                currentLang === 'zh-CN' ? '无法使用公共IP，请尝试使用本地网络IP' : 'Cannot use public IP, try using local network IP instead',
+                                'warning'
+                            );
+                        }
+                    });
+                }
+            }).catch(error => {
+                console.error('Error fetching public IP:', error);
+                if (publicIpDisplay) {
+                    publicIpDisplay.textContent = 'Unknown';
+                }
+            });
+
+            applyNightMode();
+            initTooltips();
+            document.getElementById('loadBtn').onclick = () => document.getElementById('jsonFileInput').click();
+            document.getElementById('pasteBtn').onclick = triggerPaste;
+            document.getElementById('addBtn').onclick = addItem;
+            document.getElementById('saveBtn').onclick = saveChecklist;
+            document.getElementById('resetBtn').onclick = resetChecklist;
+            document.getElementById('toggleLogBtn').onclick = toggleLogConsole;
+            document.getElementById('clearLogBtn').onclick = clearLogConsole;
+            document.getElementById('closeLogBtn').onclick = hideLogConsole;
+            document.getElementById('pageLockBtn').onclick = togglePageLock;
+            document.getElementById('titleLockBtn').onclick = toggleTitleLock;
+            document.getElementById('langSwitcher').onclick = toggleLanguage;
+            document.getElementById('nightModeBtn').onclick = toggleNightMode;
+
+            // Collaboration event handlers
+            document.getElementById('connectBtn').onclick = connectToServer;
+            document.getElementById('disconnectBtn').onclick = disconnectFromServer;
+            document.getElementById('usernameInput').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    connectToServer();
+                }
+            });
+
+            // Custom Collaboration modal
+            const showCollabBtn = document.getElementById('showCollabBtn');
+            const collabModal = document.getElementById('collabModal');
+            const collabModalBackdrop = document.getElementById('collabModalBackdrop');
+            const collabModalClose = document.getElementById('collabModalClose');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+
+            // Function to show the modal
+            function showCollabModal() {
+                collabModal.classList.add('show');
+                collabModalBackdrop.classList.add('show');
+                console.log('Showing collaboration modal');
+            }
+
+            // Function to hide the modal
+            function hideCollabModal() {
+                collabModal.classList.remove('show');
+                collabModalBackdrop.classList.remove('show');
+                console.log('Hiding collaboration modal');
+            }
+
+            // Show modal when clicking the button
+            showCollabBtn.addEventListener('click', function() {
+                showCollabModal();
+            });
+
+            // Show modal when clicking the active users indicator
+            document.getElementById('activeUsersIndicator').addEventListener('click', function() {
+                showCollabModal();
+            });
+
+            // Hide modal when clicking the close button
+            collabModalClose.addEventListener('click', function() {
+                hideCollabModal();
+            });
+
+            // Add event listeners for session buttons (disabled in this version)
+            /* Session buttons are disabled in this version
+            document.getElementById('createSessionBtn').addEventListener('click', function() {
+                createSession();
+            });
+
+            document.getElementById('joinSessionBtn').addEventListener('click', function() {
+                joinSession();
+            });
+
+            document.getElementById('shareSessionBtn').addEventListener('click', function() {
+                shareSession();
+            });
+            */
+
+            // Add event listeners for connection tabs
+            document.getElementById('direct-tab').addEventListener('click', function() {
+                // Direct tab is now the only active tab, no need to show/hide sections
+            });
+
+            // Initialize tooltips
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
+            // Hide modal when clicking the close button in footer
+            closeModalBtn.addEventListener('click', function() {
+                hideCollabModal();
+            });
+
+            // Hide modal when clicking the backdrop
+            collabModalBackdrop.addEventListener('click', function() {
+                hideCollabModal();
+            });
+
+            // Add share connection button functionality
+            document.getElementById('shareConnectionBtn').addEventListener('click', function() {
+                shareConnectionInfo();
+            });
+
+            // Test modal functionality is kept in HTML for debugging purposes
+            // but event handlers are removed for production
+
+            const imageUrlInput = document.getElementById('imageUrlInput');
+            if (imageUrlInput) imageUrlInput.addEventListener('paste', handlePaste);
+
+            const contentInput = document.getElementById('contentInput');
+            if (contentInput) contentInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addItem();
+                }
+            });
+
+            checklistBody.addEventListener('click', handleTableEvents);
+            window.addEventListener('beforeunload', handleBeforeUnload);
+
+            document.getElementById('jsonFileInput').addEventListener('change', loadChecklist);
+            document.getElementById('imageFilesInput').addEventListener('change', handleImageFilesUpload);
+
+            console.log('初次渲染，checklist长度:', checklist.length);
+            updateLanguage();
+            renderChecklist();
+            showFloatingMessage(getTranslation('systemInitialized'), 'success', 2000);
+            addLogEntry('系统初始化完成', 'info');
+
+            // Try to load username from localStorage
+            const savedUsername = localStorage.getItem('checklist_username');
+            if (savedUsername) {
+                document.getElementById('usernameInput').value = savedUsername;
+                username = savedUsername;
+            }
+
+            // Check if there's a connection parameter in the URL
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const serverUrlParam = urlParams.get('serverUrl');
+                const sessionParam = urlParams.get('session');
+
+                if (serverUrlParam) {
+                    // Set the server URL
+                    document.getElementById('serverUrlInput').value = serverUrlParam;
+                    serverUrl = serverUrlParam;
+
+                    // Show a notification
+                    showFloatingMessage(
+                        currentLang === 'zh-CN'
+                            ? '已从 URL 加载服务器地址，点击连接按钮连接到服务器'
+                            : 'Server URL loaded from URL, click Connect to join the server',
+                        'info',
+                        5000
+                    );
+
+                    // Open the collaboration modal and switch to direct connection tab
+                    showCollabModal();
+                    document.getElementById('direct-tab').click();
+                } else if (sessionParam) {
+                    // Set the session ID
+                    const sessionIdInput = document.getElementById('sessionIdInput');
+                    if (sessionIdInput) {
+                        sessionIdInput.value = sessionParam;
+                        sessionId = sessionParam;
+                        isHosting = false;
+                    }
+
+                    // Show a notification
+                    showFloatingMessage(
+                        currentLang === 'zh-CN'
+                            ? `已从 URL 加载会话 ID: ${sessionParam}, 点击加入按钮连接到会话`
+                            : `Session ID loaded from URL: ${sessionParam}, click Join to connect to the session`,
+                        'info',
+                        5000
+                    );
+
+                    // Open the collaboration modal and ensure session tab is active
+                    showCollabModal();
+                    document.getElementById('session-tab').click();
+                }
+            } catch (error) {
+                console.error('Error parsing connection info from URL:', error);
+            }
+        });
+
+        function applyNightMode() {
+            const body = document.body;
+            const nightModeBtn = document.getElementById('nightModeBtn');
+            if (isNightMode) {
+                body.classList.add('night-mode');
+                nightModeBtn.innerHTML = '<i class="bi bi-sun"></i>';
+            } else {
+                body.classList.remove('night-mode');
+                nightModeBtn.innerHTML = '<i class="bi bi-moon-stars"></i>';
+            }
+            initTooltips(); // Refresh tooltips after mode change
+        }
+
+        function toggleNightMode() {
+            isNightMode = !isNightMode;
+            localStorage.setItem('nightMode', isNightMode);
+            applyNightMode();
+            showFloatingMessage(
+                currentLang === 'zh-CN'
+                    ? (isNightMode ? '已启用夜间模式' : '已禁用夜间模式')
+                    : (isNightMode ? 'Night mode enabled' : 'Night mode disabled'),
+                'info'
+            );
+            addLogEntry(`夜间模式${isNightMode ? '启用' : '禁用'}`, 'info');
+        }
+
+        function initTooltips() {
+            if (tooltips.length > 0) {
+                tooltips.forEach(tooltip => tooltip.dispose && tooltip.dispose());
+                tooltips = [];
+            }
+            const tooltipTriggerList = document.querySelectorAll('[data-tooltip-key]');
+            tooltips = [...tooltipTriggerList].map(el => {
+                const key = el.getAttribute('data-tooltip-key');
+                const title = getTranslation(key);
+                return new bootstrap.Tooltip(el, {
+                    title,
+                    trigger: 'hover focus',
+                    delay: { show: 500, hide: 100 }
+                });
+            });
+        }
+
+        function getTranslation(key) {
+            return translations[currentLang][key] || translations['zh-CN'][key] || key;
+        }
+
+        function updateLanguage() {
+            document.querySelectorAll('[data-lang-key]').forEach(el => {
+                const key = el.getAttribute('data-lang-key');
+                el.textContent = getTranslation(key);
+            });
+            document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-lang-placeholder');
+                el.placeholder = getTranslation(key);
+            });
+            document.documentElement.lang = currentLang;
+            initTooltips();
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'zh-CN' ? 'en' : 'zh-CN';
+            updateLanguage();
+            renderChecklist();
+            showFloatingMessage(currentLang === 'zh-CN' ? '已切换到中文' : 'Switched to English', 'info');
+            addLogEntry(`语言切换至 ${currentLang === 'zh-CN' ? '中文' : 'English'}`, 'info');
+        }
+
+        function showFloatingMessage(message, type = 'info', duration = 3000) {
+            const messageEl = document.getElementById('floating-message');
+            if (!messageEl || !message || message.trim() === '') {
+                console.warn('尝试显示空消息，已忽略:', message);
+                addLogEntry('尝试显示空消息，已忽略', 'warning');
+                return;
+            }
+            if (floatingMessageTimeout) clearTimeout(floatingMessageTimeout);
+            let color = { info: '#17a2b8', error: '#dc3545', warning: '#ffc107', success: '#28a745' }[type] || '#17a2b8';
+            messageEl.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+            messageEl.style.borderLeft = `4px solid ${color}`;
+            messageEl.textContent = message;
+            messageEl.classList.add('show');
+            floatingMessageTimeout = setTimeout(() => messageEl.classList.remove('show'), duration);
+        }
+
+        function handleBeforeUnload(event) {
+            if (pageIsLocked || imageBlobs.size > 0) {
+                const message = currentLang === 'zh-CN' ? '警告：您有未保存的图片。请在离开前保存。' : 'Warning: You have unsaved images. Please save before leaving.';
+                event.returnValue = message;
+                return message;
+            }
+        }
+
+        function togglePageLock() {
+            pageIsLocked = !pageIsLocked;
+            const lockBtn = document.getElementById('pageLockBtn');
+            if (lockBtn) {
+                lockBtn.innerHTML = pageIsLocked ? '<i class="bi bi-lock"></i>' : '<i class="bi bi-unlock"></i>';
+                lockBtn.classList.toggle('locked', pageIsLocked);
+                lockBtn.setAttribute('data-tooltip-key', 'pageLockBtn');
+                showFloatingMessage(
+                    currentLang === 'zh-CN'
+                        ? (pageIsLocked ? '页面已锁定。刷新将被阻止。' : '页面已解锁。')
+                        : (pageIsLocked ? 'Page locked. Refresh will be prevented.' : 'Page unlocked.'),
+                    'info'
+                );
+                console.log('页面锁定状态:', pageIsLocked);
+                addLogEntry(`页面${pageIsLocked ? '锁定' : '解锁'}`, 'info');
+                initTooltips();
+            } else {
+                console.error('未找到pageLockBtn元素');
+            }
+        }
+
+        function toggleTitleLock() {
+            const titleInput = document.getElementById('titleInput');
+            const lockBtn = document.getElementById('titleLockBtn');
+            if (!titleInput || !lockBtn) {
+                console.error('未找到titleInput或titleLockBtn元素');
+                addLogEntry('标题锁定失败：未找到元素', 'error');
+                return;
+            }
+
+            titleIsLocked = !titleIsLocked;
+            titleInput.readOnly = titleIsLocked;
+            titleInput.classList.toggle('title-locked', titleIsLocked);
+            lockBtn.innerHTML = titleIsLocked ? '<i class="bi bi-lock"></i>' : '<i class="bi bi-unlock"></i>';
+            lockBtn.classList.toggle('locked', titleIsLocked);
+            lockBtn.setAttribute('data-tooltip-key', 'titleLockBtn');
+            showFloatingMessage(
+                currentLang === 'zh-CN'
+                    ? (titleIsLocked ? '标题已锁定' : '标题已解锁')
+                    : (titleIsLocked ? 'Title locked' : 'Title unlocked'),
+                'info'
+            );
+            addLogEntry(`标题${titleIsLocked ? '锁定' : '解锁'}: ${titleInput.value || '空'}`, 'info');
+
+            if (titleIsLocked && !titleInput.value.trim()) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '警告：锁定了一个空标题' : 'Warning: Locked an empty title',
+                    'warning'
+                );
+                addLogEntry('标题锁定警告：空标题', 'warning');
+            }
+            initTooltips();
+        }
+
+        function toggleLogConsole() {
+            const logConsole = document.getElementById('console-log');
+            if (logConsole) {
+                logVisible = !logVisible;
+                logConsole.classList.toggle('active', logVisible);
+                console.log('日志控制台状态:', logVisible ? '显示' : '隐藏');
+                addLogEntry(`日志控制台${logVisible ? '显示' : '隐藏'}`, 'info');
+            } else {
+                console.error('未找到console-log元素');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无法显示日志控制台' : 'Error: Cannot show log console',
+                    'error'
+                );
+            }
+        }
+
+        function hideLogConsole() {
+            const logConsole = document.getElementById('console-log');
+            if (logConsole) {
+                logVisible = false;
+                logConsole.classList.remove('active');
+                console.log('日志控制台已关闭');
+                addLogEntry('日志控制台关闭', 'info');
+            }
+        }
+
+        function clearLogConsole() {
+            const consoleContent = document.getElementById('console-content');
+            if (consoleContent) {
+                consoleContent.innerHTML = '';
+                addLogEntry('日志已清空', 'info');
+            }
+        }
+
+        function addLogEntry(message, type = 'info') {
+            const consoleContent = document.getElementById('console-content');
+            if (!consoleContent) return;
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.innerHTML = `<span class="log-time">${timeStr}</span> ${message}`;
+            consoleContent.appendChild(logEntry);
+            consoleContent.scrollTop = consoleContent.scrollHeight;
+        }
+
+        function handleTableEvents(event) {
+            const button = event.target.closest('button');
+            if (!button) return;
+            const action = button.getAttribute('data-action');
+            const index = parseInt(button.getAttribute('data-index'), 10);
+            if (action === 'toggle') toggleDone(index);
+            else if (action === 'edit') editItem(index);
+            else if (action === 'remove') removeItem(index);
+            else if (action === 'copy') copyItem(index);
+            else if (action === 'saveEdit') saveEdit(index);
+            else if (action === 'cancelEdit') cancelEdit(index);
+            else if (action === 'editPaste') triggerEditPaste(index);
+            else if (action === 'shareImage') shareImage(index);
+        }
+
+        function loadChecklist(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '未选择文件，请选择一个 .json 文件' : 'No file selected, please choose a .json file',
+                    'warning'
+                );
+                addLogEntry('导入取消：未选择文件', 'warning');
+                return;
+            }
+
+            if (!file.name.endsWith('.json')) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请选择一个有效的 .json 文件' : 'Please select a valid .json file',
+                    'warning'
+                );
+                addLogEntry('导入失败：无效文件类型', 'warning');
+                event.target.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (!Array.isArray(importedData)) {
+                        throw new Error('文件内容不是有效的清单数组');
+                    }
+
+                    checklist = importedData;
+                    console.log('导入清单:', checklist);
+                    addLogEntry(`导入清单成功，项目数: ${checklist.length}`, 'success');
+
+                    const itemsWithImages = checklist.filter(item => item.imageId && item.imagePath);
+                    if (itemsWithImages.length > 0) {
+                        imageBlobs.clear();
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '清单中包含图片引用，请选择对应的图片文件' : 'Checklist contains image references, please select corresponding image files',
+                            'info',
+                            5000
+                        );
+                        document.getElementById('imageFilesInput').click();
+                    } else {
+                        renderChecklist();
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '清单导入成功！' : 'Checklist imported successfully!',
+                            'success'
+                        );
+                    }
+                } catch (error) {
+                    console.error('导入JSON失败:', error);
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '导入失败：无效的JSON文件' : 'Import failed: Invalid JSON file',
+                        'error'
+                    );
+                    addLogEntry('导入失败：无效JSON', 'error');
+                    checklist = [];
+                    renderChecklist();
+                }
+                event.target.value = '';
+            };
+            reader.onerror = function() {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '读取文件失败，请重试' : 'Failed to read file, please try again',
+                    'error'
+                );
+                addLogEntry('导入失败：文件读取错误', 'error');
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function handleImageFilesUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '未选择图片文件，清单已导入但无图片' : 'No image files selected, checklist imported without images',
+                    'warning'
+                );
+                addLogEntry('图片导入取消：未选择文件', 'warning');
+                renderChecklist();
+                return;
+            }
+
+            let loadedImages = 0;
+            for (let file of files) {
+                if (!file.type.startsWith('image/')) {
+                    console.warn(`跳过非图片文件: ${file.name}`);
+                    addLogEntry(`跳过非图片文件: ${file.name}`, 'warning');
+                    continue;
+                }
+
+                const imageId = `img_${Date.now()}_${imageIndex++}`;
+                const dataUrl = URL.createObjectURL(file);
+                imageBlobs.set(imageId, file);
+
+                const matchingItem = checklist.find(item => item.imageId && file.name.includes(item.imageId));
+                if (matchingItem) {
+                    matchingItem.imagePath = dataUrl;
+                    matchingItem.imageId = imageId;
+                    loadedImages++;
+                } else {
+                    console.warn(`未找到匹配的imageId for ${file.name}`);
+                    addLogEntry(`未匹配图片: ${file.name}`, 'warning');
+                }
+            }
+
+            if (loadedImages > 0) {
+                renderChecklist();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? `成功导入清单和 ${loadedImages} 张图片！` : `Successfully imported checklist and ${loadedImages} images!`,
+                    'success'
+                );
+                addLogEntry(`导入 ${loadedImages} 张图片成功`, 'success');
+            } else {
+                renderChecklist();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单已导入，但未匹配到有效图片' : 'Checklist imported, but no valid images matched',
+                    'warning'
+                );
+                addLogEntry('图片导入失败：无匹配', 'warning');
+            }
+            event.target.value = '';
+        }
+
+        function triggerPaste() {
+            const pasteInput = document.getElementById('imageUrlInput');
+            if (pasteInput) {
+                pasteInput.focus();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请按 Ctrl+V 将截图粘贴到输入框' : 'Press Ctrl+V to paste a screenshot into the input',
+                    'info'
+                );
+            } else {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无法触发粘贴 - 未找到输入框' : 'Error: Cannot trigger paste - input not found',
+                    'error'
+                );
+                addLogEntry('粘贴触发失败：未找到输入框', 'error');
+            }
+        }
+
+        function triggerEditPaste(index) {
+            const pasteInput = document.getElementById(`editImageUrl${index}`);
+            if (pasteInput) {
+                pasteInput.focus();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请按 Ctrl+V 将截图粘贴到编辑框' : 'Press Ctrl+V to paste a screenshot into the edit input',
+                    'info'
+                );
+            } else {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无法触发编辑粘贴 - 未找到输入框' : 'Error: Cannot trigger edit paste - input not found',
+                    'error'
+                );
+                addLogEntry('编辑粘贴触发失败：未找到输入框', 'error');
+            }
+        }
+
+        function handlePaste(event) {
+            event.preventDefault();
+            const items = event.clipboardData?.items;
+            if (!items || items.length === 0) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '剪贴板中无可用数据。请确保已复制图片' : 'No data in clipboard. Ensure an image is copied',
+                    'warning'
+                );
+                addLogEntry('粘贴失败：剪贴板无数据', 'warning');
+                return;
+            }
+            for (let item of items) {
+                if (item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    if (!blob) {
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '无法从剪贴板获取图片。请重试' : 'Cannot retrieve image from clipboard. Please try again',
+                            'error'
+                        );
+                        addLogEntry('粘贴失败：无法获取图片', 'error');
+                        return;
+                    }
+                    const imageId = `img_${Date.now()}_${imageIndex++}`;
+                    imageBlobs.set(imageId, blob);
+                    const dataUrl = URL.createObjectURL(blob);
+                    const title = document.getElementById('titleInput').value.trim() || '截图';
+                    const content = document.getElementById('contentInput').value.trim() || '粘贴的图片';
+
+                    // Add the item to the checklist
+                    const newIndex = checklist.length;
+                    checklist.push({ title, content, imagePath: dataUrl, imageId, done: false });
+                    renderChecklist();
+
+                    // Show success message
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '图片已粘贴，项目已添加成功！' : 'Image pasted, item added successfully!',
+                        'success'
+                    );
+                    addLogEntry(`添加项目: ${title} (含图片)`, 'success');
+
+                    // Clear input fields
+                    document.getElementById('contentInput').value = '';
+                    document.getElementById('imageUrlInput').value = '';
+                    if (!titleIsLocked) document.getElementById('titleInput').value = '';
+
+                    // If connected to server, automatically share the image
+                    if (isConnected && socket && socket.readyState === WebSocket.OPEN) {
+                        // First, send the new item to the server
+                        sendMessage({
+                            type: 'itemAdded',
+                            item: {
+                                title: title,
+                                content: content,
+                                done: false,
+                                // Don't include the image data here, we'll send it separately
+                                imagePath: '',
+                                imageId: '',
+                                isSharedImage: false
+                            },
+                            timestamp: Date.now()
+                        });
+
+                        // Then share the image
+                        setTimeout(() => {
+                            shareImageData(newIndex, imageId, blob);
+                        }, 500); // Small delay to ensure the item is added first
+                    }
+                    return;
+                }
+            }
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '剪贴板数据不是图片。请复制图片后重试' : 'Clipboard data is not an image. Copy an image and try again',
+                'warning'
+            );
+            addLogEntry('粘贴失败：非图片数据', 'warning');
+        }
+
+        function handleEditPaste(event) {
+            const index = parseInt(event.target.getAttribute('data-index'), 10);
+            if (isNaN(index) || !checklist[index]) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：无效的编辑索引' : 'Error: Invalid edit index',
+                    'error'
+                );
+                addLogEntry('编辑粘贴失败：无效索引', 'error');
+                return;
+            }
+            event.preventDefault();
+            const items = event.clipboardData?.items;
+            if (!items || items.length === 0) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '剪贴板中无可用数据。请确保已复制图片' : 'No data in clipboard. Ensure an image is copied',
+                    'warning'
+                );
+                addLogEntry('编辑粘贴失败：剪贴板无数据', 'warning');
+                return;
+            }
+            for (let item of items) {
+                if (item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    if (!blob) {
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '无法从剪贴板获取图片。请重试' : 'Cannot retrieve image from clipboard. Please try again',
+                            'error'
+                        );
+                        addLogEntry('编辑粘贴失败：无法获取图片', 'error');
+                        return;
+                    }
+                    const imageId = `img_${Date.now()}_${imageIndex++}`;
+                    imageBlobs.set(imageId, blob);
+                    const dataUrl = URL.createObjectURL(blob);
+                    if (checklist[index].imageId && imageBlobs.has(checklist[index].imageId)) {
+                        URL.revokeObjectURL(checklist[index].imagePath);
+                        imageBlobs.delete(checklist[index].imageId);
+                    }
+                    checklist[index].imagePath = dataUrl;
+                    checklist[index].imageId = imageId;
+                    checklist[index].isSharedImage = false;
+                    document.getElementById(`editImageUrl${index}`).value = dataUrl;
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '图片已粘贴到编辑项目！' : 'Image pasted to edited item!',
+                        'success'
+                    );
+                    addLogEntry(`编辑项目 ${checklist[index].title}：添加图片`, 'success');
+
+                    // If connected to server, automatically share the image
+                    if (isConnected && socket && socket.readyState === WebSocket.OPEN) {
+                        // Share the image
+                        setTimeout(() => {
+                            shareImageData(index, imageId, blob);
+                        }, 500); // Small delay to ensure the UI is updated first
+                    }
+                    return;
+                }
+            }
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '剪贴板数据不是图片。请复制图片后重试' : 'Clipboard data is not an image. Copy an image and try again',
+                'warning'
+            );
+            addLogEntry('编辑粘贴失败：非图片数据', 'warning');
+        }
+
+        function addItem() {
+            const titleInput = document.getElementById('titleInput');
+            const content = document.getElementById('contentInput').value.trim();
+            const imageUrl = document.getElementById('imageUrlInput').value.trim();
+            const title = titleInput.value.trim();
+
+            if (title && content) {
+                const newItem = { title, content, imagePath: imageUrl || '', done: false };
+                checklist.push(newItem);
+                renderChecklist();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '新项目已添加成功！' : 'New item added successfully!',
+                    'success'
+                );
+                addLogEntry(`添加项目: ${title}`, 'success');
+                document.getElementById('contentInput').value = '';
+                document.getElementById('imageUrlInput').value = '';
+                if (!titleIsLocked) titleInput.value = '';
+
+                // Send update to server if connected
+                if (isConnected) {
+                    sendMessage({
+                        type: 'itemAdded',
+                        item: newItem,
+                        timestamp: Date.now()
+                    });
+                }
+            } else {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请填写标题和内容字段' : 'Please fill in title and content fields',
+                    'warning'
+                );
+                addLogEntry('添加失败：标题或内容为空', 'warning');
+            }
+        }
+
+        function exportJsonFile() {
+            const data = JSON.stringify(checklist, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `checklist_save_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function saveChecklist() {
+            if (checklist.length === 0) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单为空，无需保存' : 'Checklist is empty, no need to save',
+                    'warning'
+                );
+                addLogEntry('保存失败：清单为空', 'warning');
+                return;
+            }
+
+            if (imageBlobs.size === 0) {
+                exportJsonFile();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单已保存为JSON文件' : 'Checklist saved as JSON file',
+                    'success'
+                );
+                addLogEntry('保存清单为JSON', 'success');
+            } else {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                script.onload = function() {
+                    const zip = new JSZip();
+                    zip.file('checklist.json', JSON.stringify(checklist, null, 2));
+                    imageBlobs.forEach((blob, imageId) => zip.file(`images/${imageId}.png`, blob));
+                    zip.generateAsync({ type: 'blob' }).then(content => {
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(content);
+                        link.download = `checklist_save_${new Date().toISOString().slice(0, 10)}.zip`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '清单和图片已保存为ZIP文件' : 'Checklist and images saved as ZIP file',
+                            'success'
+                        );
+                        addLogEntry(`保存清单和 ${imageBlobs.size} 张图片为ZIP`, 'success');
+                    });
+                };
+                script.onerror = () => {
+                    console.error('无法加载JSZip库');
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '保存失败，降级为仅保存JSON' : 'Save failed, downgraded to JSON only',
+                        'warning'
+                    );
+                    addLogEntry('保存失败：JSZip加载错误', 'error');
+                    exportJsonFile();
+                };
+                document.head.appendChild(script);
+            }
+        }
+
+        function renderChecklist() {
+            const tbody = document.getElementById('checklistBody');
+            if (!tbody) {
+                console.error('未找到checklistBody元素');
+                document.body.innerHTML += '<p style="color:red;">错误：无法渲染表格</p>';
+                return;
+            }
+            tbody.innerHTML = '';
+            console.log('渲染清单，长度:', checklist.length);
+            if (checklist.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            <div class="text-muted">${getTranslation('noItems')}</div>
+                            <div class="mt-3">
+                                <button class="btn btn-outline-primary" onclick="document.getElementById('titleInput').focus()">
+                                    ${getTranslation('addFirstItem')} <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                checklist.forEach((item, index) => {
+                    const isDone = item.done || false;
+                    const doneClass = isDone ? 'text-decoration-line-through text-muted' : '';
+                    const hasImage = item.imagePath && item.imagePath.trim() !== '';
+                    // Check if someone is editing this item
+                    let editingIndicator = '';
+                    if (editingItems.has(index)) {
+                        const editorId = editingItems.get(index);
+                        const editor = activeUsers.get(editorId);
+                        if (editor) {
+                            const editingText = getTranslation('editingBy').replace('{username}', editor.username);
+                            editingIndicator = `<span class="editing-indicator"><i class="bi bi-pencil-fill"></i> ${editingText}</span>`;
+                        }
+                    }
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>
+                                <button class="btn btn-sm ${isDone ? 'btn-success' : 'btn-outline-secondary'} toggle-btn"
+                                        data-action="toggle" data-index="${index}"
+                                        data-tooltip-key="${isDone ? 'markIncomplete' : 'markComplete'}">
+                                    ${isDone ? '<i class="bi bi-check-lg"></i> ' + (currentLang === 'zh-CN' ? '已完成' : 'Done') : '<i class="bi bi-circle"></i> ' + (currentLang === 'zh-CN' ? '未完成' : 'To Do')}
+                                </button>
+                            </td>
+                            <td>${index + 1}</td>
+                            <td class="${doneClass}">${item.title} ${editingIndicator}</td>
+                            <td class="${doneClass}">${item.content}</td>
+                            <td>
+                                ${hasImage ?
+                                    `<div class="image-container">
+                                        <a href="${item.imagePath}" target="_blank"><img src="${item.imagePath}" alt="预览" class="preview-img ${item.isSharedImage ? 'shared-image' : ''}"></a>
+                                        ${item.isSharedImage ?
+                                            `<span class="image-badge shared-badge" data-tooltip-key="sharedImage"><i class="bi bi-cloud-check"></i></span>` :
+                                            `<button class="btn btn-sm btn-outline-primary share-image-btn" data-action="shareImage" data-index="${index}" data-tooltip-key="shareImageBtn" ${!isConnected ? 'disabled' : ''}>
+                                                <i class="bi bi-cloud-upload"></i>
+                                            </button>`
+                                        }
+                                    </div>` :
+                                    (currentLang === 'zh-CN' ? '无图片' : 'No Image')
+                                }
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-primary btn-sm" data-action="edit" data-index="${index}"
+                                            data-tooltip-key="editBtn" ${editingItems.has(index) && editingItems.get(index) !== userId ? 'disabled' : ''}>
+                                            <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" data-action="remove" data-index="${index}"
+                                            data-tooltip-key="removeBtn" ${editingItems.has(index) ? 'disabled' : ''}>
+                                            <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="edit-inputs d-none" id="editInputs${index}">
+                                    <input type="text" class="form-control form-control-sm" id="editTitle${index}" value="${item.title}"
+                                           placeholder="${getTranslation('titleInput')}">
+                                    <input type="text" class="form-control form-control-sm" id="editContent${index}" value="${item.content}"
+                                           placeholder="${getTranslation('contentInput')}">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control form-control-sm" id="editImageUrl${index}" value="${item.imagePath || ''}"
+                                               placeholder="${getTranslation('imageUrlInput')}" data-index="${index}">
+                                        <button class="btn btn-warning btn-sm" data-action="editPaste" data-index="${index}"
+                                                data-tooltip-key="editPasteBtn"><i class="bi bi-clipboard"></i></button>
+                                    </div>
+                                    <div class="mt-2">
+                                        <button class="btn btn-info btn-sm" data-action="saveEdit" data-index="${index}"
+                                                data-tooltip-key="saveEditBtn">
+                                            <i class="bi bi-check"></i> ${currentLang === 'zh-CN' ? '保存' : 'Save'}
+                                        </button>
+                                        <button class="btn btn-secondary btn-sm" data-action="cancelEdit" data-index="${index}"
+                                                data-tooltip-key="cancelEditBtn">
+                                            <i class="bi bi-x"></i> ${currentLang === 'zh-CN' ? '取消' : 'Cancel'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+            initTooltips();
+        }
+
+        function toggleDone(index) {
+            if (checklist[index]) {
+                checklist[index].done = !checklist[index].done;
+                renderChecklist();
+                showFloatingMessage(
+                    currentLang === 'zh-CN'
+                        ? `项目已${checklist[index].done ? '标记为已完成' : '标记为未完成'}`
+                        : `Item ${checklist[index].done ? 'marked as complete' : 'marked as incomplete'}`,
+                    'success'
+                );
+                addLogEntry(`项目 ${checklist[index].title} 状态改为${checklist[index].done ? '已完成' : '未完成'}`, 'success');
+
+                // Send update to server if connected
+                if (isConnected) {
+                    sendMessage({
+                        type: 'itemStatusChanged',
+                        index: index,
+                        done: checklist[index].done,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+        }
+
+        function removeItem(index) {
+            if (confirm(currentLang === 'zh-CN' ? '确定要删除这个项目吗？' : 'Are you sure you want to delete this item?')) {
+                const item = checklist[index];
+                if (item.imageId && imageBlobs.has(item.imageId)) {
+                    URL.revokeObjectURL(item.imagePath);
+                    imageBlobs.delete(item.imageId);
+                }
+                const title = item.title;
+                checklist.splice(index, 1);
+                renderChecklist();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '项目已删除成功！' : 'Item deleted successfully!',
+                    'success'
+                );
+                addLogEntry(`删除项目: ${title}`, 'success');
+
+                // Send update to server if connected
+                if (isConnected) {
+                    sendMessage({
+                        type: 'itemRemoved',
+                        index: index,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+        }
+
+        function editItem(index) {
+            const editInputs = document.getElementById(`editInputs${index}`);
+            if (editInputs) {
+                // Check if someone else is already editing this item
+                if (editingItems.has(index)) {
+                    const editorId = editingItems.get(index);
+                    const editor = activeUsers.get(editorId);
+                    if (editor) {
+                        showFloatingMessage(
+                            currentLang === 'zh-CN'
+                                ? `${editor.username} 正在编辑这个项目`
+                                : `${editor.username} is currently editing this item`,
+                            'warning'
+                        );
+                        return;
+                    }
+                }
+
+                editInputs.classList.remove('d-none');
+                document.getElementById(`editTitle${index}`).focus();
+                const editImageInput = document.getElementById(`editImageUrl${index}`);
+                if (editImageInput) {
+                    editImageInput.removeEventListener('paste', handleEditPaste);
+                    editImageInput.addEventListener('paste', handleEditPaste);
+                }
+                addLogEntry(`开始编辑项目: ${checklist[index].title}`, 'info');
+
+                // Send editing status to server if connected
+                if (isConnected) {
+                    sendMessage({
+                        type: 'startEditing',
+                        index: index,
+                        timestamp: Date.now()
+                    });
+                }
+            } else {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '错误：未找到编辑输入框' : 'Error: Edit inputs not found',
+                    'error'
+                );
+                addLogEntry('编辑失败：未找到输入框', 'error');
+            }
+        }
+
+        function saveEdit(index) {
+            const newTitle = document.getElementById(`editTitle${index}`).value.trim();
+            const newContent = document.getElementById(`editContent${index}`).value.trim();
+            if (newTitle && newContent) {
+                const oldTitle = checklist[index].title;
+                checklist[index].title = newTitle;
+                checklist[index].content = newContent;
+
+                // Send stop editing and update to server if connected
+                if (isConnected) {
+                    sendMessage({
+                        type: 'stopEditing',
+                        index: index,
+                        timestamp: Date.now()
+                    });
+
+                    sendMessage({
+                        type: 'itemUpdated',
+                        index: index,
+                        item: checklist[index],
+                        timestamp: Date.now()
+                    });
+                }
+
+                renderChecklist();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '项目更新成功！' : 'Item updated successfully!',
+                    'success'
+                );
+                addLogEntry(`编辑项目: ${oldTitle} -> ${newTitle}`, 'success');
+            } else {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '标题和内容不能为空' : 'Title and content cannot be empty',
+                    'warning'
+                );
+                addLogEntry('编辑失败：标题或内容为空', 'warning');
+            }
+        }
+
+        function cancelEdit(index) {
+            const editInputs = document.getElementById(`editInputs${index}`);
+            if (editInputs) {
+                editInputs.classList.add('d-none');
+                addLogEntry(`取消编辑项目: ${checklist[index].title}`, 'info');
+
+                // Send stop editing to server if connected
+                if (isConnected) {
+                    sendMessage({
+                        type: 'stopEditing',
+                        index: index,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+        }
+
+        function copyItem(index) {
+            const item = checklist[index];
+            const textToCopy = `${item.title}\n${item.content}`;
+            navigator.clipboard.writeText(textToCopy)
+                .then(() => {
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '内容已复制到剪贴板' : 'Content copied to clipboard',
+                        'success'
+                    );
+                    addLogEntry(`复制项目内容: ${item.title}`, 'success');
+                })
+                .catch(() => {
+                    showFloatingMessage(
+                        currentLang === 'zh-CN' ? '复制失败，请手动选择并复制' : 'Copy failed, please select and copy manually',
+                        'warning'
+                    );
+                    addLogEntry(`复制失败: ${item.title}`, 'warning');
+                });
+        }
+
+        function resetChecklist() {
+            if (confirm(currentLang === 'zh-CN' ? '确定要清空所有项目吗？此操作不可恢复！' : 'Are you sure you want to clear all items? This action cannot be undone!')) {
+                imageBlobs.forEach((_, imageId) => {
+                    const item = checklist.find(i => i.imageId === imageId);
+                    if (item && item.imagePath) URL.revokeObjectURL(item.imagePath);
+                });
+                const itemCount = checklist.length;
+                imageBlobs.clear();
+                checklist = [];
+                imageIndex = 1;
+                renderChecklist();
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '清单已重置' : 'Checklist reset',
+                    'warning'
+                );
+                addLogEntry(`重置清单，清空 ${itemCount} 个项目`, 'warning');
+
+                // If connected to server, ask if user wants to sync reset to all clients
+                if (isConnected) {
+                    if (confirm(currentLang === 'zh-CN' ? '是否要同步重置到所有客户端？' : 'Do you want to sync this reset to all clients?')) {
+                        sendMessage({
+                            type: 'resetAll',
+                            timestamp: Date.now()
+                        });
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '重置命令已发送到所有客户端' : 'Reset command sent to all clients',
+                            'info'
+                        );
+                        addLogEntry('发送重置命令到所有客户端', 'info');
+                    }
+                }
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notificationArea = document.getElementById('notification-area');
+            if (!notificationArea) return;
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.innerHTML = `<span>${message}</span><button class="notification-close" onclick="this.parentElement.remove()">×</button>`;
+            notificationArea.appendChild(notification);
+            setTimeout(() => notification.parentElement && notification.remove(), 3000);
+        }
+
+        /**
+         * Establishes a connection to the server
+         * This function handles both direct connections and session-based connections
+         * It validates input, establishes the WebSocket connection, and sets up event handlers
+         */
+        function connectToServer() {
+            // Check if already connected
+            if (isConnected) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '已经连接到服务器' : 'Already connected to server',
+                    'info'
+                );
+                return;
+            }
+
+            // Get connection parameters
+            const usernameInput = document.getElementById('usernameInput');
+            const hostIpInput = document.getElementById('hostIpInput');
+            username = usernameInput.value.trim();
+            const hostIp = hostIpInput.value.trim();
+
+            // Validate username
+            if (!username) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请输入用户名' : 'Please enter a username',
+                    'warning'
+                );
+                usernameInput.focus();
+                return;
+            }
+
+            // Validate host IP
+            if (!hostIp) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请输入主机IP地址' : 'Please enter a host IP address',
+                    'warning'
+                );
+                hostIpInput.focus();
+                return;
+            }
+
+            // Validate IP format
+            const ipRegex = /^[0-9]{1,3}(\.[0-9]{1,3}){3}$/;
+            if (!ipRegex.test(hostIp) && hostIp !== 'localhost') {
+                showFloatingMessage(
+                    getTranslation('invalidIpFormat'),
+                    'warning'
+                );
+                hostIpInput.focus();
+                return;
+            }
+
+            // Generate WebSocket URL from host IP
+            serverUrl = `ws://${hostIp}:8080`;
+
+            // Save username to localStorage
+            localStorage.setItem('checklist_username', username);
+
+            // Update UI to connecting state
+            updateConnectionStatus('connecting');
+
+            try {
+                socket = new WebSocket(serverUrl);
+
+                socket.onopen = function() {
+                    // Update connection state
+                    isConnected = true;
+                    updateConnectionStatus('connected');
+
+                    // Prepare appropriate connection message based on connection type
+                    let connectionMessage;
+                    if (sessionId) {
+                        // Session-based connection
+                        if (isHosting) {
+                            // Host created a new session
+                            connectionMessage = currentLang === 'zh-CN'
+                                ? `已创建会话: ${sessionId}`
+                                : `Session created: ${sessionId}`;
+
+                            // Show the share session button for hosts
+                            const shareSessionBtn = document.getElementById('shareSessionBtn');
+                            if (shareSessionBtn) {
+                                shareSessionBtn.classList.remove('d-none');
+                            }
+                        } else {
+                            // Client joined an existing session
+                            connectionMessage = currentLang === 'zh-CN'
+                                ? `已加入会话: ${sessionId}`
+                                : `Joined session: ${sessionId}`;
+                        }
+                    } else {
+                        // Direct IP-based connection
+                        connectionMessage = currentLang === 'zh-CN'
+                            ? '已连接到服务器'
+                            : 'Connected to server';
+                    }
+
+                    // Display connection success message
+                    showFloatingMessage(connectionMessage, 'success');
+                    addLogEntry(`连接到服务器: ${serverUrl}`, 'success');
+
+                    // Send join message with session information to the server
+                    sendMessage({
+                        type: 'join',
+                        username: username,
+                        sessionId: sessionId,
+                        isHosting: isHosting,
+                        timestamp: Date.now()
+                    });
+
+                    // Request current state from the server
+                    // This will synchronize our checklist with the server's state
+                    sendMessage({
+                        type: 'requestState',
+                        sessionId: sessionId,
+                        timestamp: Date.now()
+                    });
+
+                    // Show disconnect button, hide connect button
+                    document.getElementById('connectBtn').classList.add('d-none');
+                    document.getElementById('disconnectBtn').classList.remove('d-none');
+                    document.getElementById('activeUsersCount').parentElement.classList.remove('d-none');
+
+                    // Activate page lock to prevent accidental refresh/navigation
+                    if (!pageIsLocked) {
+                        togglePageLock();
+                        addLogEntry('已自动锁定页面以防止意外刷新', 'info');
+                    }
+                };
+
+                socket.onmessage = function(event) {
+                    handleServerMessage(event.data);
+                };
+
+                socket.onclose = function() {
+                    handleDisconnect();
+                };
+
+                socket.onerror = function(error) {
+                    console.error('连接错误:', error);
+                    addLogEntry(`连接错误: ${error.message || '未知错误'}`, 'error');
+                    updateConnectionStatus('error');
+                    handleDisconnect();
+                };
+
+            } catch (error) {
+                console.error('创建 WebSocket 失败:', error);
+                addLogEntry(`创建 WebSocket 失败: ${error.message}`, 'error');
+                updateConnectionStatus('error');
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? `连接失败: ${error.message}` : `Connection failed: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        function disconnectFromServer() {
+            if (!isConnected || !socket) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '已经断开连接' : 'Already disconnected',
+                    'info'
+                );
+                return;
+            }
+
+            // Send leave message before closing
+            if (socket.readyState === WebSocket.OPEN) {
+                sendMessage({
+                    type: 'leave',
+                    username: username,
+                    timestamp: Date.now()
+                });
+            }
+
+            socket.close();
+            handleDisconnect();
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '已断开连接' : 'Disconnected from server',
+                'info'
+            );
+            addLogEntry('断开连接', 'info');
+        }
+
+        function handleDisconnect() {
+            isConnected = false;
+            socket = null;
+            userId = null;
+            activeUsers.clear();
+            editingItems.clear();
+            updateConnectionStatus('disconnected');
+
+            // Reset session information
+            if (sessionId) {
+                // Don't clear the session ID input, but hide the share button
+                const shareSessionBtn = document.getElementById('shareSessionBtn');
+                if (shareSessionBtn) {
+                    shareSessionBtn.classList.add('d-none');
+                }
+            }
+
+            // Deactivate page lock if it was automatically activated
+            if (pageIsLocked) {
+                togglePageLock();
+                addLogEntry('已自动解除页面锁定', 'info');
+            }
+
+            // Show connect button, hide disconnect button
+            document.getElementById('connectBtn').classList.remove('d-none');
+            document.getElementById('disconnectBtn').classList.add('d-none');
+            document.getElementById('activeUsersCount').parentElement.classList.add('d-none');
+            document.getElementById('activeUsersCount').textContent = '0';
+
+            // Remove all editing indicators
+            renderChecklist();
+        }
+
+        function updateConnectionStatus(status) {
+            const indicators = document.querySelectorAll('.connection-indicator');
+            const statusText = document.getElementById('connectionStatus');
+
+            if (!indicators.length || !statusText) return;
+
+            // Update all indicators
+            indicators.forEach(indicator => {
+                // Remove all status classes
+                indicator.classList.remove('connected', 'connecting', 'disconnected', 'error');
+
+                // Add the current status class
+                indicator.classList.add(status);
+            });
+
+            // Update the button color based on status
+            const showCollabBtn = document.getElementById('showCollabBtn');
+            if (showCollabBtn) {
+                showCollabBtn.classList.remove('btn-outline-primary', 'btn-primary', 'btn-warning', 'btn-danger');
+
+                switch (status) {
+                    case 'connected':
+                        showCollabBtn.classList.add('btn-primary');
+                        break;
+                    case 'connecting':
+                        showCollabBtn.classList.add('btn-warning');
+                        break;
+                    case 'error':
+                        showCollabBtn.classList.add('btn-danger');
+                        break;
+                    default:
+                        showCollabBtn.classList.add('btn-outline-primary');
+                }
+            }
+
+            // Update the status text
+            let statusKey = 'disconnected';
+            switch (status) {
+                case 'connected': statusKey = 'connected'; break;
+                case 'connecting': statusKey = 'connecting'; break;
+                case 'error': statusKey = 'connectionFailed'; break;
+                default: statusKey = 'disconnected';
+            }
+
+            statusText.textContent = getTranslation(statusKey);
+            statusText.setAttribute('data-lang-key', statusKey);
+        }
+
+        function sendMessage(message) {
+            if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) {
+                console.warn('无法发送消息，未连接到服务器');
+                addLogEntry('发送消息失败：未连接', 'warning');
+                return false;
+            }
+
+            try {
+                // Add userId if we have one
+                if (userId) {
+                    message.userId = userId;
+                }
+
+                socket.send(JSON.stringify(message));
+                return true;
+            } catch (error) {
+                console.error('发送消息失败:', error);
+                addLogEntry(`发送消息失败: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        function handleServerMessage(data) {
+            try {
+                const message = JSON.parse(data);
+                console.log('收到消息:', message);
+
+                switch (message.type) {
+                    case 'welcome':
+                        handleWelcomeMessage(message);
+                        break;
+                    case 'userJoined':
+                        handleUserJoinedMessage(message);
+                        break;
+                    case 'userLeft':
+                        handleUserLeftMessage(message);
+                        break;
+                    case 'activeUsers':
+                        handleActiveUsersMessage(message);
+                        break;
+                    case 'fullState':
+                        handleFullStateMessage(message);
+                        break;
+                    case 'itemAdded':
+                        handleItemAddedMessage(message);
+                        break;
+                    case 'itemUpdated':
+                        handleItemUpdatedMessage(message);
+                        break;
+                    case 'itemRemoved':
+                        handleItemRemovedMessage(message);
+                        break;
+                    case 'itemStatusChanged':
+                        handleItemStatusChangedMessage(message);
+                        break;
+                    case 'startEditing':
+                        handleStartEditingMessage(message);
+                        break;
+                    case 'stopEditing':
+                        handleStopEditingMessage(message);
+                        break;
+                    case 'itemImageUpdated':
+                        handleItemImageUpdatedMessage(message);
+                        break;
+                    default:
+                        console.warn('未知消息类型:', message.type);
+                        addLogEntry(`未知消息类型: ${message.type}`, 'warning');
+                }
+            } catch (error) {
+                console.error('解析消息失败:', error, data);
+                addLogEntry(`解析消息失败: ${error.message}`, 'error');
+            }
+        }
+
+        function handleWelcomeMessage(message) {
+            userId = message.userId;
+            addLogEntry(`已分配用户ID: ${userId}`, 'info');
+        }
+
+        function handleUserJoinedMessage(message) {
+            if (message.userId === userId) return; // Ignore our own join message
+
+            activeUsers.set(message.userId, {
+                username: message.username,
+                lastActive: Date.now()
+            });
+
+            updateActiveUsersCount();
+
+            const joinMsg = getTranslation('userJoined').replace('{username}', message.username);
+            showNotification(joinMsg, 'info');
+            addLogEntry(`用户加入: ${message.username} (${message.userId})`, 'info');
+        }
+
+        function handleUserLeftMessage(message) {
+            if (message.userId === userId) return; // Ignore our own leave message
+
+            const user = activeUsers.get(message.userId);
+            if (user) {
+                const leftMsg = getTranslation('userLeft').replace('{username}', user.username);
+                showNotification(leftMsg, 'info');
+                addLogEntry(`用户离开: ${user.username} (${message.userId})`, 'info');
+
+                activeUsers.delete(message.userId);
+                updateActiveUsersCount();
+
+                // Remove any editing indicators for this user
+                for (const [index, editorId] of editingItems.entries()) {
+                    if (editorId === message.userId) {
+                        editingItems.delete(index);
+                    }
+                }
+                renderChecklist();
+            }
+        }
+
+        function handleActiveUsersMessage(message) {
+            activeUsers.clear();
+
+            message.users.forEach(user => {
+                if (user.userId !== userId) { // Don't include ourselves
+                    activeUsers.set(user.userId, {
+                        username: user.username,
+                        lastActive: Date.now()
+                    });
+                }
+            });
+
+            updateActiveUsersCount();
+            addLogEntry(`活跃用户更新: ${activeUsers.size} 人`, 'info');
+        }
+
+        function handleFullStateMessage(message) {
+            // Process the received checklist
+            const receivedChecklist = message.checklist || [];
+
+            // If we have no local checklist, just use the received one
+            if (checklist.length === 0) {
+                checklist = receivedChecklist;
+            } else {
+                // Merge the received checklist with our local one
+                // Keep local images if they exist
+                receivedChecklist.forEach((remoteItem, index) => {
+                    // If this is a new item, add it
+                    if (index >= checklist.length) {
+                        checklist.push(remoteItem);
+                    } else {
+                        // Update existing item but preserve local image if it exists
+                        const localItem = checklist[index];
+                        if (localItem.imageId && localItem.imagePath && (!remoteItem.imagePath || remoteItem.hasLocalImage)) {
+                            // Keep the local image
+                            remoteItem.imagePath = localItem.imagePath;
+                            remoteItem.imageId = localItem.imageId;
+                        }
+                        checklist[index] = remoteItem;
+                    }
+                });
+
+                // If the remote checklist is shorter, trim our local one
+                if (receivedChecklist.length < checklist.length) {
+                    // Clean up any removed items' images
+                    for (let i = receivedChecklist.length; i < checklist.length; i++) {
+                        const item = checklist[i];
+                        if (item.imageId && imageBlobs.has(item.imageId)) {
+                            URL.revokeObjectURL(item.imagePath);
+                            imageBlobs.delete(item.imageId);
+                        }
+                    }
+                    checklist.length = receivedChecklist.length;
+                }
+            }
+
+            renderChecklist();
+
+            // Check if this was a reset from another user
+            if (message.resetBy && message.resetByUsername && message.checklist.length === 0) {
+                const resetMessage = currentLang === 'zh-CN'
+                    ? `${message.resetByUsername} 重置了所有项目`
+                    : `${message.resetByUsername} reset all items`;
+
+                showFloatingMessage(resetMessage, 'warning');
+                showNotification(resetMessage, 'warning');
+                addLogEntry(`接收到重置命令来自: ${message.resetByUsername}`, 'warning');
+            } else {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '同步完成' : 'Sync complete',
+                    'success'
+                );
+                addLogEntry(`接收到完整状态, 项目数: ${checklist.length}`, 'success');
+            }
+        }
+
+        function handleItemAddedMessage(message) {
+            if (message.userId === userId) return; // Ignore our own actions
+
+            checklist.push(message.item);
+            renderChecklist();
+
+            const user = activeUsers.get(message.userId);
+            const username = user ? user.username : 'Unknown user';
+            addLogEntry(`${username} 添加了项目: ${message.item.title}`, 'info');
+        }
+
+        function handleItemUpdatedMessage(message) {
+            if (message.userId === userId) return; // Ignore our own actions
+
+            if (message.index >= 0 && message.index < checklist.length) {
+                checklist[message.index] = message.item;
+                renderChecklist();
+
+                const user = activeUsers.get(message.userId);
+                const username = user ? user.username : 'Unknown user';
+                addLogEntry(`${username} 更新了项目: ${message.item.title}`, 'info');
+            }
+        }
+
+        function handleItemRemovedMessage(message) {
+            if (message.userId === userId) return; // Ignore our own actions
+
+            if (message.index >= 0 && message.index < checklist.length) {
+                const removedItem = checklist[message.index];
+                checklist.splice(message.index, 1);
+                renderChecklist();
+
+                const user = activeUsers.get(message.userId);
+                const username = user ? user.username : 'Unknown user';
+                addLogEntry(`${username} 删除了项目: ${removedItem.title}`, 'info');
+            }
+        }
+
+        function handleItemStatusChangedMessage(message) {
+            if (message.userId === userId) return; // Ignore our own actions
+
+            if (message.index >= 0 && message.index < checklist.length) {
+                checklist[message.index].done = message.done;
+                renderChecklist();
+
+                const user = activeUsers.get(message.userId);
+                const username = user ? user.username : 'Unknown user';
+                const status = message.done ? '已完成' : '未完成';
+                addLogEntry(`${username} 将项目 "${checklist[message.index].title}" 标记为 ${status}`, 'info');
+            }
+        }
+
+        function handleStartEditingMessage(message) {
+            if (message.userId === userId) return; // Ignore our own actions
+
+            if (message.index >= 0 && message.index < checklist.length) {
+                editingItems.set(message.index, message.userId);
+                renderChecklist();
+
+                const user = activeUsers.get(message.userId);
+                const username = user ? user.username : 'Unknown user';
+                addLogEntry(`${username} 开始编辑项目: ${checklist[message.index].title}`, 'info');
+            }
+        }
+
+        function handleStopEditingMessage(message) {
+            if (message.userId === userId) return; // Ignore our own actions
+
+            if (editingItems.get(message.index) === message.userId) {
+                editingItems.delete(message.index);
+                renderChecklist();
+
+                const user = activeUsers.get(message.userId);
+                const username = user ? user.username : 'Unknown user';
+                addLogEntry(`${username} 停止编辑项目 ${message.index + 1}`, 'info');
+            }
+        }
+
+        function updateActiveUsersCount() {
+            // Calculate total users (including ourselves)
+            const totalUsers = activeUsers.size + 1; // +1 for the current user
+
+            // Update the count
+            const countElements = document.querySelectorAll('#activeUsersCount');
+            countElements.forEach(element => {
+                element.textContent = totalUsers;
+            });
+
+            // Show/hide active users indicators
+            const activeUsersIndicators = document.querySelectorAll('.active-users-indicator');
+            activeUsersIndicators.forEach(indicator => {
+                // Always show the indicator if we're connected, even if no other users
+                if (isConnected) {
+                    indicator.classList.remove('d-none');
+                } else {
+                    indicator.classList.add('d-none');
+                }
+
+                // Add tooltip data for hover functionality
+                indicator.setAttribute('data-bs-toggle', 'tooltip');
+                indicator.setAttribute('data-bs-placement', 'bottom');
+
+                // Create tooltip content
+                let tooltipContent = currentLang === 'zh-CN' ? '在线用户:\n' : 'Online users:\n';
+                tooltipContent += `- ${username} (${currentLang === 'zh-CN' ? '你' : 'you'})\n`;
+
+                activeUsers.forEach((user, userId) => {
+                    tooltipContent += `- ${user.username} (${userId})\n`;
+                });
+
+                indicator.setAttribute('title', tooltipContent);
+                indicator.setAttribute('data-bs-html', 'true');
+            });
+
+            // Update the active users list in the modal
+            const activeUsersArea = document.querySelector('.active-users-area');
+            const activeUsersList = document.getElementById('activeUsersList');
+
+            if (activeUsersArea && activeUsersList) {
+                // Always show the area if we're connected
+                if (isConnected) {
+                    activeUsersArea.classList.remove('d-none');
+
+                    // Clear the list
+                    activeUsersList.innerHTML = '';
+
+                    // Add ourselves first
+                    const currentUserItem = document.createElement('li');
+                    currentUserItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    currentUserItem.innerHTML = `
+                        <span>${username} <small class="text-muted">(${currentLang === 'zh-CN' ? '你' : 'you'})</small></span>
+                        <span class="badge bg-success rounded-pill">✓</span>
+                    `;
+                    activeUsersList.appendChild(currentUserItem);
+
+                    // Add each other user to the list
+                    activeUsers.forEach((user, userId) => {
+                        const listItem = document.createElement('li');
+                        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        listItem.innerHTML = `
+                            <span>${user.username}</span>
+                            <span class="badge bg-primary rounded-pill">${userId}</span>
+                        `;
+                        activeUsersList.appendChild(listItem);
+                    });
+                } else {
+                    activeUsersArea.classList.add('d-none');
+                }
+            }
+
+            // Initialize tooltips
+            try {
+                const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                tooltipTriggerList.map(function (tooltipTriggerEl) {
+                    return new bootstrap.Tooltip(tooltipTriggerEl);
+                });
+            } catch (error) {
+                console.warn('Bootstrap tooltips initialization failed:', error);
+                // Fallback to title attribute which will still show basic browser tooltip
+            }
+        }
+
+        function shareConnectionInfo() {
+            const hostIpInput = document.getElementById('hostIpInput');
+            const hostIp = hostIpInput.value.trim();
+
+            if (!hostIp) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '请先输入IP地址' : 'Please enter an IP address first',
+                    'warning'
+                );
+                return;
+            }
+
+            // For local network connections
+            const isHostConnection = true; // Always assume this is a host connection
+
+            // No need for localhost warning since we're using manual IP input
+
+            // Just use the IP address directly for sharing
+            const shareableInfo = hostIp;
+
+            // Create a modal to show the connection info
+            // First, check if there's already a share modal and remove it
+            const existingModal = document.getElementById('shareConnectionModal');
+            if (existingModal) {
+                existingModal.parentNode.removeChild(existingModal);
+            }
+            const existingBackdrop = document.getElementById('shareModalBackdrop');
+            if (existingBackdrop) {
+                existingBackdrop.parentNode.removeChild(existingBackdrop);
+            }
+
+            // Create backdrop
+            const shareModalBackdrop = document.createElement('div');
+            shareModalBackdrop.className = 'custom-modal-backdrop';
+            shareModalBackdrop.id = 'shareModalBackdrop';
+            document.body.appendChild(shareModalBackdrop);
+
+            // No need for connection type title anymore
+
+            // Create modal
+            const shareModal = document.createElement('div');
+            shareModal.className = 'custom-modal';
+            shareModal.id = 'shareConnectionModal';
+            shareModal.setAttribute('tabindex', '-1');
+
+            shareModal.innerHTML = `
+                <div class="custom-modal-header">
+                    <h5 class="custom-modal-title" data-lang-key="connectionInfo">${getTranslation('connectionInfo')}</h5>
+                    <button type="button" class="custom-modal-close" id="shareModalClose">&times;</button>
+                </div>
+                <div class="custom-modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" data-lang-key="ipAddress">IP地址 / IP Address</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" value="${hostIp}" readonly>
+                            <button class="btn btn-outline-secondary copy-btn" data-copy-text="${hostIp}">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted" data-lang-key="ipAddressShareHelp">分享此IP地址给其他用户，他们可以在连接面板中输入此地址。 / Share this IP address with other users. They can enter it in the connection panel.</small>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <small>${currentLang === 'zh-CN' ? '分享此服务器地址给其他用户，他们可以在“直接连接”面板中输入此地址来连接到您的服务器' : 'Share this server address with other users. They can enter this address in the "Direct Connection" panel to connect to your server'}</small>
+                    </div>
+
+                    ${isHostConnection ? `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <small>${currentLang === 'zh-CN'
+                            ? '您正在分享主机连接。确保服务器正在运行，并且其他用户可以访问您的IP地址。'
+                            : 'You are sharing a host connection. Make sure the server is running and your IP address is accessible to other users.'}</small>
+                    </div>
+                    ` : ''}
+                </div>
+                <div class="custom-modal-footer">
+                    <button type="button" class="btn btn-secondary" id="shareModalCloseBtn" data-lang-key="close">${getTranslation('close')}</button>
+                </div>
+            `;
+
+            // Add the modal to the document
+            document.body.appendChild(shareModal);
+
+            // Function to show the share modal
+            function showShareModal() {
+                shareModal.classList.add('show');
+                shareModalBackdrop.classList.add('show');
+            }
+
+            // Function to hide the share modal
+            function hideShareModal() {
+                shareModal.classList.remove('show');
+                shareModalBackdrop.classList.remove('show');
+
+                // Remove the modal after hiding
+                setTimeout(() => {
+                    if (shareModal.parentNode) {
+                        shareModal.parentNode.removeChild(shareModal);
+                    }
+                    if (shareModalBackdrop.parentNode) {
+                        shareModalBackdrop.parentNode.removeChild(shareModalBackdrop);
+                    }
+                }, 300);
+            }
+
+            // Add copy button functionality
+            const copyButtons = shareModal.querySelectorAll('.copy-btn');
+            copyButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const textToCopy = this.getAttribute('data-copy-text');
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        const originalHTML = this.innerHTML;
+                        this.innerHTML = `<i class="bi bi-check"></i> ${getTranslation('copied')}`;
+                        setTimeout(() => {
+                            this.innerHTML = originalHTML;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy text:', err);
+                        showFloatingMessage(
+                            currentLang === 'zh-CN' ? '复制失败，请手动复制' : 'Copy failed, please copy manually',
+                            'error'
+                        );
+                    });
+                });
+            });
+
+            // Add close button functionality
+            const shareModalClose = document.getElementById('shareModalClose');
+            shareModalClose.addEventListener('click', hideShareModal);
+
+            const shareModalCloseBtn = document.getElementById('shareModalCloseBtn');
+            shareModalCloseBtn.addEventListener('click', hideShareModal);
+
+            // Close when clicking on backdrop
+            shareModalBackdrop.addEventListener('click', hideShareModal);
+
+            // No need for connection message with manual IP input
+
+            // Update the alert message to use the translation key
+            const infoAlert = shareModal.querySelector('.alert-info small');
+            if (infoAlert) {
+                infoAlert.textContent = getTranslation('connectionShareTip');
+                infoAlert.setAttribute('data-lang-key', 'connectionShareTip');
+            }
+
+            // Show the modal
+            showShareModal();
+        }
+
+        function handleItemImageUpdatedMessage(message) {
+            if (message.userId === userId) return; // Ignore our own actions
+
+            if (message.index >= 0 && message.index < checklist.length) {
+                // Update the item's image information
+                checklist[message.index].imagePath = message.imageUrl;
+                checklist[message.index].imageId = message.imageId;
+                checklist[message.index].isSharedImage = message.isSharedImage;
+
+                // If this is a shared image, we need to prepend the server URL
+                if (message.isSharedImage && message.imageUrl && message.imageUrl.startsWith('/shared_images/')) {
+                    // Extract the server address from the WebSocket URL
+                    const wsUrl = new URL(serverUrl);
+                    const serverAddress = `http://${wsUrl.host}`;
+                    checklist[message.index].imagePath = `${serverAddress}${message.imageUrl}`;
+                    console.log('Updated shared image path:', checklist[message.index].imagePath);
+                }
+
+                renderChecklist();
+
+                const user = activeUsers.get(message.userId);
+                const username = user ? user.username : 'Unknown user';
+                addLogEntry(`${username} 更新了项目图片: ${checklist[message.index].title}`, 'info');
+            }
+        }
+
+        // Function to share image data directly from a blob
+        function shareImageData(index, imageId, imageBlob) {
+            if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) {
+                console.error('Not connected to server, cannot share image');
+                return;
+            }
+
+            if (!imageBlob) {
+                console.error('No image blob provided');
+                return;
+            }
+
+            // Convert the blob to base64
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Data = e.target.result.split(',')[1]; // Remove the data URL prefix
+
+                // Send the image data to the server
+                sendMessage({
+                    type: 'shareImage',
+                    index: index,
+                    imageId: imageId,
+                    imageType: imageBlob.type,
+                    imageData: base64Data,
+                    timestamp: Date.now()
+                });
+
+                console.log(`Sharing image for item at index ${index}`);
+                addLogEntry(`自动共享图片: 项目 ${index + 1}`, 'info');
+            };
+            reader.onerror = function() {
+                console.error('Failed to read image data for sharing');
+                addLogEntry('自动共享图片失败: 读取数据错误', 'error');
+            };
+            reader.readAsDataURL(imageBlob);
+        }
+
+        function shareImage(index) {
+            if (!isConnected || !socket || socket.readyState !== WebSocket.OPEN) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '未连接到服务器，无法共享图片' : 'Not connected to server, cannot share image',
+                    'warning'
+                );
+                return;
+            }
+
+            const item = checklist[index];
+            if (!item || !item.imagePath || !item.imageId) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '没有可共享的图片' : 'No image to share',
+                    'warning'
+                );
+                return;
+            }
+
+            // Check if this is already a shared image
+            if (item.isSharedImage) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '图片已经共享' : 'Image is already shared',
+                    'info'
+                );
+                return;
+            }
+
+            // Get the image blob from the map
+            const imageBlob = imageBlobs.get(item.imageId);
+            if (!imageBlob) {
+                showFloatingMessage(
+                    currentLang === 'zh-CN' ? '找不到图片数据' : 'Image data not found',
+                    'error'
+                );
+                return;
+            }
+
+            // Share the image data
+            shareImageData(index, item.imageId, imageBlob);
+
+            showFloatingMessage(
+                currentLang === 'zh-CN' ? '正在共享图片...' : 'Sharing image...',
+                'info'
+            );
+            addLogEntry(`共享项目图片: ${item.title}`, 'info');
+        }
+    </script>
+    <!-- Test Modal Backdrop -->
+    <div class="custom-modal-backdrop" id="testModalBackdrop"></div>
+
+    <!-- Test Modal -->
+    <div class="custom-modal" id="testModal" tabindex="-1">
+        <div class="custom-modal-header">
+            <h5 class="custom-modal-title">Test Modal</h5>
+            <button type="button" class="custom-modal-close" id="testModalClose">&times;</button>
+        </div>
+        <div class="custom-modal-body">
+            <p>This is a test modal to check if the modal functionality works.</p>
+            <div class="mb-3">
+                <label class="form-label">Test Input</label>
+                <input type="text" class="form-control" value="Test value" readonly>
+            </div>
+        </div>
+        <div class="custom-modal-footer">
+            <button type="button" class="btn btn-secondary" id="testModalCloseBtn">Close</button>
+        </div>
+    </div>
+
+    <!-- Custom Collaboration Modal Backdrop -->
+    <div class="custom-modal-backdrop" id="collabModalBackdrop"></div>
+
+    <!-- Custom Collaboration Modal -->
+    <div class="custom-modal" id="collabModal" tabindex="-1">
+        <div class="custom-modal-header">
+            <h5 class="custom-modal-title" data-lang-key="collaborationHeader">协作模式</h5>
+            <button type="button" class="custom-modal-close" id="collabModalClose">&times;</button>
+        </div>
+        <div class="custom-modal-body">
+            <div class="mb-3">
+                <label for="usernameInput" class="form-label" data-lang-key="usernameInput">输入用户名</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                    <input type="text" class="form-control" id="usernameInput" placeholder="输入用户名" data-lang-placeholder="usernameInput">
+                </div>
+            </div>
+            <!-- Network Information (only shown in Direct Connection tab) -->
+            <div class="mb-3 d-none" id="localIpInfoSection">
+                <div class="alert alert-info py-2 mb-3">
+                    <small data-lang-key="ipInfoHelp">使用此IP地址来启动主机服务器。其他用户可以使用此地址连接到您的服务器。</small>
+                </div>
+
+                <div class="accordion" id="ipAccordion">
+                    <!-- Local Network IP -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#localIpCollapse" aria-expanded="true" aria-controls="localIpCollapse">
+                                <i class="bi bi-pc-display me-2"></i> <span data-lang-key="localIp">本地IP</span>
+                            </button>
+                        </h2>
+                        <div id="localIpCollapse" class="accordion-collapse collapse show" data-bs-parent="#ipAccordion">
+                            <div class="accordion-body">
+                                <div class="mb-3">
+                                    <!-- IP display with action buttons -->
+                                    <div class="bg-light p-2 mb-2 rounded d-flex align-items-center">
+                                        <span id="ipDisplay" class="ip-display flex-grow-1 text-primary fw-bold">获取IP中...</span>
+                                        <div class="d-flex">
+                                            <button class="btn btn-sm btn-outline-secondary me-1" id="editIpBtn" data-tooltip-key="editIp">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary" id="copyIpBtn" data-tooltip-key="copyToClipboard">
+                                                <i class="bi bi-clipboard"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Use IP button -->
+                                    <button class="btn btn-outline-primary w-100 mb-3" id="useIpBtn">
+                                        <i class="bi bi-arrow-right-circle me-1"></i> <span data-lang-key="useThisIp">使用此IP</span>
+                                    </button>
+
+                                    <!-- IP source toggle -->
+                                    <div class="d-flex justify-content-center mb-3">
+                                        <div class="btn-group btn-group-sm" role="group" aria-label="IP Source">
+                                            <input type="radio" class="btn-check" name="ipSource" id="autoDetectedRadio" autocomplete="off" checked>
+                                            <label class="btn btn-outline-secondary" for="autoDetectedRadio" data-lang-key="autoDetectedIp">自动检测</label>
+
+                                            <input type="radio" class="btn-check" name="ipSource" id="manualIpRadio" autocomplete="off">
+                                            <label class="btn btn-outline-secondary" for="manualIpRadio" data-lang-key="manualIp">手动输入</label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Manual IP input (hidden by default) -->
+                                    <div id="manualIpInputContainer" class="d-none">
+                                        <div class="input-group input-group-sm mb-2">
+                                            <input type="text" class="form-control" id="manualIpInput" placeholder="输入IP地址" value="10.219.148.59">
+                                            <button class="btn btn-outline-primary" id="saveManualIpBtn">
+                                                <i class="bi bi-check me-1"></i> <span data-lang-key="saveManualIp">保存</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Help text -->
+                                <div class="small text-muted mb-2">
+                                    <div><i class="bi bi-info-circle me-1"></i> <span data-lang-key="ipHelp">选择自动检测或手动输入IP地址，然后点击“使用此IP”</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Public IP -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#publicIpCollapse" aria-expanded="false" aria-controls="publicIpCollapse">
+                                <i class="bi bi-globe me-2"></i> <span data-lang-key="publicIp">公共IP</span>
+                            </button>
+                        </h2>
+                        <div id="publicIpCollapse" class="accordion-collapse collapse" data-bs-parent="#ipAccordion">
+                            <div class="accordion-body">
+                                <div class="mb-3">
+                                    <!-- Public IP display with copy button -->
+                                    <div class="bg-light p-2 mb-2 rounded d-flex align-items-center">
+                                        <span id="publicIpDisplay" class="ip-display flex-grow-1 text-primary fw-bold">获取IP中...</span>
+                                        <button class="btn btn-sm btn-outline-secondary" id="copyPublicIpBtn" data-tooltip-key="copyToClipboard">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Use IP button -->
+                                    <button class="btn btn-outline-primary w-100 mb-2" id="usePublicIpBtn">
+                                        <i class="bi bi-arrow-right-circle me-1"></i> <span data-lang-key="useThisIp">使用此IP</span>
+                                    </button>
+                                </div>
+                                <div class="mt-2 small text-muted">
+                                    <i class="bi bi-exclamation-triangle me-1"></i> <span data-lang-key="publicIpHelp">公共IP可能需要端口转发才能从外部访问。</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Tabs -->
+            <ul class="nav nav-tabs mb-3" id="connectionTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link disabled text-muted" id="session-tab" type="button" role="tab" aria-selected="false">
+                        <i class="bi bi-people me-1"></i> <span data-lang-key="sessionConnection">会话连接</span>
+                        <small class="badge bg-secondary ms-1">未发布</small>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="direct-tab" data-bs-toggle="tab" data-bs-target="#direct-tab-pane" type="button" role="tab" aria-controls="direct-tab-pane" aria-selected="true">
+                        <i class="bi bi-hdd-network me-1"></i> <span data-lang-key="directConnection">直接连接</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link disabled text-muted" id="public-tab" type="button" role="tab" aria-selected="false">
+                        <i class="bi bi-globe me-1"></i> <span data-lang-key="publicConnection">公共连接</span>
+                        <small class="badge bg-secondary ms-1">未发布</small>
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="connectionTabContent">
+                <!-- Session Connection Tab (Disabled) -->
+                <div class="tab-pane fade" id="session-tab-pane" role="tabpanel" aria-labelledby="session-tab" tabindex="0">
+                    <div class="mb-3" id="sessionConnectionSection">
+                        <div class="alert alert-secondary py-3 mb-3 text-center">
+                            <i class="bi bi-clock-history fs-4 d-block mb-2"></i>
+                            <h6>会话连接功能即将推出</h6>
+                            <small>此功能正在开发中，敬请期待。目前请使用直接连接方式。</small>
+                        </div>
+                        <!-- Session connection content is commented out but kept for future implementation
+                        <div class="ip-info-card mb-3">
+                            <div class="ip-info-header">
+                                <span data-lang-key="sessionId">会话 ID</span>
+                            </div>
+                            <div class="ip-info-body">
+                                <div class="input-group mb-3">
+                                    <span class="input-group-text"><i class="bi bi-key"></i></span>
+                                    <input type="text" class="form-control" id="sessionIdInput" placeholder="输入会话 ID" data-lang-placeholder="enterSessionId">
+                                </div>
+
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button class="btn btn-primary" id="createSessionBtn">
+                                        <i class="bi bi-plus-circle me-1"></i> <span data-lang-key="createSession">创建会话</span>
+                                    </button>
+                                    <button class="btn btn-success" id="joinSessionBtn">
+                                        <i class="bi bi-box-arrow-in-right me-1"></i> <span data-lang-key="joinSession">加入会话</span>
+                                    </button>
+                                    <button class="btn btn-info d-none" id="shareSessionBtn">
+                                        <i class="bi bi-share me-1"></i> <span data-lang-key="shareSession">分享会话</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        -->
+                    </div>
+                </div>
+
+                <!-- Public Connection Tab (Disabled) -->
+                <div class="tab-pane fade" id="public-tab-pane" role="tabpanel" aria-labelledby="public-tab" tabindex="0">
+                    <div class="mb-3">
+                        <div class="alert alert-secondary py-3 mb-3 text-center">
+                            <i class="bi bi-globe fs-4 d-block mb-2"></i>
+                            <h6>公共连接功能即将推出</h6>
+                            <small>此功能将允许通过互联网进行连接，目前正在开发中。请使用直接连接方式。</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Direct Connection Tab (Active) -->
+                <div class="tab-pane fade show active" id="direct-tab-pane" role="tabpanel" aria-labelledby="direct-tab" tabindex="0">
+                    <div class="mb-3">
+                        <div class="alert alert-info py-2 mb-3">
+                            <small><i class="bi bi-info-circle me-1"></i> <span data-lang-key="localNetworkInfo">本地网络连接允许您在同一网络上的设备之间进行协作。</span></small>
+                        </div>
+
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <span data-lang-key="connectionSetup">连接设置 / Connection Setup</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-2">
+                                    <small class="text-muted"><i class="bi bi-info-circle me-1"></i> <span data-lang-key="connectionInstructions">输入IP地址连接到服务器。如果您是主机，请先运行 start-server.bat。 / Enter IP address to connect to server. If you're hosting, run start-server.bat first.</span></small>
+                                </div>
+
+                                <div class="input-group mb-3">
+                                    <span class="input-group-text"><i class="bi bi-pc-display"></i></span>
+                                    <input type="text" class="form-control" id="hostIpInput" placeholder="IP地址/IP Address" data-lang-placeholder="ipAddressPlaceholder" data-bs-toggle="tooltip" data-bs-placement="top" title="输入IP地址，例如: 192.168.1.100 / Enter IP address, e.g., 192.168.1.100">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="connection-status-area">
+                <div class="connection-status d-flex align-items-center mb-2">
+                    <span class="connection-indicator disconnected"></span>
+                    <span class="connection-text ms-2" id="connectionStatus" data-lang-key="disconnected">未连接</span>
+                </div>
+                <div class="active-users-area d-none">
+                    <h6 data-lang-key="activeUsers">活跃用户</h6>
+                    <ul id="activeUsersList" class="list-group"></ul>
+                </div>
+            </div>
+        </div>
+        <div class="custom-modal-footer">
+            <div class="d-flex justify-content-between w-100">
+                <div>
+                    <button type="button" class="btn btn-secondary" id="closeModalBtn" data-lang-key="close">关闭</button>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-info" id="shareConnectionBtn" data-tooltip-key="shareConnectionBtn">
+                        <i class="bi bi-share me-1"></i> <span data-lang-key="shareConnection">分享连接</span>
+                    </button>
+                    <button type="button" class="btn btn-danger d-none" id="disconnectBtn" data-tooltip-key="disconnectBtn">
+                        <i class="bi bi-wifi-off me-1"></i> <span data-lang-key="disconnect">断开</span>
+                    </button>
+                    <button type="button" class="btn btn-primary" id="connectBtn" data-tooltip-key="connectBtn">
+                        <i class="bi bi-wifi me-1"></i> <span data-lang-key="connect">连接</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
