@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 800px;
+            height: 600px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <script>
+        // Simple game with just one scene
+        class SimpleGame extends Phaser.Scene {
+            constructor() {
+                super('SimpleGame');
+                this.player = null;
+                this.platforms = null;
+                this.cursors = null;
+            }
+
+            create() {
+                // Create a blue sky background
+                this.add.rectangle(0, 0, 800, 600, 0x87ceeb).setOrigin(0, 0);
+                
+                // Create platforms
+                this.platforms = this.physics.add.staticGroup();
+                
+                // Create ground
+                for (let i = 0; i < 10; i++) {
+                    const platform = this.add.rectangle(i * 100, 550, 100, 32, 0x8b4513);
+                    this.platforms.add(platform);
+                }
+                
+                // Create a floating platform
+                const platform1 = this.add.rectangle(400, 400, 200, 32, 0x8b4513);
+                this.platforms.add(platform1);
+                
+                // Create player
+                const graphics = this.make.graphics();
+                graphics.fillStyle(0x00ff00); // Green color
+                graphics.fillRect(0, 0, 32, 48); // Player size
+                graphics.generateTexture('player-texture', 32, 48);
+                
+                this.player = this.physics.add.sprite(100, 450, 'player-texture');
+                this.player.body.setCollideWorldBounds(true);
+                
+                // Set up keyboard input
+                this.cursors = this.input.keyboard.createCursorKeys();
+                
+                // Add collision detection
+                this.physics.add.collider(this.player, this.platforms);
+                
+                // Add instructions
+                this.add.text(16, 16, 'Arrow keys to move and jump', {
+                    fontSize: '18px',
+                    fill: '#000',
+                    backgroundColor: '#fff'
+                });
+            }
+
+            update() {
+                // Handle player movement
+                if (this.cursors.left.isDown) {
+                    this.player.setVelocityX(-160);
+                } else if (this.cursors.right.isDown) {
+                    this.player.setVelocityX(160);
+                } else {
+                    this.player.setVelocityX(0);
+                }
+                
+                // Handle jumping
+                if (this.cursors.up.isDown && this.player.body.touching.down) {
+                    this.player.setVelocityY(-330);
+                }
+            }
+        }
+
+        // Game configuration
+        const config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 600,
+            parent: 'game-container',
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 300 },
+                    debug: true
+                }
+            },
+            scene: [SimpleGame]
+        };
+
+        // Create the game
+        const game = new Phaser.Game(config);
+    </script>
+</body>
+</html>

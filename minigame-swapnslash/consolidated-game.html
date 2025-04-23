@@ -1,0 +1,2318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwapNSlash - Turn-Based Side-Scroller</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 800px;
+            height: 600px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+        /* Responsive design for different screen sizes */
+        @media (max-width: 820px) {
+            #game-container {
+                width: 100%;
+                height: auto;
+                aspect-ratio: 4/3;
+            }
+        }
+        @media (max-height: 620px) {
+            #game-container {
+                height: 100vh;
+                width: auto;
+                aspect-ratio: 4/3;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <script>
+        // Global game variables
+        let gameData = {
+            playerHealth: 100,
+            playerAttack: 20,
+            playerDefense: 10,
+            level: 1,
+            score: 0,
+            enemiesDefeated: 0
+        };
+
+        // Main Game Scene - Side-scrolling platformer
+        class GameScene extends Phaser.Scene {
+            constructor() {
+                super('GameScene');
+                this.player = null;
+                this.enemies = null;
+                this.platforms = null;
+                this.cursors = null;
+                this.enemyEncountered = false;
+            }
+
+            preload() {
+                // Create all textures here
+                this.createTextures();
+            }
+
+            createTextures() {
+                // Player texture - pixel art human character
+                const playerGraphics = this.make.graphics();
+
+                // Body
+                playerGraphics.fillStyle(0x3498db); // Blue shirt
+                playerGraphics.fillRect(8, 16, 16, 16);
+
+                // Head
+                playerGraphics.fillStyle(0xf5d7b4); // Skin tone
+                playerGraphics.fillRect(8, 4, 16, 12);
+
+                // Hair
+                playerGraphics.fillStyle(0x8b4513); // Brown hair
+                playerGraphics.fillRect(8, 4, 16, 4);
+
+                // Arms
+                playerGraphics.fillStyle(0x3498db); // Blue sleeves
+                playerGraphics.fillRect(4, 16, 4, 12);
+                playerGraphics.fillRect(24, 16, 4, 12);
+
+                // Hands
+                playerGraphics.fillStyle(0xf5d7b4); // Skin tone
+                playerGraphics.fillRect(4, 28, 4, 4);
+                playerGraphics.fillRect(24, 28, 4, 4);
+
+                // Legs
+                playerGraphics.fillStyle(0x2c3e50); // Dark pants
+                playerGraphics.fillRect(8, 32, 6, 16);
+                playerGraphics.fillRect(18, 32, 6, 16);
+
+                // Generate the texture
+                playerGraphics.generateTexture('player', 32, 48);
+
+                // Slime texture - red blob to distinguish from green grass
+                const slimeGraphics = this.make.graphics();
+
+                // Main body
+                slimeGraphics.fillStyle(0xe74c3c); // Red slime
+                slimeGraphics.fillRect(4, 16, 24, 16);
+                slimeGraphics.fillRect(8, 8, 16, 8);
+
+                // Darker red highlights
+                slimeGraphics.fillStyle(0xc0392b); // Darker red for depth
+                slimeGraphics.fillRect(6, 18, 20, 12);
+
+                // Eyes
+                slimeGraphics.fillStyle(0xffffff); // White eyes
+                slimeGraphics.fillRect(10, 12, 4, 4);
+                slimeGraphics.fillRect(18, 12, 4, 4);
+
+                // Pupils
+                slimeGraphics.fillStyle(0x000000); // Black pupils
+                slimeGraphics.fillRect(12, 14, 2, 2);
+                slimeGraphics.fillRect(20, 14, 2, 2);
+
+                // Small shine highlights
+                slimeGraphics.fillStyle(0xf39c12); // Orange highlight
+                slimeGraphics.fillRect(8, 10, 2, 2);
+                slimeGraphics.fillRect(22, 16, 3, 2);
+
+                // Generate the texture
+                slimeGraphics.generateTexture('slime', 32, 32);
+
+                // Goblin texture - more detailed humanoid
+                const goblinGraphics = this.make.graphics();
+
+                // Body
+                goblinGraphics.fillStyle(0x8e44ad); // Purple body
+                goblinGraphics.fillRect(8, 16, 16, 16);
+
+                // Head
+                goblinGraphics.fillStyle(0x27ae60); // Green skin
+                goblinGraphics.fillRect(8, 4, 16, 12);
+
+                // Ears
+                goblinGraphics.fillStyle(0x27ae60); // Green skin
+                goblinGraphics.fillRect(4, 8, 4, 8);
+                goblinGraphics.fillRect(24, 8, 4, 8);
+
+                // Eyes
+                goblinGraphics.fillStyle(0xff0000); // Red eyes
+                goblinGraphics.fillRect(10, 8, 4, 4);
+                goblinGraphics.fillRect(18, 8, 4, 4);
+
+                // Arms
+                goblinGraphics.fillStyle(0x8e44ad); // Purple sleeves
+                goblinGraphics.fillRect(4, 16, 4, 12);
+                goblinGraphics.fillRect(24, 16, 4, 12);
+
+                // Hands
+                goblinGraphics.fillStyle(0x27ae60); // Green skin
+                goblinGraphics.fillRect(4, 28, 4, 4);
+                goblinGraphics.fillRect(24, 28, 4, 4);
+
+                // Legs
+                goblinGraphics.fillStyle(0x4a235a); // Dark purple pants
+                goblinGraphics.fillRect(8, 32, 6, 16);
+                goblinGraphics.fillRect(18, 32, 6, 16);
+
+                // Generate the texture
+                goblinGraphics.generateTexture('goblin', 32, 48);
+
+                // Bush/tall grass texture - designed to align properly with ground
+                const grassGraphics = this.make.graphics();
+
+                // Create the texture with origin at bottom
+                const textureWidth = 60;
+                const textureHeight = 40;
+
+                // Individual grass/bush elements - growing upward from bottom
+                grassGraphics.fillStyle(0x2ecc71); // Green
+
+                // Create varied bush shapes - all starting from bottom
+                for (let i = 0; i < 12; i++) {
+                    const x = i * 5 + Math.random() * 2;
+                    const height = 20 + Math.random() * 15;
+                    const width = 4 + Math.random() * 3;
+                    grassGraphics.fillRect(x, textureHeight - height, width, height);
+                }
+
+                // Add some highlights
+                grassGraphics.fillStyle(0x3ce681); // Lighter green
+                for (let i = 0; i < 6; i++) {
+                    const x = i * 10 + Math.random() * 5;
+                    const height = 15 + Math.random() * 10;
+                    const width = 2 + Math.random() * 2;
+                    grassGraphics.fillRect(x, textureHeight - height, width, height);
+                }
+
+                // Add some darker elements at the base
+                grassGraphics.fillStyle(0x27ae60); // Darker green
+                grassGraphics.fillRect(0, textureHeight - 10, textureWidth, 10);
+
+                // Add individual darker grass blades
+                for (let i = 0; i < 8; i++) {
+                    const x = i * 8 + Math.random() * 4;
+                    const height = 12 + Math.random() * 8;
+                    const width = 3 + Math.random() * 2;
+                    grassGraphics.fillRect(x, textureHeight - height, width, height);
+                }
+
+                // Generate the texture
+                grassGraphics.generateTexture('grass', textureWidth, textureHeight);
+
+                // Platform texture - more detailed pixel art platform
+                const platformGraphics = this.make.graphics();
+
+                // Main platform body
+                platformGraphics.fillStyle(0x8b4513); // Brown base
+                platformGraphics.fillRect(0, 0, 100, 32);
+
+                // Top grass layer
+                platformGraphics.fillStyle(0x2ecc71); // Green grass
+                platformGraphics.fillRect(0, 0, 100, 6);
+
+                // Dirt details
+                platformGraphics.fillStyle(0x6e4a1c); // Darker brown for details
+
+                // Add some pixel details to make it look more natural
+                for (let i = 0; i < 10; i++) {
+                    const x = i * 10 + Math.floor(Math.random() * 5);
+                    const y = 10 + Math.floor(Math.random() * 15);
+                    const width = 4 + Math.floor(Math.random() * 6);
+                    const height = 4 + Math.floor(Math.random() * 6);
+                    platformGraphics.fillRect(x, y, width, height);
+                }
+
+                platformGraphics.generateTexture('platform', 100, 32);
+
+                // Battle background - more detailed with pixel art elements
+                const battleBgGraphics = this.make.graphics();
+
+                // Sky gradient background
+                battleBgGraphics.fillGradientStyle(0x000033, 0x000033, 0x0a1a3f, 0x0a1a3f, 1);
+                battleBgGraphics.fillRect(0, 0, 800, 600);
+
+                // Add stars
+                battleBgGraphics.fillStyle(0xffffff);
+                for (let i = 0; i < 100; i++) {
+                    const x = Math.floor(Math.random() * 800);
+                    const y = Math.floor(Math.random() * 400);
+                    const size = Math.random() < 0.8 ? 1 : 2; // Mostly small stars
+                    battleBgGraphics.fillRect(x, y, size, size);
+                }
+
+                // Add distant mountains
+                battleBgGraphics.fillStyle(0x2c3e50);
+
+                // First mountain range (far)
+                battleBgGraphics.beginPath();
+                battleBgGraphics.moveTo(0, 400);
+                for (let x = 0; x < 800; x += 100) {
+                    const height = 50 + Math.floor(Math.random() * 50);
+                    battleBgGraphics.lineTo(x, 400 - height);
+                    battleBgGraphics.lineTo(x + 50, 400 - height / 2);
+                }
+                battleBgGraphics.lineTo(800, 400);
+                battleBgGraphics.closePath();
+                battleBgGraphics.fill();
+
+                // Ground
+                battleBgGraphics.fillStyle(0x34495e);
+                battleBgGraphics.fillRect(0, 400, 800, 200);
+
+                battleBgGraphics.generateTexture('battle-bg', 800, 600);
+
+                // Button texture
+                const buttonGraphics = this.make.graphics();
+                buttonGraphics.fillStyle(0x444444); // Dark gray
+                buttonGraphics.fillRect(0, 0, 150, 50);
+                buttonGraphics.generateTexture('button', 150, 50);
+            }
+
+            create() {
+                console.log('GameScene started');
+
+                // Create a more detailed background
+
+                // Sky gradient
+                const sky = this.add.graphics();
+                sky.fillGradientStyle(0x87ceeb, 0x87ceeb, 0xadd8e6, 0xadd8e6, 1);
+                sky.fillRect(0, 0, 2400, 600);
+
+                // Add clouds
+                for (let i = 0; i < 20; i++) {
+                    const x = Math.floor(Math.random() * 2400);
+                    const y = 50 + Math.floor(Math.random() * 150);
+                    this.createCloud(x, y);
+                }
+
+                // Add distant mountains
+                const mountains = this.add.graphics();
+                mountains.fillStyle(0x6a8caf);
+                mountains.beginPath();
+                mountains.moveTo(0, 500);
+
+                for (let x = 0; x < 2400; x += 200) {
+                    const height = 100 + Math.floor(Math.random() * 100);
+                    mountains.lineTo(x, 500 - height);
+                    mountains.lineTo(x + 100, 500 - height / 2);
+                }
+
+                mountains.lineTo(2400, 500);
+                mountains.lineTo(2400, 600);
+                mountains.lineTo(0, 600);
+                mountains.closePath();
+                mountains.fill();
+
+                // Create platforms
+                this.createPlatforms();
+
+                // Create player
+                this.createPlayer();
+
+                // Create enemies
+                this.createEnemies();
+
+                // Set up camera to follow player - extend bounds to match level size
+                this.cameras.main.setBounds(0, 0, 2400, 600);
+                this.cameras.main.startFollow(this.player, true, 0.5, 0.5);
+
+                // Set up keyboard input
+                this.cursors = this.input.keyboard.createCursorKeys();
+
+                // Add collision detection
+                this.physics.add.collider(this.player, this.platforms);
+                this.physics.add.collider(this.enemies, this.platforms);
+
+                // Add overlap detection between player and enemies
+                this.physics.add.overlap(this.player, this.enemies, this.encounterEnemy, null, this);
+
+                // Add instructions
+                this.add.text(16, 16, 'Arrow keys to move and jump', {
+                    fontSize: '18px',
+                    fill: '#000',
+                    backgroundColor: '#fff'
+                }).setScrollFactor(0);
+
+                // Create killzone at the bottom of the level
+                this.createKillZone();
+            }
+
+            createPlatforms() {
+                this.platforms = this.physics.add.staticGroup();
+
+                // Create ground platforms
+                for (let i = 0; i < 30; i++) {
+                    // Skip some sections to create gaps
+                    if (i === 8 || i === 9 || i === 18 || i === 19) continue;
+
+                    const platform = this.add.image(i * 100, 550, 'platform');
+                    this.platforms.add(platform);
+                }
+
+                // Add some floating platforms
+                const platform1 = this.add.image(600, 400, 'platform');
+                this.platforms.add(platform1);
+
+                const platform2 = this.add.image(50, 250, 'platform');
+                this.platforms.add(platform2);
+
+                const platform3 = this.add.image(750, 220, 'platform');
+                this.platforms.add(platform3);
+
+                // Add invisible left boundary to prevent falling off the left edge
+                this.leftBoundary = this.physics.add.sprite(0, 300, null);
+                this.leftBoundary.setVisible(false);
+                this.leftBoundary.body.setImmovable(true);
+                this.leftBoundary.body.setSize(10, 600);
+
+                // Add invisible right boundary at the end of the level
+                this.rightBoundary = this.physics.add.sprite(2400, 300, null);
+                this.rightBoundary.setVisible(false);
+                this.rightBoundary.body.setImmovable(true);
+                this.rightBoundary.body.setSize(10, 600);
+
+                // Add these boundaries to the platforms group
+                this.platforms.add(this.leftBoundary);
+                this.platforms.add(this.rightBoundary);
+
+                // Create grass patches
+                this.createGrassPatches();
+            }
+
+            createGrassPatches() {
+                // Create a group for grass (no physics)
+                this.grassPatches = this.add.group();
+
+                // Add grass/bush patches at strategic positions along the ground
+                const grassPositions = [
+                    // Ground level bushes - larger clusters - properly aligned with ground
+                    { x: 150, y: 534, scale: 1.2 },
+                    { x: 200, y: 534, scale: 1.0 },
+                    { x: 350, y: 534, scale: 1.3 },
+                    { x: 450, y: 534, scale: 1.1 },
+                    { x: 700, y: 534, scale: 1.4 },
+                    { x: 1000, y: 534, scale: 1.2 },
+                    { x: 1050, y: 534, scale: 1.0 },
+                    { x: 1200, y: 534, scale: 1.3 },
+                    { x: 1400, y: 534, scale: 1.1 },
+                    { x: 1700, y: 534, scale: 1.2 },
+                    { x: 2000, y: 534, scale: 1.3 },
+
+                    // Bushes on platforms - smaller - properly aligned with platforms
+                    { x: 580, y: 384, scale: 0.8 },
+                    { x: 620, y: 384, scale: 0.7 },
+                    { x: 30, y: 234, scale: 0.8 },
+                    { x: 70, y: 234, scale: 0.7 },
+                    { x: 730, y: 204, scale: 0.8 },
+                    { x: 770, y: 204, scale: 0.7 }
+                ];
+
+                // Create grass patches with varied sizes
+                grassPositions.forEach(pos => {
+                    const grass = this.add.image(pos.x, pos.y, 'grass');
+                    grass.setOrigin(0.5, 1.0); // Set origin to bottom center for proper ground alignment
+                    grass.setScale(pos.scale);
+                    grass.setDepth(10); // Set depth to render above platforms but below characters
+                    this.grassPatches.add(grass);
+                });
+            }
+
+            createKillZone() {
+                // Create lava/spikes visual for the killzone
+                const killZoneVisual = this.add.graphics();
+
+                // Red base for lava
+                killZoneVisual.fillStyle(0xff0000, 0.8);
+                killZoneVisual.fillRect(0, 590, 2400, 60);
+
+                // Add lava/spike details
+                killZoneVisual.fillStyle(0xff6600, 0.9);
+
+                // Create triangular spikes along the top of the killzone
+                for (let x = 0; x < 2400; x += 20) {
+                    killZoneVisual.beginPath();
+                    killZoneVisual.moveTo(x, 590);
+                    killZoneVisual.lineTo(x + 10, 580);
+                    killZoneVisual.lineTo(x + 20, 590);
+                    killZoneVisual.closePath();
+                    killZoneVisual.fill();
+                }
+
+                // Add a pulsing animation to the lava
+                this.tweens.add({
+                    targets: killZoneVisual,
+                    alpha: 0.6,
+                    duration: 1500,
+                    yoyo: true,
+                    repeat: -1
+                });
+
+                // Create the actual killzone collision area
+                this.killZone = this.physics.add.sprite(1200, 620, null);
+                this.killZone.setVisible(false);
+                this.killZone.body.setImmovable(true);
+                this.killZone.body.setSize(2400, 60); // Wide enough to cover the entire level
+
+                // Add collision detection between player and killzone
+                this.physics.add.overlap(this.player, this.killZone, this.playerDeath, null, this);
+
+                // Also add collision for enemies so they die if they fall
+                this.physics.add.overlap(this.enemies, this.killZone, this.enemyDeath, null, this);
+            }
+
+            createPlayer() {
+                this.player = this.physics.add.sprite(100, 450, 'player');
+                // Remove world bounds collision to allow free movement
+                this.player.body.setCollideWorldBounds(false);
+                this.player.moveSpeed = 160;
+                this.player.jumpSpeed = -330;
+
+                // Add a subtle idle breathing animation
+                this.createIdleAnimation();
+            }
+
+            createIdleAnimation() {
+                // Create a subtle breathing animation for idle state
+                this.player.idleTween = this.tweens.add({
+                    targets: this.player,
+                    scaleY: 1.03, // Very subtle scale change
+                    duration: 1500, // Slow breathing
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut',
+                    paused: true // Start paused
+                });
+
+                // Start the idle animation
+                this.player.idleTween.play();
+            }
+
+            createEnemies() {
+                this.enemies = this.physics.add.group();
+
+                // Create enemies at positions that match the level layout
+                const enemyPositions = [
+                    // Ground level enemies - patrolling with longer distances
+                    { x: 300, y: 520, type: 'slime', patrolDistance: 350, moveSpeed: 80, jumpProbability: 0, platformBound: true },
+                    { x: 900, y: 520, type: 'slime', patrolDistance: 400, moveSpeed: 90, jumpProbability: 0, platformBound: true },
+                    { x: 1500, y: 520, type: 'slime', patrolDistance: 380, moveSpeed: 85, jumpProbability: 0, platformBound: true },
+
+                    // Platform enemies
+                    { x: 600, y: 370, type: 'goblin', patrolDistance: 200, moveSpeed: 100, jumpProbability: 0.005, platformBound: true },
+                    { x: 750, y: 190, type: 'goblin', patrolDistance: 180, moveSpeed: 110, jumpProbability: 0.01, platformBound: true },
+                    { x: 1200, y: 520, type: 'goblin', patrolDistance: 420, moveSpeed: 105, jumpProbability: 0.008, platformBound: true },
+                    { x: 1800, y: 520, type: 'goblin', patrolDistance: 380, moveSpeed: 115, jumpProbability: 0.01, platformBound: true }
+                ];
+
+                enemyPositions.forEach(pos => {
+                    const enemy = this.physics.add.sprite(pos.x, pos.y, pos.type);
+                    // Remove world bounds collision to allow free movement
+                    enemy.body.setCollideWorldBounds(false);
+                    enemy.type = pos.type;
+                    enemy.health = pos.type === 'slime' ? 30 : 50;
+                    enemy.attack = pos.type === 'slime' ? 10 : 15;
+                    enemy.patrolDistance = pos.patrolDistance;
+                    enemy.startX = pos.x;
+                    enemy.leftBound = pos.x - pos.patrolDistance/2;
+                    enemy.rightBound = pos.x + pos.patrolDistance/2;
+                    enemy.direction = Math.random() < 0.5 ? -1 : 1; // Random initial direction
+                    enemy.moveSpeed = pos.moveSpeed;
+                    enemy.jumpProbability = pos.jumpProbability;
+                    enemy.jumpSpeed = -300;
+                    enemy.jumpCooldown = 0;
+                    enemy.canJump = true;
+                    enemy.platformBound = pos.platformBound; // Whether enemy should stay on its platform
+                    enemy.fallTimer = 0; // Timer to track how long enemy has been falling
+                    enemy.maxFallTime = 60; // Maximum frames enemy can fall before trying to recover
+                    enemy.directionChangeTimer = 0; // Initialize direction change timer
+                    enemy.edgeCheckCounter = 0; // Initialize edge check counter
+                    enemy.moveTimer = Math.floor(Math.random() * 180); // Random initial movement timer
+                    enemy.pauseTimer = 0; // Timer for pausing
+                    enemy.state = 'moving'; // Current state: 'moving' or 'paused'
+
+                    // Initialize movement
+                    enemy.setVelocityX(enemy.moveSpeed * enemy.direction);
+
+                    // Add idle animation for enemies
+                    if (enemy.type === 'slime') {
+                        // Slime pulse animation
+                        enemy.idleTween = this.tweens.add({
+                            targets: enemy,
+                            scaleX: 1.1,
+                            scaleY: 0.9,
+                            duration: 1000,
+                            yoyo: true,
+                            repeat: -1,
+                            ease: 'Sine.easeInOut'
+                        });
+                    } else {
+                        // Goblin subtle breathing
+                        enemy.idleTween = this.tweens.add({
+                            targets: enemy,
+                            scaleY: 1.03,
+                            duration: 1200,
+                            yoyo: true,
+                            repeat: -1,
+                            ease: 'Sine.easeInOut'
+                        });
+                    }
+
+                    this.enemies.add(enemy);
+                });
+            }
+
+            update() {
+                // Skip updates if in battle or player died
+                if (this.enemyEncountered || this.playerDied) return;
+
+                // Update player movement
+                this.updatePlayerMovement();
+
+                // Update enemies
+                this.updateEnemies();
+
+                // Check if player has fallen below the screen
+                if (this.player.y > 600) {
+                    this.playerDeath(this.player, null);
+                }
+
+                // Update grass interactions
+                this.updateGrassInteractions();
+            }
+
+            updateGrassInteractions() {
+                // Check player against grass patches
+                this.checkEntityGrassOverlap(this.player);
+
+                // Check enemies against grass patches
+                this.enemies.getChildren().forEach(enemy => {
+                    if (!enemy.isBeingDestroyed) {
+                        this.checkEntityGrassOverlap(enemy);
+                    }
+                });
+            }
+
+            checkEntityGrassOverlap(entity) {
+                // Set default properties if not already set
+                if (entity.defaultDepth === undefined) {
+                    entity.defaultDepth = entity.depth || 0;
+                    entity.inGrass = false;
+                    entity.defaultAlpha = entity.alpha || 1;
+                }
+
+                // Check if entity is overlapping with any grass patch
+                let isInGrass = false;
+                let largestGrass = null;
+
+                this.grassPatches.getChildren().forEach(grass => {
+                    // Adjust overlap check based on grass scale
+                    const overlapWidth = 30 * grass.scaleX;
+                    const overlapHeight = 30 * grass.scaleY;
+
+                    // Simple rectangular overlap check - adjusted for bottom origin
+                    if (Math.abs(entity.x - grass.x) < overlapWidth &&
+                        Math.abs(entity.y - (grass.y - grass.height * grass.scaleY / 2)) < overlapHeight) {
+                        isInGrass = true;
+
+                        // Track the largest grass patch for better visual effect
+                        if (!largestGrass || grass.scaleX > largestGrass.scaleX) {
+                            largestGrass = grass;
+                        }
+                    }
+                });
+
+                // Different behavior for player vs enemies
+                if (entity === this.player) {
+                    // Player becomes invisible in grass
+                    if (isInGrass && !entity.inGrass) {
+                        // Player just entered grass
+                        entity.inGrass = true;
+
+                        // Create a rustling animation
+                        this.tweens.add({
+                            targets: largestGrass,
+                            scaleX: largestGrass.scaleX * 1.1,
+                            scaleY: largestGrass.scaleY * 0.95,
+                            duration: 200,
+                            yoyo: true
+                        });
+
+                        // Fade player to nearly invisible
+                        this.tweens.add({
+                            targets: entity,
+                            alpha: 0.2,
+                            duration: 300
+                        });
+                    } else if (!isInGrass && entity.inGrass) {
+                        // Player just left grass
+                        entity.inGrass = false;
+
+                        // Fade player back to visible
+                        this.tweens.add({
+                            targets: entity,
+                            alpha: entity.defaultAlpha,
+                            duration: 300
+                        });
+                    }
+                } else {
+                    // Enemies are covered by grass but still partially visible
+                    if (isInGrass && !entity.inGrass) {
+                        // Enemy just entered grass
+                        entity.inGrass = true;
+                        entity.setDepth(5); // Below grass
+
+                        // Create a rustling animation
+                        this.tweens.add({
+                            targets: largestGrass,
+                            scaleX: largestGrass.scaleX * 1.05,
+                            scaleY: largestGrass.scaleY * 0.97,
+                            duration: 150,
+                            yoyo: true
+                        });
+
+                        // Partially hide enemy
+                        this.tweens.add({
+                            targets: entity,
+                            alpha: 0.6,
+                            duration: 200
+                        });
+                    } else if (!isInGrass && entity.inGrass) {
+                        // Enemy just left grass
+                        entity.inGrass = false;
+                        entity.setDepth(entity.defaultDepth);
+
+                        // Make enemy fully visible again
+                        this.tweens.add({
+                            targets: entity,
+                            alpha: entity.defaultAlpha,
+                            duration: 200
+                        });
+                    }
+                }
+            }
+
+            updatePlayerMovement() {
+                // Handle horizontal movement
+                if (this.cursors.left.isDown) {
+                    this.player.setVelocityX(-this.player.moveSpeed);
+                    this.player.setFlipX(true);
+                    this.animatePlayerMovement();
+                } else if (this.cursors.right.isDown) {
+                    this.player.setVelocityX(this.player.moveSpeed);
+                    this.player.setFlipX(false);
+                    this.animatePlayerMovement();
+                } else {
+                    this.player.setVelocityX(0);
+                    this.stopPlayerAnimation();
+                }
+
+                // Handle jumping
+                if (this.cursors.up.isDown && this.player.body.touching.down && !this.player.isJumping) {
+                    this.player.isJumping = true;
+                    this.player.setVelocityY(this.player.jumpSpeed);
+
+                    // Pause idle animation during jump
+                    if (this.player.idleTween && this.player.idleTween.isPlaying()) {
+                        this.player.idleTween.pause();
+                    }
+
+                    // Add jump effect
+                    this.tweens.add({
+                        targets: this.player,
+                        scaleX: 0.8,
+                        scaleY: 1.2,
+                        duration: 100,
+                        yoyo: true,
+                        onComplete: () => {
+                            this.player.setScale(1);
+                            // Reset jumping flag after a short delay
+                            this.time.delayedCall(100, () => {
+                                this.player.isJumping = false;
+
+                                // Only resume idle if not moving and not landing
+                                if (!this.player.isMoving && !this.player.isLanding && this.player.body.touching.down) {
+                                    if (this.player.idleTween && !this.player.idleTween.isPlaying()) {
+                                        this.player.idleTween.resume();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // Check if player landed from a jump
+                if (this.player.body.touching.down && this.player.body.prev.y < this.player.y && !this.player.isLanding) {
+                    // Set landing flag to prevent multiple landing animations
+                    this.player.isLanding = true;
+
+                    // Pause idle animation during landing
+                    if (this.player.idleTween && this.player.idleTween.isPlaying()) {
+                        this.player.idleTween.pause();
+                    }
+
+                    // Landing effect
+                    this.tweens.add({
+                        targets: this.player,
+                        scaleX: 1.2,
+                        scaleY: 0.8,
+                        duration: 100,
+                        yoyo: true,
+                        onComplete: () => {
+                            this.player.setScale(1);
+                            // Reset landing flag after a short delay
+                            this.time.delayedCall(100, () => {
+                                this.player.isLanding = false;
+
+                                // Resume idle animation if not moving
+                                if (!this.player.isMoving && !this.player.isJumping) {
+                                    if (this.player.idleTween && !this.player.idleTween.isPlaying()) {
+                                        this.player.idleTween.resume();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            animatePlayerMovement() {
+                // Add a bobbing animation when moving
+                if (this.player.body.touching.down && !this.player.isMoving) {
+                    this.player.isMoving = true;
+
+                    // Pause the idle animation while moving
+                    if (this.player.idleTween && this.player.idleTween.isPlaying()) {
+                        this.player.idleTween.pause();
+                    }
+
+                    // Reset scale before starting movement animation
+                    this.player.setScale(1);
+
+                    // Store the tween reference so we can stop it specifically
+                    this.player.moveTween = this.tweens.add({
+                        targets: this.player,
+                        y: this.player.y - 5,
+                        duration: 150,
+                        yoyo: true,
+                        repeat: -1,
+                        ease: 'Sine.easeInOut'
+                    });
+                }
+            }
+
+            stopPlayerAnimation() {
+                if (this.player.isMoving) {
+                    this.player.isMoving = false;
+
+                    // Kill only the movement bobbing tween, not all tweens
+                    if (this.player.moveTween) {
+                        this.player.moveTween.stop();
+                        this.player.moveTween = null;
+                    }
+
+                    // Reset player position to normal height (in case tween was interrupted)
+                    if (!this.player.isLanding && !this.player.isJumping) {
+                        this.player.setScale(1);
+
+                        // Resume idle animation when player stops moving
+                        if (this.player.idleTween && !this.player.idleTween.isPlaying()) {
+                            this.player.idleTween.resume();
+                        }
+                    }
+                }
+            }
+
+            // Simplified enemy movement - no need for complex hiding spot detection
+
+            updateEnemies() {
+                this.enemies.getChildren().forEach(enemy => {
+                    // Skip if enemy is being destroyed
+                    if (enemy.isBeingDestroyed) return;
+
+                    // Check if enemy has fallen below the screen
+                    if (enemy.y > 600) {
+                        this.enemyDeath(enemy, null);
+                        return;
+                    }
+
+                    // SIMPLIFIED ENEMY MOVEMENT LOGIC
+
+                    // Handle direction change timer (brief pause when changing direction)
+                    if (enemy.directionChangeTimer > 0) {
+                        enemy.directionChangeTimer--;
+                        enemy.setVelocityX(0); // Don't move during direction change
+                        return; // Skip the rest of the update
+                    }
+
+                    // Handle paused state
+                    if (enemy.state === 'paused') {
+                        enemy.pauseTimer--;
+                        if (enemy.pauseTimer <= 0) {
+                            // Resume movement after pause
+                            enemy.state = 'moving';
+                            // Sometimes change direction after pausing
+                            if (Math.random() < 0.5) {
+                                enemy.direction *= -1;
+                            }
+                            // Set a long movement timer
+                            enemy.moveTimer = 180 + Math.floor(Math.random() * 120); // 3-5 seconds of movement
+                        }
+                        return; // Don't move while paused
+                    }
+
+                    // Handle moving state
+                    if (enemy.state === 'moving') {
+                        // Decrement movement timer
+                        enemy.moveTimer--;
+
+                        // Randomly pause after moving for a while
+                        if (enemy.moveTimer <= 0 && Math.random() < 0.2) { // 20% chance to pause
+                            enemy.state = 'paused';
+                            enemy.pauseTimer = 60 + Math.floor(Math.random() * 60); // 1-2 second pause
+                            enemy.setVelocityX(0);
+                            return;
+                        }
+
+                        // Check if reached patrol boundary
+                        if (enemy.x <= enemy.leftBound && enemy.direction < 0) {
+                            // Reached left boundary
+                            enemy.direction = 1; // Change direction
+                            enemy.directionChangeTimer = 5; // Brief pause
+                            return;
+                        } else if (enemy.x >= enemy.rightBound && enemy.direction > 0) {
+                            // Reached right boundary
+                            enemy.direction = -1; // Change direction
+                            enemy.directionChangeTimer = 5; // Brief pause
+                            return;
+                        }
+
+                        // Basic movement
+                        if (enemy.body.touching.down) {
+                            // Full speed on ground
+                            enemy.setVelocityX(enemy.moveSpeed * enemy.direction);
+                            enemy.fallTimer = 0; // Reset fall timer when on ground
+                        } else {
+                            // Slightly reduced speed in air
+                            enemy.setVelocityX(enemy.moveSpeed * enemy.direction * 0.8);
+
+                            // Track falling time
+                            enemy.fallTimer++;
+                            if (enemy.fallTimer > enemy.maxFallTime && enemy.platformBound) {
+                                // Reset position if fallen for too long
+                                enemy.x = enemy.startX;
+                                enemy.y = enemy.y - 50;
+                                enemy.body.velocity.x = 0;
+                                enemy.body.velocity.y = 0;
+                                enemy.fallTimer = 0;
+                                return;
+                            }
+                        }
+                    }
+
+                    // Flip sprite based on direction
+                    enemy.setFlipX(enemy.direction < 0);
+
+                    // Platform edge detection (only for platform-bound enemies)
+                    if (enemy.platformBound && enemy.body.touching.down) {
+                        // Only check every few frames to prevent jittering
+                        enemy.edgeCheckCounter = (enemy.edgeCheckCounter || 0) + 1;
+                        if (enemy.edgeCheckCounter >= 5) {
+                            enemy.edgeCheckCounter = 0;
+
+                            // Look ahead for platform edge
+                            const lookAheadDistance = enemy.direction * 40; // Increased look-ahead
+                            const nextX = enemy.x + lookAheadDistance;
+                            const groundBelow = this.physics.overlapRect(nextX, enemy.y + 32, 5, 10);
+
+                            // Check if there's ground ahead
+                            let platformAhead = false;
+                            for (let i = 0; i < groundBelow.length; i++) {
+                                if (groundBelow[i].gameObject && groundBelow[i].gameObject.body &&
+                                    groundBelow[i].gameObject.body.immovable) {
+                                    platformAhead = true;
+                                    break;
+                                }
+                            }
+
+                            // Turn around if about to walk off edge
+                            if (!platformAhead) {
+                                enemy.direction *= -1;
+                                enemy.directionChangeTimer = 5; // Brief pause
+                            }
+                        }
+                    }
+
+                    // Wall collision detection
+                    if (enemy.body.touching.left || enemy.body.touching.right) {
+                        enemy.direction *= -1;
+                        enemy.directionChangeTimer = 5; // Brief pause
+                    }
+
+                    // Animation handling
+                    if (Math.abs(enemy.body.velocity.x) > 10 && enemy.body.touching.down) {
+                        // Moving animation
+                        if (!enemy.isMoving) {
+                            enemy.isMoving = true;
+                            if (enemy.idleTween) enemy.idleTween.pause();
+
+                            enemy.moveTween = this.tweens.add({
+                                targets: enemy,
+                                y: enemy.y - 5,
+                                duration: 150,
+                                yoyo: true,
+                                repeat: -1,
+                                ease: 'Sine.easeInOut'
+                            });
+                        }
+                    } else if (enemy.isMoving) {
+                        // Stop moving animation
+                        enemy.isMoving = false;
+                        if (enemy.moveTween) {
+                            enemy.moveTween.stop();
+                            enemy.moveTween = null;
+
+                            if (enemy.idleTween && enemy.body.touching.down) {
+                                enemy.idleTween.resume();
+                            }
+                        }
+                    }
+                });
+            }
+
+            createCloud(x, y) {
+                // Create a simple pixel art cloud
+                const cloud = this.add.graphics();
+                cloud.fillStyle(0xffffff, 0.8);
+
+                // Main cloud body
+                cloud.fillCircle(x, y, 20);
+                cloud.fillCircle(x + 15, y - 10, 15);
+                cloud.fillCircle(x + 25, y, 18);
+                cloud.fillCircle(x - 15, y - 5, 15);
+
+                return cloud;
+            }
+
+            playerDeath(player, killZone) {
+                // Prevent multiple deaths
+                if (this.playerDied) return;
+                this.playerDied = true;
+
+                // Stop player movement
+                player.body.setVelocity(0);
+
+                // Create a camera shake effect
+                this.cameras.main.shake(500, 0.05);
+
+                // Flash the player red
+                this.tweens.add({
+                    targets: player,
+                    alpha: 0.3,
+                    duration: 100,
+                    yoyo: true,
+                    repeat: 3
+                });
+
+                // Create death particles
+                const particles = this.add.particles('player');
+                const emitter = particles.createEmitter({
+                    x: player.x,
+                    y: player.y,
+                    speed: { min: 50, max: 200 },
+                    angle: { min: 0, max: 360 },
+                    scale: { start: 0.4, end: 0 },
+                    lifespan: 800,
+                    quantity: 30,
+                    blendMode: 'ADD'
+                });
+
+                // Hide the player
+                this.tweens.add({
+                    targets: player,
+                    alpha: 0,
+                    duration: 300,
+                    delay: 400,
+                    onComplete: () => {
+                        // Stop the particle emitter
+                        emitter.stop();
+
+                        // Create a dark overlay
+                        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0)
+                            .setScrollFactor(0)
+                            .setDepth(100);
+
+                        // Fade in the overlay
+                        this.tweens.add({
+                            targets: overlay,
+                            alpha: 0.8,
+                            duration: 1000,
+                            onComplete: () => {
+                                // Create game over text with animation
+                                const gameOverText = this.add.text(400, 250, 'GAME OVER', {
+                                    fontSize: '64px',
+                                    fontFamily: 'monospace',
+                                    fill: '#ff0000',
+                                    stroke: '#000',
+                                    strokeThickness: 6
+                                }).setOrigin(0.5).setScrollFactor(0).setDepth(101).setAlpha(0);
+
+                                // Add restart instructions
+                                const restartText = this.add.text(400, 350, 'Press R to restart', {
+                                    fontSize: '24px',
+                                    fontFamily: 'monospace',
+                                    fill: '#ffffff',
+                                    stroke: '#000',
+                                    strokeThickness: 3
+                                }).setOrigin(0.5).setScrollFactor(0).setDepth(101).setAlpha(0);
+
+                                // Animate the text
+                                this.tweens.add({
+                                    targets: [gameOverText, restartText],
+                                    alpha: 1,
+                                    y: '+=20',
+                                    duration: 800,
+                                    ease: 'Power2'
+                                });
+
+                                // Add restart key
+                                this.input.keyboard.once('keydown-R', () => {
+                                    // Fade out
+                                    this.tweens.add({
+                                        targets: [overlay, gameOverText, restartText],
+                                        alpha: 0,
+                                        duration: 500,
+                                        onComplete: () => {
+                                            this.scene.restart();
+                                            gameData.playerHealth = 100; // Reset player health
+                                        }
+                                    });
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            enemyDeath(enemy, killZone) {
+                // Prevent processing if enemy is already being destroyed
+                if (enemy.isBeingDestroyed) return;
+                enemy.isBeingDestroyed = true;
+
+                // Create a small camera shake effect
+                this.cameras.main.shake(200, 0.01);
+
+                // Flash the enemy
+                this.tweens.add({
+                    targets: enemy,
+                    alpha: 0.3,
+                    duration: 50,
+                    yoyo: true,
+                    repeat: 2
+                });
+
+                // Create death particles based on enemy type
+                const particleColor = enemy.type === 'slime' ? 0xe74c3c : 0x8e44ad;
+
+                const particles = this.add.particles(enemy.type);
+                const emitter = particles.createEmitter({
+                    x: enemy.x,
+                    y: enemy.y,
+                    speed: { min: 30, max: 150 },
+                    angle: { min: 0, max: 360 },
+                    scale: { start: 0.3, end: 0 },
+                    lifespan: 600,
+                    quantity: 20,
+                    tint: particleColor,
+                    blendMode: 'ADD'
+                });
+
+                // Hide the enemy
+                this.tweens.add({
+                    targets: enemy,
+                    alpha: 0,
+                    y: enemy.y + 30, // Sink into the lava
+                    duration: 300,
+                    onComplete: () => {
+                        // Stop the particle emitter after a short delay
+                        this.time.delayedCall(300, () => {
+                            emitter.stop();
+                            // Remove the enemy after particles are done
+                            this.time.delayedCall(600, () => {
+                                particles.destroy();
+                                enemy.destroy();
+                            });
+                        });
+                    }
+                });
+            }
+
+            encounterEnemy(player, enemy) {
+                // Prevent multiple encounters
+                if (this.enemyEncountered) return;
+
+                this.enemyEncountered = true;
+
+                // Stop player and enemy movement
+                player.body.setVelocity(0);
+                enemy.body.setVelocity(0);
+
+                // Start battle scene
+                this.scene.pause();
+                this.scene.launch('BattleScene', {
+                    player: player,
+                    enemy: enemy
+                });
+            }
+        }
+
+        // Battle Scene - Turn-based combat
+        class BattleScene extends Phaser.Scene {
+            constructor() {
+                super('BattleScene');
+                this.player = null;
+                this.enemy = null;
+                this.isPlayerTurn = true;
+                this.actionButtons = [];
+            }
+
+            init(data) {
+                this.player = data.player;
+                this.enemy = data.enemy;
+            }
+
+            create() {
+                // Add battle background
+                this.add.image(400, 300, 'battle-bg');
+
+                // Create UI sections
+                this.createBattleUI();
+
+                // Create battle sprites in the combat area - positioned to face each other
+                this.playerSprite = this.add.image(250, 300, 'player').setScale(2);
+
+                this.enemySprite = this.add.image(550, 300, this.enemy.type).setScale(2);
+
+                // Create action buttons in the action area
+                this.createActionButtons();
+
+                // Initialize battle log
+                this.battleLog = [];
+                this.addToBattleLog('Battle started!');
+
+                // Start battle with player's turn
+                this.time.delayedCall(1000, () => {
+                    this.startPlayerTurn();
+                });
+            }
+
+            createBattleUI() {
+                // Create UI container to manage all UI elements
+                this.uiContainer = this.add.container(0, 0);
+
+                // Add a dark semi-transparent overlay for the entire battle scene
+                const battleOverlay = this.add.rectangle(400, 300, 800, 600, 0x000033, 0.7);
+                this.uiContainer.add(battleOverlay);
+
+                // Define panel dimensions and positions to avoid overlap
+                const panelConfig = {
+                    // Battle log at the top - moved to the left to avoid overlap with enemy panel
+                    log: { x: 300, y: 50, width: 500, height: 60 },
+
+                    // Enemy stats in top right - moved slightly higher
+                    enemy: { x: 650, y: 100, width: 250, height: 140 },
+
+                    // Combat area in the center
+                    combat: { x: 400, y: 300, width: 600, height: 260 },
+
+                    // Player stats in bottom left
+                    player: { x: 150, y: 520, width: 250, height: 140 },
+
+                    // Actions in bottom right
+                    actions: { x: 550, y: 520, width: 450, height: 140 }
+                };
+
+                // Create UI panels with the defined configuration
+
+                // Create completely invisible panels to maintain organization
+                // without any visible backgrounds or borders
+
+                // Battle log area (top) - completely invisible
+                const logPanel = this.add.rectangle(
+                    panelConfig.log.x,
+                    panelConfig.log.y,
+                    panelConfig.log.width,
+                    panelConfig.log.height,
+                    0xffffff, 0
+                );
+                this.uiContainer.add(logPanel);
+
+                // Enemy stats area (top right) - completely invisible
+                const enemyPanel = this.add.rectangle(
+                    panelConfig.enemy.x,
+                    panelConfig.enemy.y,
+                    panelConfig.enemy.width,
+                    panelConfig.enemy.height,
+                    0xffffff, 0
+                );
+                this.uiContainer.add(enemyPanel);
+
+                // Main combat area (center) - completely invisible
+                const combatArea = this.add.rectangle(
+                    panelConfig.combat.x,
+                    panelConfig.combat.y,
+                    panelConfig.combat.width,
+                    panelConfig.combat.height,
+                    0xffffff, 0
+                );
+                this.uiContainer.add(combatArea);
+
+                // Player stats area (bottom left) - completely invisible
+                const playerPanel = this.add.rectangle(
+                    panelConfig.player.x,
+                    panelConfig.player.y,
+                    panelConfig.player.width,
+                    panelConfig.player.height,
+                    0xffffff, 0
+                );
+                this.uiContainer.add(playerPanel);
+
+                // Action area (bottom right) - completely invisible
+                const actionPanel = this.add.rectangle(
+                    panelConfig.actions.x,
+                    panelConfig.actions.y,
+                    panelConfig.actions.width,
+                    panelConfig.actions.height,
+                    0xffffff, 0
+                );
+                this.uiContainer.add(actionPanel);
+
+                // Add panel titles with improved styling
+                const playerTitle = this.add.text(panelConfig.player.x, panelConfig.player.y - 50, 'PLAYER', {
+                    fontSize: '20px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff',
+                    stroke: '#000',
+                    strokeThickness: 2
+                }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                this.uiContainer.add(playerTitle);
+
+                const enemyTitle = this.add.text(panelConfig.enemy.x, panelConfig.enemy.y - 40, 'ENEMY', {
+                    fontSize: '20px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff',
+                    stroke: '#000',
+                    strokeThickness: 2
+                }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                this.uiContainer.add(enemyTitle);
+
+                const logTitle = this.add.text(panelConfig.log.x, panelConfig.log.y - 20, 'BATTLE LOG', {
+                    fontSize: '20px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff',
+                    stroke: '#000',
+                    strokeThickness: 2
+                }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                this.uiContainer.add(logTitle);
+
+                const actionsTitle = this.add.text(panelConfig.actions.x, panelConfig.actions.y - 50, 'ACTIONS', {
+                    fontSize: '20px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff',
+                    stroke: '#000',
+                    strokeThickness: 2
+                }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                this.uiContainer.add(actionsTitle);
+
+                // Create player stats display with improved styling and brackets
+                this.playerNameText = this.add.text(panelConfig.player.x, panelConfig.player.y - 30, '[ Hero ]', {
+                    fontSize: '20px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff',
+                    stroke: '#000',
+                    strokeThickness: 2
+                }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                this.uiContainer.add(this.playerNameText);
+
+                this.playerHealthText = this.add.text(panelConfig.player.x, panelConfig.player.y, `HP: ${gameData.playerHealth}/100`, {
+                    fontSize: '18px',
+                    fontFamily: 'monospace',
+                    fill: '#3498db',
+                    stroke: '#000',
+                    strokeThickness: 1
+                }).setOrigin(0.5);
+                this.uiContainer.add(this.playerHealthText);
+
+                this.playerStatsText = this.add.text(panelConfig.player.x, panelConfig.player.y + 30,
+                    `ATK: ${gameData.playerAttack}  DEF: ${gameData.playerDefense}`, {
+                    fontSize: '16px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff'
+                }).setOrigin(0.5);
+                this.uiContainer.add(this.playerStatsText);
+
+                // Create health bar for player
+                const playerHealthBar = this.createHealthBar(panelConfig.player.x, panelConfig.player.y + 60, gameData.playerHealth, 100, 0x3498db);
+                this.uiContainer.add(playerHealthBar.bgBar);
+                this.uiContainer.add(playerHealthBar.healthBar);
+                this.uiContainer.add(playerHealthBar.border);
+
+                // Create enemy stats display with improved styling and brackets
+                const enemyName = this.enemy.type.charAt(0).toUpperCase() + this.enemy.type.slice(1);
+                this.enemyNameText = this.add.text(panelConfig.enemy.x, panelConfig.enemy.y - 20, `[ ${enemyName} ]`, {
+                    fontSize: '20px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff',
+                    stroke: '#000',
+                    strokeThickness: 2
+                }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                this.uiContainer.add(this.enemyNameText);
+
+                const maxEnemyHealth = this.enemy.type === 'slime' ? 30 : 50;
+                this.enemyHealthText = this.add.text(panelConfig.enemy.x, panelConfig.enemy.y + 10, `HP: ${this.enemy.health}/${maxEnemyHealth}`, {
+                    fontSize: '18px',
+                    fontFamily: 'monospace',
+                    fill: '#ff0000',
+                    stroke: '#000',
+                    strokeThickness: 1
+                }).setOrigin(0.5);
+                this.uiContainer.add(this.enemyHealthText);
+
+                this.enemyStatsText = this.add.text(panelConfig.enemy.x, panelConfig.enemy.y + 40,
+                    `ATK: ${this.enemy.attack}`, {
+                    fontSize: '16px',
+                    fontFamily: 'monospace',
+                    fill: '#ffffff'
+                }).setOrigin(0.5);
+                this.uiContainer.add(this.enemyStatsText);
+
+                // Create health bar for enemy
+                const enemyHealthBar = this.createHealthBar(panelConfig.enemy.x, panelConfig.enemy.y + 70, this.enemy.health, maxEnemyHealth, 0xff0000);
+                this.uiContainer.add(enemyHealthBar.bgBar);
+                this.uiContainer.add(enemyHealthBar.healthBar);
+                this.uiContainer.add(enemyHealthBar.border);
+
+                // Create battle text (for main announcements) with improved styling to match name display
+                this.battleText = this.add.text(panelConfig.log.x, panelConfig.log.y, 'Battle Start!', {
+                    fontSize: '22px',
+                    fontFamily: 'monospace',
+                    fill: '#fff',
+                    stroke: '#000',
+                    strokeThickness: 2
+                }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                this.uiContainer.add(this.battleText);
+
+                // Store panel config for reference in other methods
+                this.panelConfig = panelConfig;
+            }
+
+            createHealthBar(x, y, currentHealth, maxHealth, color) {
+                // Create background bar - adjust width to fit within panels
+                const barWidth = 150; // Even narrower to ensure it fits within panel
+                const barHeight = 14; // Slightly shorter
+                const bgBar = this.add.rectangle(x, y, barWidth, barHeight, 0x333333, 0.7)
+                    .setOrigin(0.5);
+
+                // Calculate health percentage
+                const healthPercent = Math.max(0, currentHealth / maxHealth);
+
+                // Create a mask to ensure the health bar doesn't extend beyond its container
+                const maskShape = this.make.graphics();
+                maskShape.fillStyle(0xffffff);
+                maskShape.fillRect(x - barWidth/2, y - barHeight/2, barWidth, barHeight);
+                const mask = maskShape.createGeometryMask();
+
+                // Create health bar
+                const healthWidth = Math.max(1, barWidth * healthPercent); // Ensure at least 1px width
+                const healthBar = this.add.rectangle(
+                    x - (barWidth / 2) + (healthWidth / 2),
+                    y,
+                    healthWidth,
+                    barHeight,
+                    color
+                ).setOrigin(0.5);
+
+                // Apply mask to health bar
+                healthBar.setMask(mask);
+
+                // Add border to health bar
+                const border = this.add.rectangle(x, y, barWidth, barHeight, 0xffffff, 0)
+                    .setOrigin(0.5)
+                    .setStrokeStyle(1, 0xffffff, 0.6);
+
+                // Store references for updating
+                if (color === 0x3498db) { // Player health bar
+                    this.playerHealthBar = healthBar;
+                    this.playerMaxHealth = maxHealth;
+                    this.playerHealthBarX = x; // Store original x position
+                    this.playerHealthBarBg = bgBar;
+                    this.playerHealthBarBorder = border;
+                    this.playerHealthBarMask = mask;
+                    this.playerHealthBarMaskShape = maskShape;
+                } else { // Enemy health bar
+                    this.enemyHealthBar = healthBar;
+                    this.enemyMaxHealth = maxHealth;
+                    this.enemyHealthBarX = x; // Store original x position
+                    this.enemyHealthBarBg = bgBar;
+                    this.enemyHealthBarBorder = border;
+                    this.enemyHealthBarMask = mask;
+                    this.enemyHealthBarMaskShape = maskShape;
+                }
+
+                return { bgBar, healthBar, border };
+            }
+
+            updateHealthBar(healthBar, currentHealth, maxHealth) {
+                // Calculate health percentage
+                const healthPercent = Math.max(0, currentHealth / maxHealth);
+                const barWidth = 150; // Match the width in createHealthBar
+
+                // Get the original x position
+                const originalX = healthBar === this.playerHealthBar ?
+                    this.playerHealthBarX : this.enemyHealthBarX;
+
+                // Update health bar width
+                const healthWidth = Math.max(1, barWidth * healthPercent); // Ensure at least 1px width
+
+                // Animate health bar change - ensure it stays within the mask
+                this.tweens.add({
+                    targets: healthBar,
+                    width: healthWidth,
+                    x: originalX - (barWidth / 2) + (healthWidth / 2),
+                    duration: 300,
+                    ease: 'Power2'
+                });
+
+                // Change color based on health percentage with animation
+                let targetColor;
+                if (healthPercent < 0.2) {
+                    targetColor = 0xff0000; // Red when low health
+                } else if (healthPercent < 0.5) {
+                    targetColor = 0xffff00; // Yellow when medium health
+                } else {
+                    targetColor = healthBar === this.playerHealthBar ? 0x3498db : 0xff0000;
+                }
+
+                // Apply color change
+                this.tweens.addCounter({
+                    from: healthBar.fillColor,
+                    to: targetColor,
+                    duration: 300,
+                    onUpdate: (tween) => {
+                        const value = Math.floor(tween.getValue());
+                        healthBar.fillColor = value;
+                    }
+                });
+            }
+
+            addToBattleLog(message) {
+                // Add message to battle log array
+                this.battleLog.unshift(message);
+
+                // Keep only the last 5 messages
+                if (this.battleLog.length > 5) {
+                    this.battleLog.pop();
+                }
+
+                // Update battle text with the latest message
+                this.battleText.setText(message);
+            }
+
+            createActionButtons() {
+                const actions = ['Attack', 'Defend', 'Special'];
+                this.actionButtons = [];
+
+                // Calculate button positions based on panel config
+                const buttonWidth = 120;
+                const buttonSpacing = 20;
+                const totalButtonsWidth = (buttonWidth * actions.length) + (buttonSpacing * (actions.length - 1));
+                const startX = this.panelConfig.actions.x - (totalButtonsWidth / 2) + (buttonWidth / 2);
+
+                // Position buttons in the action panel area
+                actions.forEach((action, index) => {
+                    // Calculate button position
+                    const buttonX = startX + (index * (buttonWidth + buttonSpacing));
+                    const buttonY = this.panelConfig.actions.y - 10;
+
+                    // Create button with minimal styling - no border, just subtle background
+                    const button = this.add.rectangle(
+                        buttonX,
+                        buttonY,
+                        buttonWidth,
+                        50,
+                        0x444444,
+                        0.5 // Semi-transparent
+                    );
+                    button.setInteractive();
+                    this.uiContainer.add(button);
+
+                    // Add text with improved styling
+                    const text = this.add.text(button.x, button.y, action, {
+                        fontSize: '20px',
+                        fontFamily: 'monospace',
+                        fill: '#fff',
+                        stroke: '#000',
+                        strokeThickness: 2
+                    }).setOrigin(0.5).setShadow(1, 1, '#000000', 2);
+                    this.uiContainer.add(text);
+
+                    // Add hover effect - more subtle
+                    button.on('pointerover', () => {
+                        button.fillColor = 0x666666;
+                        button.fillAlpha = 0.7;
+                        text.setScale(1.1);
+                        text.setShadow(2, 2, '#000000', 4, true, true); // Enhanced shadow on hover
+                    });
+
+                    button.on('pointerout', () => {
+                        button.fillColor = 0x444444;
+                        button.fillAlpha = 0.5;
+                        text.setScale(1);
+                        text.setShadow(1, 1, '#000000', 2); // Normal shadow
+                    });
+
+                    // Add click handler with visual feedback
+                    button.on('pointerdown', () => {
+                        // Visual feedback - glow effect
+                        button.fillColor = 0x888888;
+                        button.fillAlpha = 0.8;
+
+                        // Add a temporary glow effect
+                        const glow = this.add.rectangle(button.x, button.y, buttonWidth + 10, 60, 0xffffff, 0.3)
+                            .setDepth(button.depth - 1);
+                        this.uiContainer.add(glow);
+
+                        this.tweens.add({
+                            targets: [button, glow],
+                            scaleX: 0.95,
+                            scaleY: 0.95,
+                            duration: 100,
+                            yoyo: true,
+                            onComplete: () => {
+                                // Remove glow effect
+                                this.tweens.add({
+                                    targets: glow,
+                                    alpha: 0,
+                                    duration: 200,
+                                    onComplete: () => {
+                                        glow.destroy();
+                                    }
+                                });
+                                this.handleActionClick(action.toLowerCase());
+                            }
+                        });
+                    });
+
+                    // Store button reference
+                    this.actionButtons.push({ button, text });
+
+                    // Add action description below the button
+                    let description = '';
+                    switch(action.toLowerCase()) {
+                        case 'attack': description = 'Basic attack'; break;
+                        case 'defend': description = 'Increase defense'; break;
+                        case 'special': description = 'Strong attack (costs HP)'; break;
+                    }
+
+                    const descText = this.add.text(button.x, button.y + 35, description, {
+                        fontSize: '14px',
+                        fontFamily: 'monospace',
+                        fill: '#cccccc',
+                        stroke: '#000',
+                        strokeThickness: 1
+                    }).setOrigin(0.5);
+                    this.uiContainer.add(descText);
+
+                    // Store description reference
+                    if (!this.actionDescriptions) this.actionDescriptions = {};
+                    this.actionDescriptions[action.toLowerCase()] = descText;
+                });
+
+                // Initially hide the buttons
+                this.showActionButtons(false);
+            }
+
+            startPlayerTurn() {
+                this.isPlayerTurn = true;
+                this.battleText.setText("Your turn! Choose an action.");
+
+                // Show action buttons
+                this.showActionButtons(true);
+            }
+
+            startEnemyTurn() {
+                this.isPlayerTurn = false;
+                this.battleText.setText("Enemy's turn!");
+
+                // Hide action buttons
+                this.showActionButtons(false);
+
+                // Enemy AI - simple attack
+                this.time.delayedCall(1500, () => {
+                    this.enemyAttack();
+                });
+            }
+
+            showActionButtons(visible) {
+                this.actionButtons.forEach(({ button, text }) => {
+                    button.setVisible(visible);
+                    text.setVisible(visible);
+
+                    if (visible) {
+                        // Add a small animation when showing buttons
+                        button.setScale(0.8);
+                        text.setScale(0.8);
+                        this.tweens.add({
+                            targets: [button, text],
+                            scale: 1,
+                            duration: 200,
+                            ease: 'Back.Out'
+                        });
+                    }
+                });
+
+                // Show action descriptions when buttons are visible
+                if (this.actionDescriptions) {
+                    // Show/hide existing descriptions
+                    Object.values(this.actionDescriptions).forEach(text => {
+                        text.setVisible(visible);
+
+                        if (visible) {
+                            // Add a fade-in effect for descriptions
+                            text.setAlpha(0);
+                            this.tweens.add({
+                                targets: text,
+                                alpha: 1,
+                                duration: 300,
+                                delay: 100
+                            });
+                        }
+                    });
+                }
+
+                // No highlight for the action area - keep it completely invisible
+                // We'll use other visual cues instead of panel highlighting
+            }
+
+            handleActionClick(action) {
+                // Hide buttons after selection
+                this.showActionButtons(false);
+
+                // Execute the corresponding action
+                switch (action) {
+                    case 'attack':
+                        this.playerAttack();
+                        break;
+                    case 'defend':
+                        this.playerDefend();
+                        break;
+                    case 'special':
+                        this.playerSpecial();
+                        break;
+                }
+            }
+
+            playerAttack() {
+                // Calculate damage
+                const damage = gameData.playerAttack;
+
+                // Add to battle log
+                this.addToBattleLog('Player attacks!');
+
+                // Animation
+                this.tweens.add({
+                    targets: this.playerSprite,
+                    x: 400,
+                    duration: 200,
+                    yoyo: true,
+                    onComplete: () => {
+                        // Calculate if this is a killing blow
+                        const isKillingBlow = this.enemy.health <= damage;
+
+                        // Apply damage but don't go below 0
+                        this.enemy.health = Math.max(0, this.enemy.health - damage);
+
+                        // Update enemy health display
+                        const maxEnemyHealth = this.enemy.type === 'slime' ? 30 : 50;
+                        this.enemyHealthText.setText(`HP: ${this.enemy.health}/${maxEnemyHealth}`);
+
+                        // Update enemy health bar
+                        this.updateHealthBar(this.enemyHealthBar, this.enemy.health, this.enemyMaxHealth);
+
+                        if (isKillingBlow) {
+                            // Critical hit effect
+                            this.createCriticalHitEffect(this.enemySprite.x, this.enemySprite.y);
+
+                            // Stronger camera shake for critical hit
+                            this.cameras.main.shake(400, 0.03);
+
+                            // Create damage number that floats up - critical hit
+                            this.createDamageNumber(damage, this.enemySprite.x, this.enemySprite.y, '#ff0000', 32, true);
+
+                            // Add to battle log
+                            this.addToBattleLog(`Critical hit! ${damage} damage!`);
+
+                            // Enemy defeated
+                            this.time.delayedCall(1000, () => {
+                                this.enemyDefeated();
+                            });
+                        } else {
+                            // Regular hit effects
+                            // Flash enemy
+                            this.tweens.add({
+                                targets: this.enemySprite,
+                                alpha: 0.5,
+                                duration: 100,
+                                yoyo: true,
+                                repeat: 3
+                            });
+
+                            // Camera shake effect for damage
+                            this.cameras.main.shake(250, 0.01);
+
+                            // Create damage number that floats up
+                            this.createDamageNumber(damage, this.enemySprite.x, this.enemySprite.y, '#ff0000');
+
+                            // Add to battle log
+                            this.addToBattleLog(`You dealt ${damage} damage!`);
+
+                            // Start enemy turn after a delay
+                            this.time.delayedCall(1500, () => {
+                                this.startEnemyTurn();
+                            });
+                        }
+                    }
+                });
+            }
+
+            playerDefend() {
+                // Increase defense temporarily
+                const defenseBoost = 5;
+                gameData.playerDefense += defenseBoost;
+
+                // Add to battle log
+                this.addToBattleLog(`Defense increased by ${defenseBoost}!`);
+
+                // Update player stats display
+                this.playerStatsText.setText(`ATK: ${gameData.playerAttack}  DEF: ${gameData.playerDefense}`);
+
+                // Create a shield effect around the player
+                const shieldGraphics = this.make.graphics();
+                shieldGraphics.fillStyle(0x3498db, 0.5); // Blue, semi-transparent
+                shieldGraphics.fillCircle(0, 0, 50);
+                shieldGraphics.lineStyle(3, 0x3498db, 1);
+                shieldGraphics.strokeCircle(0, 0, 50);
+                shieldGraphics.generateTexture('shield-effect', 100, 100);
+
+                const shield = this.add.image(this.playerSprite.x, this.playerSprite.y, 'shield-effect');
+
+                // Show defense boost number
+                this.createDefenseNumber(defenseBoost, this.playerSprite.x, this.playerSprite.y - 30);
+
+                // Add a pulsing effect to the player panel to indicate defense boost
+                this.tweens.add({
+                    targets: this.playerStatsText,
+                    scale: 1.2,
+                    duration: 300,
+                    yoyo: true,
+                    repeat: 1
+                });
+
+                // Visual effect
+                this.tweens.add({
+                    targets: [this.playerSprite, shield],
+                    alpha: 0.7,
+                    duration: 200,
+                    yoyo: true,
+                    repeat: 2,
+                    onComplete: () => {
+                        // Fade out shield
+                        this.tweens.add({
+                            targets: shield,
+                            alpha: 0,
+                            scale: 1.5,
+                            duration: 500,
+                            onComplete: () => {
+                                shield.destroy();
+                            }
+                        });
+
+                        // Start enemy turn after a delay
+                        this.time.delayedCall(1500, () => {
+                            this.startEnemyTurn();
+                        });
+                    }
+                });
+            }
+
+            playerSpecial() {
+                // Special attack with higher damage but costs health
+                const damage = gameData.playerAttack * 1.5;
+                const healthCost = 10;
+
+                // Add to battle log
+                this.addToBattleLog('Player uses special attack!');
+
+                // Reduce player health but don't go below 1
+                gameData.playerHealth = Math.max(1, gameData.playerHealth - healthCost);
+
+                // Update player health display
+                this.playerHealthText.setText(`HP: ${gameData.playerHealth}/100`);
+
+                // Update player health bar
+                this.updateHealthBar(this.playerHealthBar, gameData.playerHealth, this.playerMaxHealth);
+
+                // Show health cost to player
+                this.createDamageNumber(healthCost, this.playerSprite.x, this.playerSprite.y, '#ff9900');
+
+                // Add a special attack effect
+                const specialGraphics = this.make.graphics();
+                specialGraphics.fillStyle(0xff5500, 0.7); // Orange, semi-transparent
+                specialGraphics.fillCircle(0, 0, 60);
+                specialGraphics.generateTexture('special-effect', 120, 120);
+
+                const specialEffect = this.add.image(this.playerSprite.x, this.playerSprite.y, 'special-effect');
+                specialEffect.setBlendMode(Phaser.BlendModes.ADD);
+
+                // Animation
+                this.tweens.add({
+                    targets: [this.playerSprite, specialEffect],
+                    scale: 2.5,
+                    duration: 200,
+                    yoyo: true,
+                    onComplete: () => {
+                        // Fade out special effect
+                        this.tweens.add({
+                            targets: specialEffect,
+                            alpha: 0,
+                            duration: 300,
+                            onComplete: () => {
+                                specialEffect.destroy();
+                            }
+                        });
+
+                        // Calculate if this is a killing blow
+                        const isKillingBlow = this.enemy.health <= damage;
+
+                        // Apply damage but don't go below 0
+                        this.enemy.health = Math.max(0, this.enemy.health - damage);
+
+                        // Update enemy health display
+                        const maxEnemyHealth = this.enemy.type === 'slime' ? 30 : 50;
+                        this.enemyHealthText.setText(`HP: ${this.enemy.health}/${maxEnemyHealth}`);
+
+                        // Update enemy health bar
+                        this.updateHealthBar(this.enemyHealthBar, this.enemy.health, this.enemyMaxHealth);
+
+                        if (isKillingBlow) {
+                            // Critical hit effect with special attack flair
+                            this.createCriticalHitEffect(this.enemySprite.x, this.enemySprite.y, true);
+
+                            // Extra strong camera shake for critical special attack
+                            this.cameras.main.shake(500, 0.04);
+
+                            // Create damage number that floats up - critical special attack
+                            this.createDamageNumber(damage, this.enemySprite.x, this.enemySprite.y, '#ff0000', 40, true);
+
+                            // Add to battle log
+                            this.addToBattleLog(`CRITICAL SPECIAL! ${damage} damage!`);
+
+                            // Enemy defeated with special fanfare
+                            this.time.delayedCall(1200, () => {
+                                this.enemyDefeated();
+                            });
+                        } else {
+                            // Regular special attack effects
+                            // Flash enemy
+                            this.tweens.add({
+                                targets: this.enemySprite,
+                                alpha: 0.3,
+                                scale: 1.5,
+                                duration: 150,
+                                yoyo: true,
+                                repeat: 2
+                            });
+
+                            // Camera shake effect - stronger for special attack
+                            this.cameras.main.shake(400, 0.02);
+
+                            // Create damage number that floats up - larger for special attack
+                            this.createDamageNumber(damage, this.enemySprite.x, this.enemySprite.y, '#ff0000', 32);
+
+                            // Add to battle log
+                            this.addToBattleLog(`Special attack! ${damage} damage dealt!`);
+
+                            // Start enemy turn after a delay
+                            this.time.delayedCall(1500, () => {
+                                this.startEnemyTurn();
+                            });
+                        }
+                    }
+                });
+            }
+
+            enemyAttack() {
+                // Calculate damage (reduced by player defense)
+                const baseDamage = this.enemy.attack;
+                const damage = Math.max(1, baseDamage - gameData.playerDefense);
+
+                // Add to battle log
+                const enemyName = this.enemy.type.charAt(0).toUpperCase() + this.enemy.type.slice(1);
+                this.addToBattleLog(`${enemyName} attacks!`);
+
+                // Animation
+                this.tweens.add({
+                    targets: this.enemySprite,
+                    x: 400,
+                    duration: 200,
+                    yoyo: true,
+                    onComplete: () => {
+                        // Calculate if this is a killing blow
+                        const isKillingBlow = gameData.playerHealth <= damage;
+
+                        // Apply damage but don't go below 0
+                        gameData.playerHealth = Math.max(0, gameData.playerHealth - damage);
+
+                        // Update player health display
+                        this.playerHealthText.setText(`HP: ${gameData.playerHealth}/100`);
+
+                        // Update player health bar
+                        this.updateHealthBar(this.playerHealthBar, gameData.playerHealth, this.playerMaxHealth);
+
+                        if (isKillingBlow) {
+                            // Critical hit effect
+                            this.createCriticalHitEffect(this.playerSprite.x, this.playerSprite.y);
+
+                            // Stronger camera shake for critical hit
+                            this.cameras.main.shake(400, 0.03);
+
+                            // Create damage number that floats up - critical hit
+                            this.createDamageNumber(damage, this.playerSprite.x, this.playerSprite.y, '#ff0000', 32, true);
+
+                            // Add to battle log
+                            this.addToBattleLog(`Critical hit! Enemy dealt ${damage} damage!`);
+
+                            // Player defeated
+                            this.time.delayedCall(1000, () => {
+                                this.playerDefeated();
+                            });
+                        } else {
+                            // Regular hit effects
+                            // Flash player
+                            this.tweens.add({
+                                targets: this.playerSprite,
+                                alpha: 0.5,
+                                duration: 100,
+                                yoyo: true,
+                                repeat: 3
+                            });
+
+                            // Camera shake effect for damage
+                            this.cameras.main.shake(300, 0.015);
+
+                            // Create damage number that floats up
+                            this.createDamageNumber(damage, this.playerSprite.x, this.playerSprite.y, '#ff0000');
+
+                            // Add to battle log
+                            this.addToBattleLog(`Enemy dealt ${damage} damage!`);
+
+                            // Update player stats display after defense reset
+                            gameData.playerDefense = 10;
+                            this.playerStatsText.setText(`ATK: ${gameData.playerAttack}  DEF: ${gameData.playerDefense}`);
+
+                            // Start player turn after a delay
+                            this.time.delayedCall(1500, () => {
+                                this.startPlayerTurn();
+                            });
+                        }
+                    }
+                });
+            }
+
+            enemyDefeated() {
+                // Add to battle log
+                const enemyName = this.enemy.type.charAt(0).toUpperCase() + this.enemy.type.slice(1);
+                this.addToBattleLog(`${enemyName} defeated!`);
+
+                // Create victory text
+                const victoryText = this.add.text(400, 300, 'VICTORY!', {
+                    fontSize: '48px',
+                    fontStyle: 'bold',
+                    fill: '#ffff00',
+                    stroke: '#000',
+                    strokeThickness: 6
+                }).setOrigin(0.5).setAlpha(0);
+
+                // Animate victory text
+                this.tweens.add({
+                    targets: victoryText,
+                    alpha: 1,
+                    scale: { from: 0.5, to: 1.2 },
+                    duration: 800,
+                    ease: 'Elastic.Out',
+                    onComplete: () => {
+                        // Fade out victory text
+                        this.tweens.add({
+                            targets: victoryText,
+                            alpha: 0,
+                            y: victoryText.y - 50,
+                            duration: 1000,
+                            delay: 1000,
+                            onComplete: () => {
+                                victoryText.destroy();
+                            }
+                        });
+                    }
+                });
+
+                // Update game data
+                gameData.score += 100;
+                gameData.enemiesDefeated++;
+
+                // Fade out enemy sprite
+                this.tweens.add({
+                    targets: this.enemySprite,
+                    alpha: 0,
+                    y: this.enemySprite.y - 50,
+                    duration: 1000,
+                    onComplete: () => {
+                        // End battle with victory
+                        this.endBattle('victory');
+                    }
+                });
+            }
+
+            playerDefeated() {
+                // Add to battle log
+                this.addToBattleLog('You were defeated!');
+
+                // Create defeat text
+                const defeatText = this.add.text(400, 300, 'DEFEAT', {
+                    fontSize: '48px',
+                    fontStyle: 'bold',
+                    fill: '#ff0000',
+                    stroke: '#000',
+                    strokeThickness: 6
+                }).setOrigin(0.5).setAlpha(0);
+
+                // Animate defeat text
+                this.tweens.add({
+                    targets: defeatText,
+                    alpha: 1,
+                    scale: { from: 0.5, to: 1.2 },
+                    duration: 800,
+                    ease: 'Elastic.Out',
+                    onComplete: () => {
+                        // Fade out defeat text
+                        this.tweens.add({
+                            targets: defeatText,
+                            alpha: 0,
+                            y: defeatText.y - 50,
+                            duration: 1000,
+                            delay: 1000,
+                            onComplete: () => {
+                                defeatText.destroy();
+                            }
+                        });
+                    }
+                });
+
+                // Fade out player sprite
+                this.tweens.add({
+                    targets: this.playerSprite,
+                    alpha: 0,
+                    y: this.playerSprite.y + 50,
+                    duration: 1000,
+                    onComplete: () => {
+                        // End battle with defeat
+                        this.endBattle('defeat');
+                    }
+                });
+            }
+
+            createDamageNumber(value, x, y, color = '#ff0000', fontSize = 24, isCritical = false) {
+                // Create a text object for the damage number
+                const text = isCritical ? `CRITICAL -${value}!` : `-${value}`;
+                const damageText = this.add.text(x, y, text, {
+                    fontSize: `${fontSize}px`,
+                    fontStyle: 'bold',
+                    fill: color,
+                    stroke: '#000',
+                    strokeThickness: 4
+                }).setOrigin(0.5);
+
+                if (isCritical) {
+                    // Make critical hits more dramatic
+                    damageText.setScale(0.5);
+
+                    // Animate the critical damage number with a bounce and scale effect
+                    this.tweens.add({
+                        targets: damageText,
+                        y: y - 80,
+                        scale: 1.2,
+                        alpha: { from: 1, to: 0 },
+                        duration: 1500,
+                        ease: 'Bounce.Out',
+                        onComplete: () => {
+                            damageText.destroy();
+                        }
+                    });
+                } else {
+                    // Regular damage number animation
+                    this.tweens.add({
+                        targets: damageText,
+                        y: y - 50,
+                        alpha: 0,
+                        duration: 1000,
+                        ease: 'Power1',
+                        onComplete: () => {
+                            damageText.destroy();
+                        }
+                    });
+                }
+            }
+
+            createDefenseNumber(value, x, y) {
+                // Create a text object for the defense boost number
+                const defenseText = this.add.text(x, y, `+${value} DEF`, {
+                    fontSize: '20px',
+                    fontStyle: 'bold',
+                    fill: '#3498db', // Blue color
+                    stroke: '#000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                // Animate the defense number floating up and fading out
+                this.tweens.add({
+                    targets: defenseText,
+                    y: y - 40,
+                    alpha: 0,
+                    scale: 1.2,
+                    duration: 1200,
+                    ease: 'Power1',
+                    onComplete: () => {
+                        defenseText.destroy();
+                    }
+                });
+            }
+
+            createCriticalHitEffect(x, y, isSpecial = false) {
+                // Create a flash effect
+                const flash = this.add.rectangle(x, y, 800, 600, 0xffffff);
+                flash.setAlpha(0);
+                flash.setDepth(100);
+
+                // Flash the screen
+                this.tweens.add({
+                    targets: flash,
+                    alpha: 0.8,
+                    duration: 100,
+                    yoyo: true,
+                    repeat: isSpecial ? 2 : 1,
+                    onComplete: () => {
+                        flash.destroy();
+                    }
+                });
+
+                // Create an explosion effect
+                const explosionSize = isSpecial ? 150 : 100;
+                const explosionGraphics = this.make.graphics();
+                explosionGraphics.fillStyle(isSpecial ? 0xff5500 : 0xff0000, 1);
+                explosionGraphics.fillCircle(0, 0, explosionSize);
+                explosionGraphics.generateTexture('explosion-effect', explosionSize * 2, explosionSize * 2);
+
+                const explosion = this.add.image(x, y, 'explosion-effect');
+                explosion.setAlpha(0.8);
+                explosion.setScale(0.1);
+
+                // Animate the explosion
+                this.tweens.add({
+                    targets: explosion,
+                    scale: 1,
+                    alpha: 0,
+                    duration: 500,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        explosion.destroy();
+                    }
+                });
+
+                // Add "CRITICAL" text
+                const criticalText = this.add.text(x, y, isSpecial ? "CRITICAL SPECIAL!" : "CRITICAL HIT!", {
+                    fontSize: isSpecial ? '36px' : '28px',
+                    fontStyle: 'bold',
+                    fill: isSpecial ? '#ff5500' : '#ff0000',
+                    stroke: '#000',
+                    strokeThickness: 5
+                }).setOrigin(0.5);
+
+                // Animate the critical text
+                this.tweens.add({
+                    targets: criticalText,
+                    scale: { from: 0.5, to: 1.5 },
+                    alpha: { from: 1, to: 0 },
+                    duration: 1000,
+                    ease: 'Elastic.Out',
+                    onComplete: () => {
+                        criticalText.destroy();
+                    }
+                });
+            }
+
+            endBattle(result) {
+                // Resume game scene
+                const gameScene = this.scene.get('GameScene');
+                gameScene.enemyEncountered = false;
+
+                if (result === 'victory') {
+                    // Remove defeated enemy
+                    this.enemy.destroy();
+                }
+
+                // Close battle scene
+                this.scene.resume('GameScene');
+                this.scene.stop();
+            }
+        }
+
+        // Game configuration
+        const config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 600,
+            parent: 'game-container',
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 300 },
+                    debug: false
+                }
+            },
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH,
+                width: 800,
+                height: 600
+            },
+            scene: [GameScene, BattleScene]
+        };
+
+        // Create the game
+        const game = new Phaser.Game(config);
+    </script>
+</body>
+</html>
