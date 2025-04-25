@@ -1,10 +1,10 @@
-# SwapNSlash - Turn-Based Side-Scroller
+# JungleRush - Turn-Based Side-Scroller
 
 A turn-based strategy game with side-scrolling elements, similar to Mario's stage design but with turn-based combat.
 
 ## Game Concept
 
-In SwapNSlash, you control a character that can move side-to-side in a platformer world, similar to Mario. However, when you encounter enemies, the game switches to a turn-based battle system where you and the enemies take turns attacking each other.
+In JungleRush, you control a character that can move side-to-side in a platformer world, similar to Mario. However, when you encounter enemies, the game switches to a turn-based battle system where you and the enemies take turns attacking each other.
 
 ### Key Features
 

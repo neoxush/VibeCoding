@@ -1,10 +1,10 @@
-# SwapNSlash Game Art Style Guide
+# JungleRush Game Art Style Guide
 
-This document outlines the visual style, color palette, and design principles for the SwapNSlash game to ensure consistency across all game assets.
+This document outlines the visual style, color palette, and design principles for the JungleRush game to ensure consistency across all game assets.
 
 ## Overall Style
 
-SwapNSlash uses a pixel art style with the following characteristics:
+JungleRush uses a pixel art style with the following characteristics:
 
 - **Pixel Resolution**: Simple, blocky pixel art with minimal anti-aliasing
 - **Proportions**: Characters are approximately 32x48 pixels, with a slightly "chibi" proportion (2-3 heads tall)
