@@ -2,11 +2,8 @@
   "name": "junglerush",
   "version": "1.0.0",
   "description": "A turn-based strategy game with side-scrolling elements",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "main": "index.html",
+  "scripts": {},
   "keywords": [
     "game",
     "turn-based",

@@ -34,7 +34,10 @@ This game is built using:
 
 1. Clone this repository
 2. Add the required asset files to the assets folder (see README files in the assets subfolders)
-3. Open index.html in a web browser or use a local server
+3. Open `game.html` directly in a web browser
+   - You can also use the included `play-game.bat` file to launch the game in Chrome
+
+Note: This game is designed to run completely offline without any server requirements.
 
 ## Asset Credits
 
