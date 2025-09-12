@@ -1,0 +1,364 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a1a;
+    color: #ffffff;
+    overflow: hidden;
+}
+
+/* App Container */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Header */
+.header {
+    background: #2d2d2d;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #404040;
+    z-index: 1000;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo i {
+    font-size: 24px;
+    color: #4CAF50;
+}
+
+.logo h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Buttons */
+.btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #404040;
+    color: #ffffff;
+}
+
+.btn:hover {
+    background: #4a4a4a;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: #4CAF50;
+    color: #ffffff;
+}
+
+.btn-secondary:hover {
+    background: #45a049;
+}
+
+.btn-danger {
+    background: #f44336;
+    color: #ffffff;
+}
+
+.btn-danger:hover {
+    background: #da190b;
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Toolbar */
+.toolbar {
+    width: 200px;
+    background: #262626;
+    padding: 20px;
+    overflow-y: auto;
+    border-right: 1px solid #404040;
+}
+
+.tool-section {
+    margin-bottom: 24px;
+}
+
+.tool-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #cccccc;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tool-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tool-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: #333333;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.tool-btn:hover {
+    background: #3a3a3a;
+    border-color: #4CAF50;
+    transform: translateY(-1px);
+}
+
+.tool-btn.active {
+    background: #4CAF50;
+    border-color: #4CAF50;
+    color: #ffffff;
+}
+
+.tool-btn i {
+    width: 16px;
+    text-align: center;
+}
+
+/* Viewport Container */
+.viewport-container {
+    flex: 1;
+    position: relative;
+    background: #1a1a1a;
+}
+
+#viewport3d {
+    width: 100%;
+    height: 100%;
+    display: block;
+    outline: none;
+}
+
+.viewport-info {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #cccccc;
+    backdrop-filter: blur(4px);
+}
+
+.info-item {
+    margin-bottom: 4px;
+}
+
+.info-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Properties Panel */
+.properties-panel {
+    width: 280px;
+    background: #262626;
+    border-left: 1px solid #404040;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid #404040;
+}
+
+.panel-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.panel-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.no-selection {
+    text-align: center;
+    color: #888888;
+    padding: 40px 20px;
+}
+
+.no-selection i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.no-selection p {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* Property Controls */
+.property-group {
+    margin-bottom: 20px;
+}
+
+.property-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #cccccc;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.property-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.property-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: #333333;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    color: #ffffff;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+}
+
+.property-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+    background: #3a3a3a;
+}
+
+.color-input {
+    width: 40px;
+    height: 36px;
+    padding: 4px;
+    background: #333333;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+}
+
+.delete-btn {
+    width: 100%;
+    padding: 12px;
+    background: #f44336;
+    border: none;
+    border-radius: 6px;
+    color: #ffffff;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 20px;
+}
+
+.delete-btn:hover {
+    background: #da190b;
+    transform: translateY(-1px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .toolbar {
+        width: 160px;
+    }
+    
+    .properties-panel {
+        width: 240px;
+    }
+    
+    .tool-btn span {
+        display: none;
+    }
+    
+    .tool-btn {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .toolbar {
+        width: 100%;
+        height: auto;
+        padding: 12px;
+        order: 2;
+    }
+    
+    .tool-grid {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .tool-btn {
+        flex: 1;
+        min-width: 60px;
+    }
+    
+    .properties-panel {
+        width: 100%;
+        height: 200px;
+        order: 3;
+    }
+    
+    .viewport-container {
+        order: 1;
+        height: 400px;
+    }
+}
