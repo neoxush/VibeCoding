@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordle 7 - Candy Crush Style</title>
+    <style>
+        body {
+            font-family: 'Comic Sans MS', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(to bottom, #ffccff, #99ccff);
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #ff3366;
+            text-shadow: 2px 2px 4px #fff;
+            font-size: 48px;
+        }
+        .game-board {
+            display: grid;
+            grid-template-rows: repeat(7, 1fr);
+            gap: 8px;
+            margin: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .row {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+        .tile {
+            width: 55px;
+            height: 55px;
+            background: linear-gradient(135deg, #ffffff, #ffe6f0);
+            border: 3px solid #ff99cc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #ff3366;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+            transition: transform 0.2s, background 0.3s;
+        }
+        .tile:hover {
+            transform: scale(1.05);
+        }
+        .correct {
+            background: linear-gradient(135deg, #6aaa64, #4d8c3f);
+            border-color: #3d6e2d;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+        }
+        .present {
+            background: linear-gradient(135deg, #c9b458, #a68e3b);
+            border-color: #8c742e;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+        }
+        .absent {
+            background: linear-gradient(135deg, #787c7e, #5a5e60);
+            border-color: #4a4e50;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+        }
+        .keyboard {
+            margin: 20px;
+        }
+        .keyboard-row {
+            display: flex;
+            gap: 6px;
+            margin: 6px;
+        }
+        .key {
+            padding: 12px 18px;
+            background: linear-gradient(135deg, #ffccff, #ff99cc);
+            border: 2px solid #ff6699;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #ff3366;
+            box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2);
+            transition: transform 0.1s;
+        }
+        .key:hover {
+            transform: scale(1.1);
+        }
+        .key:active {
+            transform: scale(0.95);
+        }
+        .message {
+            font-size: 20px;
+            margin: 15px;
+            color: #ff3366;
+            text-shadow: 1px 1px 2px #fff;
+        }
+        .hint {
+            font-size: 18px;
+            margin: 15px;
+            color: #ff6699;
+            font-style: italic;
+            text-shadow: 1px 1px 2px #fff;
+            background: rgba(255, 255, 255, 0.3);
+            padding: 8px 15px;
+            border-radius: 10px;
+        }
+        .correct-letters {
+            margin: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .correct-letter {
+            width: 45px;
+            height: 45px;
+            background: linear-gradient(135deg, #6aaa64, #4d8c3f);
+            border: 3px solid #3d6e2d;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <h1>Wordle 7</h1>
+    <div class="hint" id="hint"></div>
+    <div class="game-board" id="board"></div>
+    <div class="correct-letters" id="correctLetters"></div>
+    <div class="message" id="message"></div>
+    <div class="keyboard" id="keyboard"></div>
+
+    <script>
+        const wordBank = [
+            { word: "freedom", hint: "This word relates to liberty and independence" },
+            { word: "journey", hint: "This word describes travel or adventure" },
+            { word: "complex", hint: "This word involves intricacy or complication" },
+            { word: "vibrant", hint: "This word suggests energy and vividness" },
+            { word: "mystery", hint: "This word pertains to the unknown or puzzling" },
+            { word: "achieve", hint: "This word is about success and accomplishment" },
+            { word: "balance", hint: "This word relates to stability or equilibrium" },
+            { word: "curious", hint: "This word describes inquisitiveness" },
+            { word: "delight", hint: "This word expresses joy or pleasure" },
+            { word: "explore", hint: "This word involves discovery and investigation" }
+        ];
+
+        const selectedWord = wordBank[Math.floor(Math.random() * wordBank.length)];
+        const targetWord = selectedWord.word;
+        const wordHint = selectedWord.hint;
+        let currentRow = 0;
+        let currentTile = 0;
+        let gameOver = false;
+        let correctLettersShown = false; // Flag to ensure it only triggers once
+        let correctLetters = new Set(); // Store unique correct letters
+
+        // Display hint
+        document.getElementById('hint').textContent = wordHint;
+
+        // Create game board
+        const board = document.getElementById('board');
+        for (let i = 0; i < 7; i++) {
+            const row = document.createElement('div');
+            row.className = 'row';
+            for (let j = 0; j < 7; j++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                row.appendChild(tile);
+            }
+            board.appendChild(row);
+        }
+
+        // Create keyboard
+        const keyboardLayout = [
+            'qwertyuiop',
+            'asdfghjkl',
+            'zxcvbnm'
+        ];
+        const keyboard = document.getElementById('keyboard');
+        keyboardLayout.forEach(row => {
+            const kbRow = document.createElement('div');
+            kbRow.className = 'keyboard-row';
+            row.split('').forEach(letter => {
+                const key = document.createElement('button');
+                key.className = 'key';
+                key.textContent = letter;
+                key.addEventListener('click', () => handleKey(letter));
+                kbRow.appendChild(key);
+            });
+            if (row === 'zxcvbnm') {
+                const enter = document.createElement('button');
+                enter.className = 'key';
+                enter.textContent = 'Enter';
+                enter.addEventListener('click', checkWord);
+                kbRow.appendChild(enter);
+
+                const backspace = document.createElement('button');
+                backspace.className = 'key';
+                backspace.textContent = '⌫';
+                backspace.addEventListener('click', deleteLetter);
+                kbRow.appendChild(backspace);
+            }
+            keyboard.appendChild(kbRow);
+        });
+
+        // Handle keyboard input
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+            if (e.key.match(/^[a-zA-Z]$/)) {
+                handleKey(e.key);
+            } else if (e.key === 'Enter') {
+                checkWord();
+            } else if (e.key === 'Backspace') {
+                deleteLetter();
+            }
+        });
+
+        function handleKey(letter) {
+            if (currentTile < 7 && currentRow < 7 && !gameOver) {
+                const tile = board.children[currentRow].children[currentTile];
+                tile.textContent = letter.toUpperCase();
+                currentTile++;
+            }
+        }
+
+        function deleteLetter() {
+            if (currentTile > 0 && !gameOver) {
+                currentTile--;
+                const tile = board.children[currentRow].children[currentTile];
+                tile.textContent = '';
+            }
+        }
+
+        function showCorrectLetters() {
+            const correctLettersDiv = document.getElementById('correctLetters');
+            correctLettersDiv.innerHTML = ''; // Clear previous content
+            correctLetters.forEach(letter => {
+                const letterDiv = document.createElement('div');
+                letterDiv.className = 'correct-letter';
+                letterDiv.textContent = letter.toUpperCase();
+                correctLettersDiv.appendChild(letterDiv);
+            });
+        }
+
+        function checkWord() {
+            if (currentTile !== 7 || gameOver) return;
+
+            const guess = Array.from(board.children[currentRow].children)
+                .map(tile => tile.textContent)
+                .join('')
+                .toLowerCase();
+
+            if (guess.length === 7) {
+                const targetArray = targetWord.split('');
+                const guessArray = guess.split('');
+                let hasCorrect = false;
+
+                // First pass: mark correct letters and collect them
+                for (let i = 0; i < 7; i++) {
+                    const tile = board.children[currentRow].children[i];
+                    if (guessArray[i] === targetArray[i]) {
+                        tile.classList.add('correct');
+                        correctLetters.add(guessArray[i]);
+                        targetArray[i] = null;
+                        hasCorrect = true;
+                    }
+                }
+
+                // Second pass: mark present and absent letters, collect present ones
+                for (let i = 0; i < 7; i++) {
+                    const tile = board.children[currentRow].children[i];
+                    if (!tile.classList.contains('correct')) {
+                        if (targetArray.includes(guessArray[i])) {
+                            tile.classList.add('present');
+                            correctLetters.add(guessArray[i]);
+                            targetArray[targetArray.indexOf(guessArray[i])] = null;
+                            hasCorrect = true;
+                        } else {
+                            tile.classList.add('absent');
+                        }
+                    }
+                }
+
+                // Show correct letters once after first successful guess
+                if (hasCorrect && !correctLettersShown) {
+                    showCorrectLetters();
+                    correctLettersShown = true;
+                }
+
+                if (guess === targetWord) {
+                    document.getElementById('message').textContent = 'Sweet Victory! You won!';
+                    gameOver = true;
+                } else if (currentRow === 6) {
+                    document.getElementById('message').textContent = `Game Over! The word was ${targetWord}`;
+                    gameOver = true;
+                } else {
+                    currentRow++;
+                    currentTile = 0;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
