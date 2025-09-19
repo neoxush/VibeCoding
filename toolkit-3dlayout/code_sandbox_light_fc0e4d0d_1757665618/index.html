@@ -8,9 +8,49 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Server Requirement Check -->
+    <script>
+        // Check if running from file:// protocol and show warning
+        if (window.location.protocol === 'file:') {
+            document.addEventListener('DOMContentLoaded', function() {
+                const warningDiv = document.createElement('div');
+                warningDiv.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    background: #f44336;
+                    color: white;
+                    padding: 15px;
+                    text-align: center;
+                    z-index: 10001;
+                    font-family: Arial, sans-serif;
+                    font-size: 14px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                `;
+                warningDiv.innerHTML = `
+                    <strong>⚠️ SERVER REQUIRED</strong> - This application requires a web server to run properly.<br>
+                    <strong>Quick Fix:</strong> Run <code>python -m http.server 8000</code> in this folder, then open <code>http://localhost:8000</code><br>
+                    <button onclick="this.parentElement.remove()" style="background: white; color: #f44336; border: none; padding: 5px 10px; border-radius: 3px; margin-left: 10px; cursor: pointer;">Dismiss</button>
+                `;
+                document.body.insertBefore(warningDiv, document.body.firstChild);
+            });
+        }
+    </script>
 </head>
 
 <body>
+    <!-- Server Requirement Notice (only shows if opened directly) -->
+    <noscript>
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f44336; color: white; display: flex; align-items: center; justify-content: center; z-index: 10002; font-family: Arial, sans-serif;">
+            <div style="text-align: center; padding: 20px;">
+                <h2>⚠️ JavaScript Required</h2>
+                <p>This application requires JavaScript to be enabled.</p>
+            </div>
+        </div>
+    </noscript>
+
     <div class="app-container">
         <!-- Header -->
         <header class="header">
@@ -19,12 +59,42 @@
                 <h1>3D Blockout Toolkit</h1>
             </div>
             <div class="header-actions">
-                <div class="mode-toggle">
+                <div class="view-controls">
+                    <button id="viewPerspective" class="btn view-btn active" title="Perspective View">
+                        <i class="fas fa-cube"></i> 3D
+                    </button>
+                    <button id="viewTop" class="btn view-btn" title="Top View">
+                        <i class="fas fa-arrow-down"></i> Top
+                    </button>
+                    <button id="viewFront" class="btn view-btn" title="Front View">
+                        <i class="fas fa-arrow-right"></i> Front
+                    </button>
+                    <button id="viewLeft" class="btn view-btn" title="Left View">
+                        <i class="fas fa-arrow-left"></i> Left
+                    </button>
+                    <button id="viewRight" class="btn view-btn" title="Right View">
+                        <i class="fas fa-arrow-right"></i> Right
+                    </button>
+                </div>
+                <div class="drawing-controls">
+                    <button id="toggleDrawing" class="btn btn-secondary" title="Toggle Drawing Toolkit">
+                        <i class="fas fa-pen"></i> Draw
+                    </button>
+                </div>
+                <div class="mode-toggle" style="display: none;">
                     <button id="mode3D" class="btn mode-btn active">
                         <i class="fas fa-cube"></i> 3D Mode
                     </button>
                     <button id="mode2D" class="btn mode-btn">
                         <i class="fas fa-pencil-alt"></i> 2D Sketch
+                    </button>
+                </div>
+                <div class="undo-redo-controls">
+                    <button id="undoBtn" class="btn btn-secondary" title="Undo (Ctrl+Z)" disabled>
+                        <i class="fas fa-undo"></i> Undo
+                    </button>
+                    <button id="redoBtn" class="btn btn-secondary" title="Redo (Ctrl+Y)" disabled>
+                        <i class="fas fa-redo"></i> Redo
                     </button>
                 </div>
                 <button id="helpBtn" class="btn">
@@ -53,27 +123,27 @@
                         <div class="tool-grid">
                             <button id="addCube" class="tool-btn" title="Add Cube (1)">
                                 <i class="fas fa-cube"></i>
-                                <span>Cube</span>
+                                <span>Cube (1)</span>
                             </button>
                             <button id="addSphere" class="tool-btn" title="Add Sphere (2)">
                                 <i class="fas fa-circle"></i>
-                                <span>Sphere</span>
+                                <span>Sphere (2)</span>
                             </button>
                             <button id="addCylinder" class="tool-btn" title="Add Cylinder (3)">
                                 <i class="fas fa-database"></i>
-                                <span>Cylinder</span>
+                                <span>Cylinder (3)</span>
                             </button>
                             <button id="addPlane" class="tool-btn" title="Add Plane (4)">
                                 <i class="fas fa-square"></i>
-                                <span>Plane</span>
+                                <span>Plane (4)</span>
                             </button>
                             <button id="addCone" class="tool-btn" title="Add Cone (5)">
                                 <i class="fas fa-play"></i>
-                                <span>Cone</span>
+                                <span>Cone (5)</span>
                             </button>
                             <button id="addTorus" class="tool-btn" title="Add Torus (6)">
                                 <i class="fas fa-circle-notch"></i>
-                                <span>Torus</span>
+                                <span>Torus (6)</span>
                             </button>
                         </div>
                     </div>
@@ -83,15 +153,15 @@
                         <div class="tool-grid">
                             <button id="moveMode" class="tool-btn active" title="Move Tool (G)">
                                 <i class="fas fa-arrows-alt"></i>
-                                <span>Move</span>
+                                <span>Move (G)</span>
                             </button>
                             <button id="rotateMode" class="tool-btn" title="Rotate Tool (R)">
                                 <i class="fas fa-sync-alt"></i>
-                                <span>Rotate</span>
+                                <span>Rotate (R)</span>
                             </button>
                             <button id="scaleMode" class="tool-btn" title="Scale Tool (S)">
                                 <i class="fas fa-expand-arrows-alt"></i>
-                                <span>Scale</span>
+                                <span>Scale (S)</span>
                             </button>
                         </div>
                     </div>
@@ -183,6 +253,80 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Integrated Drawing Toolkit -->
+                <div id="drawingToolkit" style="display: none;">
+                    <div class="tool-section">
+                        <h3>Drawing Mode</h3>
+                        <div class="tool-grid">
+                            <button id="freehandMode" class="tool-btn drawing-mode-btn active" title="Freehand Drawing">
+                                <i class="fas fa-pencil-alt"></i>
+                                <span>Freehand</span>
+                            </button>
+                            <button id="lineMode" class="tool-btn drawing-mode-btn" title="Line Drawing">
+                                <i class="fas fa-minus"></i>
+                                <span>Line Mode</span>
+                            </button>
+                        </div>
+                        <div class="drawing-info">
+                            <p id="drawingModeInfo">Draw freely by clicking and dragging in the viewport.</p>
+                        </div>
+                    </div>
+
+                    <div class="tool-section">
+                        <h3>Blockout Types</h3>
+                        <div class="tool-grid">
+                            <button id="blockout-cube" class="tool-btn blockout-type-btn active" title="Draw Cubes (1)">
+                                <i class="fas fa-cube"></i>
+                                <span>Cube</span>
+                            </button>
+                            <button id="blockout-sphere" class="tool-btn blockout-type-btn" title="Draw Spheres (2)">
+                                <i class="fas fa-circle"></i>
+                                <span>Sphere</span>
+                            </button>
+                            <button id="blockout-cylinder" class="tool-btn blockout-type-btn"
+                                title="Draw Cylinders (3)">
+                                <i class="fas fa-database"></i>
+                                <span>Cylinder</span>
+                            </button>
+                            <button id="blockout-plane" class="tool-btn blockout-type-btn" title="Draw Planes (4)">
+                                <i class="fas fa-square"></i>
+                                <span>Plane</span>
+                            </button>
+                            <button id="blockout-cone" class="tool-btn blockout-type-btn" title="Draw Cones (5)">
+                                <i class="fas fa-play"></i>
+                                <span>Cone</span>
+                            </button>
+                            <button id="blockout-torus" class="tool-btn blockout-type-btn" title="Draw Torus (6)">
+                                <i class="fas fa-circle-notch"></i>
+                                <span>Torus</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="tool-section">
+                        <h3>Instructions</h3>
+                        <div class="usage-instructions">
+                            <p><strong>🎯 Visual Drawing Mode Active</strong></p>
+                            <div id="freehandInstructions">
+                                <p><strong>Freehand Mode:</strong></p>
+                                <p>• Select blockout type above</p>
+                                <p>• Click and drag to draw smooth paths</p>
+                                <p>• See live path preview as you draw</p>
+                                <p>• Objects created along your path</p>
+                            </div>
+                            <div id="lineInstructions" style="display: none;">
+                                <p><strong>Line Mode:</strong></p>
+                                <p>• Select blockout type above</p>
+                                <p>• Click to set start point</p>
+                                <p>• Move mouse to preview line</p>
+                                <p>• Click again to create line segment</p>
+                                <p>• Continue clicking to chain lines</p>
+                            </div>
+                            <p><strong>Tip:</strong> Use number keys 1-6 to switch types</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 3D Viewport -->
@@ -194,6 +338,60 @@
                     </div>
                     <div class="info-item">
                         <span>Selected: <span id="selectedObject">None</span></span>
+                    </div>
+                </div>
+
+                <!-- Diagnostic Console -->
+                <div id="diagnosticConsole" class="diagnostic-console">
+                    <div class="diagnostic-header">
+                        <h4>🔍 Initialization Status</h4>
+                        <button id="toggleDiagnostic" class="diagnostic-toggle">Hide</button>
+                    </div>
+                    <div class="diagnostic-content">
+                        <div class="diagnostic-step" id="step-dom">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">DOM Loading...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-canvas">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Canvas Element...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-scene">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">3D Scene...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-renderer">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">WebGL Renderer...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-camera">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Camera System...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-controls">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Controls...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-lighting">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Lighting...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-grid">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Grid...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-events">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Event Listeners...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-render">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Render Loop...</span>
+                        </div>
+                        <div class="diagnostic-step" id="step-complete">
+                            <span class="step-icon">⏳</span>
+                            <span class="step-text">Initialization Complete...</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -245,7 +443,7 @@
                 <div class="panel-header">
                     <h3 id="panelTitle">Properties</h3>
                 </div>
-                
+
                 <!-- 3D Properties -->
                 <div class="panel-content" id="propertiesContent">
                     <div class="no-selection">
@@ -254,34 +452,71 @@
                     </div>
                 </div>
 
-                <!-- 2D Sketch Properties -->
+                <!-- 2D Professional Drawing Properties -->
                 <div class="panel-content" id="sketchPropertiesContent" style="display: none;">
                     <div class="property-group">
-                        <label class="property-label">Brush Settings</label>
+                        <label class="property-label">Cursor Position</label>
                         <div class="property-row">
-                            <label>Size:</label>
-                            <input type="range" id="brushSizeSlider" min="1" max="20" value="3" class="property-slider">
-                            <span id="brushSizeValue">3px</span>
-                        </div>
-                        <div class="property-row">
-                            <label>Color:</label>
-                            <input type="color" id="brushColorPicker" value="#4CAF50" class="color-input">
+                            <span id="cursorCoordinates">X: 0, Y: 0</span>
                         </div>
                     </div>
 
                     <div class="property-group">
-                        <label class="property-label">Grid & Guides</label>
+                        <label class="property-label">Drawing Settings</label>
                         <div class="property-row">
-                            <button id="toggleSketchGrid" class="tool-btn">
+                            <label>Line Width:</label>
+                            <input type="range" id="brushSizeSlider" min="1" max="10" value="2" class="property-slider">
+                            <span id="brushSizeValue">2px</span>
+                        </div>
+                        <div class="property-row">
+                            <label>Color:</label>
+                            <input type="color" id="brushColorPicker" value="#2196F3" class="color-input">
+                        </div>
+                    </div>
+
+                    <div class="property-group">
+                        <label class="property-label">Precision Controls</label>
+                        <div class="property-row">
+                            <button id="toggleSketchGrid" class="tool-btn active">
                                 <i class="fas fa-th"></i>
-                                <span>Toggle Grid</span>
+                                <span>Professional Grid</span>
                             </button>
                         </div>
                         <div class="property-row">
-                            <button id="toggleSnapToGrid" class="tool-btn">
+                            <button id="toggleSnapToGrid" class="tool-btn active">
                                 <i class="fas fa-magnet"></i>
-                                <span>Snap to Grid</span>
+                                <span>Smart Snapping</span>
                             </button>
+                        </div>
+                        <div class="property-row">
+                            <button id="toggleDimensions" class="tool-btn active">
+                                <i class="fas fa-ruler"></i>
+                                <span>Show Dimensions</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="property-group">
+                        <label class="property-label">Professional Features</label>
+                        <div class="usage-instructions">
+                            <p><strong>Precision Line:</strong> Click start, click end. Hold Shift for horizontal, Ctrl
+                                for vertical.</p>
+                            <p><strong>Smart Rectangle:</strong> Drag to create. Hold Shift for square.</p>
+                            <p><strong>Intelligent Circle:</strong> Click center, drag radius.</p>
+                            <p><strong>Dimensions:</strong> Click two points to measure distance.</p>
+                            <p><strong>Snapping:</strong> Automatic snap to grid, endpoints, midpoints, centers.</p>
+                        </div>
+                    </div>
+
+                    <div class="property-group">
+                        <label class="property-label">Keyboard Shortcuts</label>
+                        <div class="usage-instructions">
+                            <p><strong>L:</strong> Precision Line Tool</p>
+                            <p><strong>R:</strong> Smart Rectangle Tool</p>
+                            <p><strong>C:</strong> Intelligent Circle Tool</p>
+                            <p><strong>D:</strong> Dimension Tool</p>
+                            <p><strong>E:</strong> Eraser Tool</p>
+                            <p><strong>G:</strong> Toggle Grid</p>
                         </div>
                     </div>
 
