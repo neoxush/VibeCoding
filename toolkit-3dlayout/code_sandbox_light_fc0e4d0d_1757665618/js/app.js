@@ -605,8 +605,12 @@ class IntegratedDrawingToolkit {
     updateTempLine(currentPosition) {
         if (!this.tempLine || !this.lineStartPoint) return;
         
-        const startWorld = this.screenToWorld(this.lineStartPoint.x, this.lineStartPoint.y);
-        const endWorld = this.screenToWorld(currentPosition.x, currentPosition.y);
+        // Convert canvas coordinates to screen coordinates
+        const startScreen = this.canvasToScreen(this.lineStartPoint.x, this.lineStartPoint.y);
+        const endScreen = this.canvasToScreen(currentPosition.x, currentPosition.y);
+        
+        const startWorld = this.screenToWorld(startScreen.x, startScreen.y);
+        const endWorld = this.screenToWorld(endScreen.x, endScreen.y);
         
         const points = [
             new THREE.Vector3(startWorld.x, startWorld.y + 0.15, startWorld.z),
