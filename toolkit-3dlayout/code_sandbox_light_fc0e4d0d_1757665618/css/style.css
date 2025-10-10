@@ -632,6 +632,60 @@ body {
 /* Drawing Controls */
 .drawing-controls {
     margin-right: 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn-drawing {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+    transition: all 0.3s ease;
+}
+
+.btn-drawing:hover {
+    background: linear-gradient(135deg, #45a049, #4CAF50);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn-drawing.active {
+    background: linear-gradient(135deg, #FF9800, #F57C00);
+    animation: pulse-glow 2s infinite;
+}
+
+.btn-exit-drawing {
+    background: #f44336;
+    color: white;
+    font-weight: 600;
+    animation: slideIn 0.3s ease;
+}
+
+.btn-exit-drawing:hover {
+    background: #da190b;
+    transform: translateY(-1px);
+}
+
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 16px rgba(255, 152, 0, 0.6);
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 /* Mode Toggle (Legacy - Hidden by default) */
@@ -983,6 +1037,79 @@ body {
     cursor: crosshair;
 }
 
+/* Mode Indicator */
+.mode-indicator {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid #4CAF50;
+    border-radius: 8px;
+    padding: 12px 16px;
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 280px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.mode-indicator.drawing-mode {
+    border-color: #FF9800;
+    background: rgba(255, 152, 0, 0.15);
+    animation: mode-pulse 2s infinite;
+}
+
+.mode-icon {
+    width: 40px;
+    height: 40px;
+    background: #4CAF50;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: white;
+    transition: all 0.3s ease;
+}
+
+.mode-indicator.drawing-mode .mode-icon {
+    background: #FF9800;
+}
+
+.mode-info {
+    flex: 1;
+}
+
+.mode-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #4CAF50;
+    margin-bottom: 4px;
+    transition: all 0.3s ease;
+}
+
+.mode-indicator.drawing-mode .mode-name {
+    color: #FF9800;
+}
+
+.mode-hint {
+    font-size: 11px;
+    color: #cccccc;
+    line-height: 1.3;
+}
+
+@keyframes mode-pulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(255, 152, 0, 0.6);
+    }
+}
+
 /* View Mode Indicators */
 .view-mode-indicator {
     position: absolute;
@@ -1193,6 +1320,35 @@ body {
     opacity: 0.7;
 }
 
+@media (max-width: 1024px) {
+    .mode-indicator {
+        min-width: 240px;
+        padding: 10px 12px;
+    }
+    
+    .mode-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+    }
+    
+    .mode-name {
+        font-size: 13px;
+    }
+    
+    .mode-hint {
+        font-size: 10px;
+    }
+    
+    .btn-text {
+        display: none;
+    }
+    
+    .btn-drawing, .btn-exit-drawing {
+        padding: 8px 12px;
+    }
+}
+
 @media (max-width: 768px) {
     .view-controls {
         display: none;
@@ -1200,6 +1356,27 @@ body {
     
     .drawing-controls {
         margin-right: 8px;
+    }
+    
+    .mode-indicator {
+        top: 10px;
+        right: 10px;
+        min-width: 200px;
+        padding: 8px 10px;
+    }
+    
+    .mode-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+    
+    .mode-name {
+        font-size: 12px;
+    }
+    
+    .mode-hint {
+        display: none;
     }
     
     .diagnostic-console {

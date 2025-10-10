@@ -60,52 +60,88 @@ Based on the gap analysis between current implementation and requirements, here 
   - Integrate command system with existing object creation, deletion, and transformation methods
   - _Requirements: 4.5_
 
-- [ ] 2. Enhance mobile touch support
-- [ ] 2.1 Implement touch-friendly transform controls
+- [ ] 2. Improve 2D/3D Mode Switching UX
+- [x] 2.1 Clarify and simplify mode switching interface
+
+
+
+  - Remove confusing dual-mode system (hidden 2D sketch canvas vs integrated drawing toolkit)
+  - Make the "Draw" button more intuitive with clear visual feedback
+  - Add mode indicator showing current state (3D Navigation vs Drawing Mode)
+  - Implement smooth visual transitions when entering/exiting drawing mode
+  - Add contextual help tooltips explaining what each mode does
+  - _Requirements: 9.1, 9.4, 9.6, 10.1_
+
+- [ ] 2.2 Enhance drawing mode activation and deactivation
+  - Add clear "Exit Drawing Mode" button when drawing toolkit is active
+  - Implement ESC key to exit drawing mode and return to 3D navigation
+  - Show visual overlay or border indicating drawing mode is active
+  - Add status message in viewport info showing current mode
+  - Preserve camera position when switching between modes
+  - _Requirements: 9.4, 9.6, 10.1_
+
+- [ ] 2.3 Improve view controls integration with drawing mode
+  - Disable incompatible view buttons when drawing mode is active (Front, Left, Right)
+  - Keep only Top and Perspective views available during drawing
+  - Add visual indication of which views are available in each mode
+  - Automatically switch to Top view when entering drawing mode with smooth transition
+  - Allow switching back to Perspective view while keeping drawing toolkit active
+  - _Requirements: 9.1, 9.4, 11.1_
+
+- [ ] 2.4 Add onboarding and user guidance
+  - Create first-time user tutorial overlay explaining the two modes
+  - Add animated hints showing how to switch between navigation and drawing
+  - Implement contextual tooltips that appear based on user actions
+  - Add "Quick Start" guide in help modal explaining workflow
+  - Create visual examples of typical workflows (navigate → draw → navigate → edit)
+  - _Requirements: 10.1, 10.4_
+
+- [ ] 3. Enhance mobile touch support
+- [ ] 3.1 Implement touch-friendly transform controls
   - Add touch event handlers for transform gizmos with larger touch targets
   - Implement touch-based object selection with tap feedback and visual confirmation
   - Add pinch-to-zoom gesture support for camera controls in 3D viewport
   - Add touch event handlers for 2D sketch mode (already has basic touch support)
   - _Requirements: 5.1, 5.2_
 
-- [ ] 2.2 Add advanced mobile gestures
+- [ ] 3.2 Add advanced mobile gestures
   - Implement swipe gestures for tool switching in toolbar
   - Add long-press context menus for mobile object operations
   - Improve touch interaction feedback with haptic-like visual responses
   - _Requirements: 5.1, 5.3_
 
-- [ ] 3. Add advanced material and visual options
-- [ ] 3.1 Implement material property controls
+- [ ] 4. Add advanced material and visual options
+- [ ] 4.1 Implement material property controls
   - Add opacity slider to properties panel for selected objects
   - Add wireframe mode toggle checkbox for individual objects
   - Implement basic material presets dropdown (default, metal, wood, plastic) with predefined colors and properties
   - Update properties panel UI to accommodate new material controls
   - _Requirements: 8.1, 8.2_
 
-- [ ] 3.2 Add viewport display modes
+- [ ] 4.2 Add viewport display modes
   - Implement global wireframe view mode toggle button in toolbar
   - Add viewport background color picker in view settings
   - Create shading mode toggle (flat vs smooth) for scene rendering
   - Add these controls to the view section of the toolbar
   - _Requirements: 8.2_
 
-- [ ] 4. Implement multi-object selection
-- [ ] 4.1 Add selection mechanisms
+- [ ] 5. Implement multi-object selection
+- [ ] 5.1 Add selection mechanisms
   - Implement Ctrl+click for additive object selection with visual feedback
   - Create selection box tool with drag-to-select rectangle functionality
   - Add visual indicators for multiple selected objects (different highlight color/style)
   - Update raycasting system to handle multiple selection states
   - _Requirements: 4.6_
 
-- [ ] 4.2 Update UI for multi-selection
+- [ ] 5.2 Update UI for multi-selection
   - Modify properties panel to show "Multiple Objects Selected" state
   - Add group operation buttons (group transform, group delete, group color change)
   - Update object count display to show "X objects selected" when multiple are selected
   - Ensure transform controls work with multiple objects simultaneously
   - _Requirements: 4.6_
 
-- [ ] 5. Add camera and viewport enhancements
-- [x] 5.1 Implement camera bookmarks
+- [ ] 6. Add camera and viewport enhancements
+- [x] 6.1 Implement camera bookmarks
 
 
   - Add camera bookmark buttons to toolbar (save current view, restore saved views)
@@ -114,23 +150,23 @@ Based on the gap analysis between current implementation and requirements, here 
   - Store camera bookmarks in scene export/import data
   - _Requirements: 1.4_
 
-- [ ] 5.2 Add measurement and alignment tools
+- [ ] 6.2 Add measurement and alignment tools
   - Create measurement tool that shows distance between two clicked objects
   - Add alignment buttons to properties panel (align selected objects to grid, align to each other)
   - Implement object distribution tool for evenly spacing multiple selected objects
   - Add visual measurement lines and distance labels in 3D viewport
   - _Requirements: 8.4_
 
-- [ ] 6. Add performance monitoring
-- [ ] 6.1 Implement performance tracking
+- [ ] 7. Add performance monitoring
+- [ ] 7.1 Implement performance tracking
   - Add FPS counter toggle button in viewport info panel
   - Create performance warning system that alerts when object count exceeds 100
   - Implement automatic quality reduction (shadow quality, geometry detail) for low-end devices
   - Add performance statistics display showing render time and memory usage
   - _Requirements: 5.4_
 
-- [ ] 7. Enhance export functionality
-- [ ] 7.1 Implement OBJ export
+- [ ] 8. Enhance export functionality
+- [ ] 8.1 Implement OBJ export
   - Add OBJ export option to export dropdown menu
   - Create export settings modal with format selection (JSON, OBJ)
   - Implement OBJ file generation from Three.js scene objects
@@ -138,16 +174,16 @@ Based on the gap analysis between current implementation and requirements, here 
   - Add export progress indicator for large scenes
   - _Requirements: 7.3, 7.4_
 
-- [ ] 8. Redesign 2D/3D UX Integration System
+- [ ] 9. Redesign 2D/3D UX Integration System
 
-- [x] 8.1 Research and analyze professional CAD/design tools
+- [x] 9.1 Research and analyze professional CAD/design tools
   - Study industry-standard 2D design interfaces (AutoCAD, SketchUp 2D, Figma)
   - Analyze 2D-to-3D workflow patterns in professional design software
   - Document best practices for shape recognition and intelligent object conversion
   - Create UX specification document based on research findings
   - _Requirements: 10.1, 10.2, 10.3_
 
-- [ ] 8.2 Implement professional 2D drawing engine
+- [ ] 9.2 Implement professional 2D drawing engine
   - Replace basic sketch canvas with precision drawing system
   - Create professional tool palette (precision line, smart rectangle, intelligent circle)
   - Implement real-time dimension display and measurement guides
@@ -155,14 +191,14 @@ Based on the gap analysis between current implementation and requirements, here 
   - Create professional CAD-like visual styling and feedback
   - _Requirements: 10.1, 10.4_
 
-- [ ] 8.3 Build intelligent shape recognition system
+- [ ] 9.3 Build intelligent shape recognition system
   - Implement shape recognition algorithms for converting freehand sketches to precise geometry
   - Create confidence-based shape correction suggestions
   - Build context-aware 3D object recommendation engine
   - Add shape recognition feedback UI with correction options
   - _Requirements: 10.2_
 
-- [ ] 8.4 Create comprehensive CAD symbol library
+- [ ] 9.4 Create comprehensive CAD symbol library
   - Design professional 2D symbols for all 3D primitives (cube, sphere, cylinder, etc.)
   - Create architectural symbols (walls, doors, windows, stairs)
   - Add furniture and object symbols with clear visual distinction
@@ -170,14 +206,14 @@ Based on the gap analysis between current implementation and requirements, here 
   - Create symbol library browser panel with search and categorization
   - _Requirements: 10.3_
 
-- [ ] 8.5 Implement advanced layer management system
+- [ ] 9.5 Implement advanced layer management system
   - Create layer management panel with visibility, lock, and color controls
   - Implement layer-based object organization (structure, furniture, annotations, measurements)
   - Add layer-specific drawing tools and properties
   - Create layer import/export functionality
   - _Requirements: 10.5_
 
-- [ ] 8.6 Build bidirectional 2D/3D synchronization
+- [ ] 9.6 Build bidirectional 2D/3D synchronization
   - Implement real-time synchronization between 2D symbols and 3D objects
   - Create intelligent 3D object generation from 2D layouts with context-aware properties
   - Add instant 3D preview system that updates as user draws in 2D
@@ -185,7 +221,7 @@ Based on the gap analysis between current implementation and requirements, here 
   - Handle edge cases and conflict resolution between 2D and 3D representations
   - _Requirements: 10.6, 10.7_
 
-- [ ] 8.7 Create advanced 2D productivity tools
+- [ ] 9.7 Create advanced 2D productivity tools
   - Implement copy/paste functionality for 2D elements
   - Add array duplication tool for creating patterns and repetitive elements
   - Create advanced selection tools (lasso, magic wand, similar object selection)
@@ -193,7 +229,7 @@ Based on the gap analysis between current implementation and requirements, here 
   - Implement 2D measurement and annotation tools
   - _Requirements: 10.8_
 
-- [ ] 8.8 Integrate enhanced 2D system with existing 3D workflow
+- [ ] 9.8 Integrate enhanced 2D system with existing 3D workflow
   - Update mode switching UI to seamlessly transition between enhanced 2D and existing 3D modes
   - Ensure all existing 3D features work correctly with new 2D-generated objects
   - Update export/import system to handle enhanced 2D layout data
@@ -205,12 +241,13 @@ Based on the gap analysis between current implementation and requirements, here 
 
 The 3D Blockout Toolkit implementation is highly advanced with most core features complete. The main areas for enhancement are:
 
-1. **Advanced Material System** - Opacity, wireframe modes, material presets
-2. **Multi-Object Selection** - Ctrl+click selection, selection box, group operations  
-3. **Professional 2D/3D Integration** - CAD-like precision tools, shape recognition, symbol library
-4. **Mobile Touch Support** - Enhanced touch controls and gestures
+1. **2D/3D Mode Switching UX** - Clarify mode transitions, improve visual feedback, add user guidance
+2. **Mobile Touch Support** - Enhanced touch controls and gestures
+3. **Advanced Material System** - Opacity, wireframe modes, material presets
+4. **Multi-Object Selection** - Ctrl+click selection, selection box, group operations  
 5. **Measurement Tools** - Distance measurement, alignment, distribution tools
-6. **Export Enhancements** - OBJ export format support
-7. **Performance Monitoring** - FPS counter, performance warnings
+6. **Performance Monitoring** - FPS counter, performance warnings
+7. **Export Enhancements** - OBJ export format support
+8. **Professional 2D/3D Integration** - CAD-like precision tools, shape recognition, symbol library
 
-The current implementation provides a solid foundation with comprehensive 3D functionality, basic 2D sketch mode, undo/redo system, multi-camera views, and integrated drawing toolkit. The remaining tasks focus on professional workflow enhancements and advanced features.
+The current implementation provides a solid foundation with comprehensive 3D functionality, basic 2D sketch mode, undo/redo system, multi-camera views, and integrated drawing toolkit. The remaining tasks focus on improving user experience, professional workflow enhancements, and advanced features.

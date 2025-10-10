@@ -308,6 +308,16 @@ class IntegratedDrawingToolkit {
             this.createTempLine();
         }
     }
+    
+    // Helper method to convert canvas coordinates to screen coordinates
+    canvasToScreen(canvasX, canvasY) {
+        const canvas = this.toolkit.renderer.domElement;
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: canvasX + rect.left,
+            y: canvasY + rect.top
+        };
+    }
 
     addDrawingPoint(position) {
         if (!this.isDrawing) return;
@@ -350,7 +360,8 @@ class IntegratedDrawingToolkit {
         for (let i = 0; i < segments; i++) {
             const t = i / Math.max(1, segments - 1);
             const position = this.interpolatePathPosition(t);
-            const worldPos = this.screenToWorld(position.x, position.y);
+            const screenPos = this.canvasToScreen(position.x, position.y);
+            const worldPos = this.screenToWorld(screenPos.x, screenPos.y);
             
             const command = new CreateObjectCommand(this.toolkit, this.selectedBlockoutType, worldPos);
             this.toolkit.commandHistory.execute(command);
@@ -359,9 +370,23 @@ class IntegratedDrawingToolkit {
 
     screenToWorld(screenX, screenY) {
         const canvas = this.toolkit.renderer.domElement;
-        const x = ((screenX / canvas.clientWidth) * 2 - 1) * 10;
-        const z = -((screenY / canvas.clientHeight) * 2 - 1) * 10;
+        const rect = canvas.getBoundingClientRect();
+        
+        // Convert screen coordinates to canvas-relative coordinates
+        const canvasX = screenX - rect.left;
+        const canvasY = screenY - rect.top;
+        
+        // Normalize to -1 to 1 range
+        const normalizedX = (canvasX / rect.width) * 2 - 1;
+        const normalizedY = -(canvasY / rect.height) * 2 + 1;
+        
+        // Map to world coordinates (for top view orthographic camera)
+        const frustumSize = 10;
+        const aspect = rect.width / rect.height;
+        const x = normalizedX * frustumSize * aspect;
+        const z = -normalizedY * frustumSize;
         const y = 0.5;
+        
         return new THREE.Vector3(x, y, z);
     }
 
@@ -407,7 +432,8 @@ class IntegratedDrawingToolkit {
         for (let i = 0; i < segments; i++) {
             const t = i / Math.max(1, segments - 1);
             const position = this.interpolatePathPosition(t);
-            const worldPos = this.screenToWorld(position.x, position.y);
+            const screenPos = this.canvasToScreen(position.x, position.y);
+            const worldPos = this.screenToWorld(screenPos.x, screenPos.y);
             
             const previewObj = this.toolkit.createPrimitiveObject(this.selectedBlockoutType, worldPos);
             previewObj.material.transparent = true;
@@ -445,9 +471,10 @@ class IntegratedDrawingToolkit {
     updatePathVisualization() {
         if (!this.pathLine || this.drawingPath.length < 2) return;
         
-        // Convert screen coordinates to world coordinates for the line
+        // Convert canvas coordinates to screen coordinates, then to world coordinates
         const points = this.drawingPath.map(point => {
-            const worldPos = this.screenToWorld(point.x, point.y);
+            const screenPos = this.canvasToScreen(point.x, point.y);
+            const worldPos = this.screenToWorld(screenPos.x, screenPos.y);
             // Slightly elevate the line above the ground plane
             return new THREE.Vector3(worldPos.x, worldPos.y + 0.1, worldPos.z);
         });
@@ -523,8 +550,14 @@ class IntegratedDrawingToolkit {
         this.toolkit.scene.add(this.cursorIndicator);
     }
 
-    updateCursorIndicator(screenX, screenY) {
+    updateCursorIndicator(canvasX, canvasY) {
         if (!this.cursorIndicator || !this.isActive) return;
+        
+        // Convert canvas-relative coordinates to screen coordinates for screenToWorld
+        const canvas = this.toolkit.renderer.domElement;
+        const rect = canvas.getBoundingClientRect();
+        const screenX = canvasX + rect.left;
+        const screenY = canvasY + rect.top;
         
         const worldPos = this.screenToWorld(screenX, screenY);
         this.cursorIndicator.position.x = worldPos.x;

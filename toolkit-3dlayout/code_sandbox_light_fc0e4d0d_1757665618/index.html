@@ -77,8 +77,11 @@
                     </button>
                 </div>
                 <div class="drawing-controls">
-                    <button id="toggleDrawing" class="btn btn-secondary" title="Toggle Drawing Toolkit">
-                        <i class="fas fa-pen"></i> Draw
+                    <button id="toggleDrawing" class="btn btn-drawing" title="Enter Drawing Mode - Draw blockouts directly on the viewport">
+                        <i class="fas fa-pen"></i> <span class="btn-text">Enter Drawing Mode</span>
+                    </button>
+                    <button id="exitDrawing" class="btn btn-exit-drawing" style="display: none;" title="Exit Drawing Mode (ESC)">
+                        <i class="fas fa-times"></i> <span class="btn-text">Exit Drawing</span>
                     </button>
                 </div>
                 <div class="mode-toggle" style="display: none;">
@@ -332,6 +335,18 @@
             <!-- 3D Viewport -->
             <div class="viewport-container" id="viewport3DContainer">
                 <canvas id="viewport3d"></canvas>
+                
+                <!-- Mode Indicator -->
+                <div class="mode-indicator" id="modeIndicator">
+                    <div class="mode-icon">
+                        <i class="fas fa-cube"></i>
+                    </div>
+                    <div class="mode-info">
+                        <div class="mode-name">3D Navigation</div>
+                        <div class="mode-hint">Click objects to select • Use mouse to orbit</div>
+                    </div>
+                </div>
+                
                 <div class="viewport-info">
                     <div class="info-item">
                         <span>Objects: <span id="objectCount">0</span></span>
