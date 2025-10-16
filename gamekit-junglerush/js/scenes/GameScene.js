@@ -65,12 +65,13 @@ class GameScene extends Phaser.Scene {
         // Add overlap detection between player and enemies
         this.physics.add.overlap(this.player, this.enemies, this.encounterEnemy, null, this);
 
-        // Add instructions
-        this.add.text(16, 16, 'Arrow keys to move and jump', {
-            fontSize: '18px',
-            fill: '#000',
-            backgroundColor: '#fff'
-        }).setScrollFactor(0);
+        // Set up WASD keys
+        this.wasd = {
+            up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+            left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+            down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+            right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
+        };
     }
 
     /**
@@ -378,22 +379,32 @@ class GameScene extends Phaser.Scene {
      * Handles player movement including walking, jumping, and animations.
      */
     updatePlayerMovement() {
-        // Handle horizontal movement
-        if (this.cursors.left.isDown) {
+        // Handle horizontal movement (Arrow keys OR WASD)
+        if (this.cursors.left.isDown || this.wasd.left.isDown) {
             this.player.setVelocityX(-this.player.moveSpeed);
             this.player.setFlipX(true);
             this.animatePlayerMovement();
-        } else if (this.cursors.right.isDown) {
+            
+            // Create dust particles while moving on ground
+            if (this.player.body.touching.down) {
+                this.createDustParticles(this.player.x, this.player.y + 24);
+            }
+        } else if (this.cursors.right.isDown || this.wasd.right.isDown) {
             this.player.setVelocityX(this.player.moveSpeed);
             this.player.setFlipX(false);
             this.animatePlayerMovement();
+            
+            // Create dust particles while moving on ground
+            if (this.player.body.touching.down) {
+                this.createDustParticles(this.player.x, this.player.y + 24);
+            }
         } else {
             this.player.setVelocityX(0);
             this.stopPlayerAnimation();
         }
 
-        // Handle jumping
-        if (this.cursors.up.isDown && this.player.body.touching.down && !this.player.isJumping) {
+        // Handle jumping (Arrow keys OR WASD)
+        if ((this.cursors.up.isDown || this.wasd.up.isDown) && this.player.body.touching.down && !this.player.isJumping) {
             this.player.isJumping = true;
             this.player.setVelocityY(this.player.jumpSpeed);
 
@@ -502,6 +513,37 @@ class GameScene extends Phaser.Scene {
     }
 
     /**
+     * Creates dust particles at character's feet during movement
+     * @param {number} x - X position
+     * @param {number} y - Y position (at feet level)
+     */
+    createDustParticles(x, y) {
+        // Throttle particle creation to avoid too many particles
+        const now = this.time.now;
+        if (!this.lastDustTime) this.lastDustTime = 0;
+        if (now - this.lastDustTime < 100) return; // Only create dust every 100ms
+        this.lastDustTime = now;
+        
+        // Create 2-3 dust particles for subtle effect
+        for (let i = 0; i < 2; i++) {
+            const offsetX = (Math.random() - 0.5) * 15;
+            const size = 2 + Math.random() * 2;
+            const particle = this.add.circle(x + offsetX, y, size, 0xdddddd, 0.6);
+            
+            this.tweens.add({
+                targets: particle,
+                y: y - 8 - Math.random() * 8,
+                x: x + offsetX + (Math.random() - 0.5) * 10,
+                alpha: 0,
+                scale: 1.5,
+                duration: 300 + Math.random() * 200,
+                ease: 'Power2',
+                onComplete: () => particle.destroy()
+            });
+        }
+    }
+
+    /**
      * Updates all enemies with patrol AI behavior.
      * Handles boundary checking, jumping, platform bounds, and edge detection.
      */
@@ -563,6 +605,11 @@ class GameScene extends Phaser.Scene {
                 if (enemy.body.touching.down) {
                     enemy.setVelocityX(enemy.moveSpeed * enemy.direction);
                     enemy.fallTimer = 0;
+                    
+                    // Create dust particles while moving on ground
+                    if (Math.abs(enemy.body.velocity.x) > 10) {
+                        this.createDustParticles(enemy.x, enemy.y + 16);
+                    }
                 } else {
                     enemy.setVelocityX(enemy.moveSpeed * enemy.direction * 0.8);
 

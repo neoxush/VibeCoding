@@ -49,11 +49,10 @@ class PreloadScene extends Phaser.Scene {
             AssetManager.generateAllTextures(this);
             this.updateProgressBar(50);
 
-            // Initialize and generate sounds using SoundManager
+            // Initialize SoundManager (sounds are generated on-demand, not preloaded)
             if (!this.soundManager) {
-                this.soundManager = new SoundManager(this);
+                this.soundManager = new SoundManager();
             }
-            this.soundManager.generateAllSounds();
             this.updateProgressBar(80);
 
             // Create simple animations

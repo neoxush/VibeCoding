@@ -95,6 +95,11 @@ class BattleScene extends Phaser.Scene {
 
         // Signal to UI scene to show action buttons
         this.scene.get('UIScene').showActionButtons();
+        
+        // Show enemy waiting/taunting dialogue
+        this.time.delayedCall(500, () => {
+            this.showEnemyDialogue('waiting');
+        });
     }
 
     /**
@@ -107,8 +112,11 @@ class BattleScene extends Phaser.Scene {
         // Hide action buttons
         this.scene.get('UIScene').hideActionButtons();
 
+        // Show enemy dialogue before attack
+        this.showEnemyDialogue();
+
         // Enemy AI - simple random attack
-        this.time.delayedCall(1500, () => {
+        this.time.delayedCall(2000, () => {
             this.enemyAttack();
         });
     }
@@ -146,26 +154,63 @@ class BattleScene extends Phaser.Scene {
 
         // Play attack sound
         if (this.soundManager) {
-            this.soundManager.playAttackSound();
+            this.soundManager.playAttack();
         }
 
-        // Play attack animation
+        // Create orange glow effect on player
+        const playerGlow = this.add.circle(this.playerSprite.x, this.playerSprite.y, 60, 0xff6600, 0.6);
+        this.tweens.add({
+            targets: playerGlow,
+            alpha: 0,
+            scale: 1.5,
+            duration: 300,
+            onComplete: () => playerGlow.destroy()
+        });
+
+        // Play attack animation with screen shake
+        this.cameras.main.shake(100, 0.005);
+        
+        // Create dust trail during movement
+        const dustInterval = this.time.addEvent({
+            delay: 30,
+            callback: () => {
+                this.createDustParticles(this.playerSprite.x, this.playerSprite.y + 70);
+            },
+            repeat: 6
+        });
+        
         this.tweens.add({
             targets: this.playerSprite,
             x: 450,
             duration: 200,
             yoyo: true,
+            onYoyo: () => {
+                dustInterval.remove();
+            },
             onComplete: () => {
+                dustInterval.remove();
+                
+                // Create impact particles at enemy position
+                this.createImpactParticles(this.enemySprite.x, this.enemySprite.y, 0xff0000);
+                
                 // Apply damage to enemy
                 this.enemy.health -= damage;
                 this.enemyHealthText.setText(`HP: ${this.enemy.health}`);
 
                 // Play hurt sound
                 if (this.soundManager) {
-                    this.soundManager.playHurtSound();
+                    this.soundManager.playHurt();
                 }
 
-                // Play hurt animation
+                // Play hurt animation with red flash
+                const enemyFlash = this.add.rectangle(this.enemySprite.x, this.enemySprite.y, 100, 100, 0xff0000, 0.5);
+                this.tweens.add({
+                    targets: enemyFlash,
+                    alpha: 0,
+                    duration: 200,
+                    onComplete: () => enemyFlash.destroy()
+                });
+
                 this.tweens.add({
                     targets: this.enemySprite,
                     alpha: 0.5,
@@ -174,8 +219,12 @@ class BattleScene extends Phaser.Scene {
                     repeat: 3
                 });
 
-                // Display damage text
+                // Display damage text with floating animation
+                this.showFloatingDamage(this.enemySprite.x, this.enemySprite.y - 50, damage, 0xff0000);
                 this.battleText.setText(`You dealt ${damage} damage!`);
+                
+                // Show enemy hurt reaction
+                this.showEnemyDialogue('hurt');
 
                 // Check if enemy is defeated
                 if (this.enemy.health <= 0) {
@@ -209,9 +258,40 @@ class BattleScene extends Phaser.Scene {
 
         this.battleText.setText(`Defense increased by ${defenseBoost}!`);
 
-        // Play defend sound (using attack sound as placeholder)
+        // Play defend sound
         if (this.soundManager) {
-            this.soundManager.playAttackSound();
+            this.soundManager.playDefend();
+        }
+
+        // Create blue shield glow effect
+        const shieldGlow = this.add.circle(this.playerSprite.x, this.playerSprite.y, 80, 0x00aaff, 0.7);
+        
+        // Pulsing shield animation
+        this.tweens.add({
+            targets: shieldGlow,
+            scale: 1.3,
+            alpha: 0,
+            duration: 600,
+            ease: 'Power2',
+            repeat: 2,
+            onComplete: () => shieldGlow.destroy()
+        });
+
+        // Create shield ring particles
+        for (let i = 0; i < 12; i++) {
+            const angle = (i / 12) * Math.PI * 2;
+            const x = this.playerSprite.x + Math.cos(angle) * 60;
+            const y = this.playerSprite.y + Math.sin(angle) * 60;
+            const particle = this.add.circle(x, y, 4, 0x00ffff, 0.8);
+            
+            this.tweens.add({
+                targets: particle,
+                x: this.playerSprite.x + Math.cos(angle) * 90,
+                y: this.playerSprite.y + Math.sin(angle) * 90,
+                alpha: 0,
+                duration: 500,
+                onComplete: () => particle.destroy()
+            });
         }
 
         // Visual effect for defense
@@ -256,8 +336,38 @@ class BattleScene extends Phaser.Scene {
 
         // Play special attack sound
         if (this.soundManager) {
-            this.soundManager.playAttackSound();
+            this.soundManager.playSpecial();
         }
+
+        // Create massive golden/yellow energy glow
+        const specialGlow = this.add.circle(this.playerSprite.x, this.playerSprite.y, 100, 0xffff00, 0.8);
+        this.tweens.add({
+            targets: specialGlow,
+            alpha: 0,
+            scale: 2,
+            duration: 400,
+            onComplete: () => specialGlow.destroy()
+        });
+
+        // Create energy ring particles
+        for (let i = 0; i < 16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            const x = this.playerSprite.x + Math.cos(angle) * 80;
+            const y = this.playerSprite.y + Math.sin(angle) * 80;
+            const particle = this.add.circle(x, y, 5, 0xffaa00, 1);
+            
+            this.tweens.add({
+                targets: particle,
+                x: this.playerSprite.x,
+                y: this.playerSprite.y,
+                alpha: 0,
+                duration: 300,
+                onComplete: () => particle.destroy()
+            });
+        }
+
+        // Stronger screen shake for special
+        this.cameras.main.shake(200, 0.01);
 
         // Play special attack animation
         this.tweens.add({
@@ -266,14 +376,49 @@ class BattleScene extends Phaser.Scene {
             duration: 200,
             yoyo: true,
             onComplete: () => {
+                // Create massive impact explosion
+                const explosion = this.add.circle(this.enemySprite.x, this.enemySprite.y, 20, 0xffff00, 1);
+                this.tweens.add({
+                    targets: explosion,
+                    scale: 5,
+                    alpha: 0,
+                    duration: 500,
+                    onComplete: () => explosion.destroy()
+                });
+
+                // Create more intense impact particles
+                for (let i = 0; i < 16; i++) {
+                    const angle = (i / 16) * Math.PI * 2;
+                    const speed = 80 + Math.random() * 40;
+                    const particle = this.add.circle(this.enemySprite.x, this.enemySprite.y, 4, 0xff0000, 1);
+                    
+                    this.tweens.add({
+                        targets: particle,
+                        x: this.enemySprite.x + Math.cos(angle) * speed,
+                        y: this.enemySprite.y + Math.sin(angle) * speed,
+                        alpha: 0,
+                        duration: 600,
+                        onComplete: () => particle.destroy()
+                    });
+                }
+                
                 // Apply damage to enemy
                 this.enemy.health -= damage;
                 this.enemyHealthText.setText(`HP: ${this.enemy.health}`);
 
                 // Play hurt sound
                 if (this.soundManager) {
-                    this.soundManager.playHurtSound();
+                    this.soundManager.playHurt();
                 }
+
+                // Intense flash effect
+                const enemyFlash = this.add.rectangle(this.enemySprite.x, this.enemySprite.y, 120, 120, 0xffff00, 0.8);
+                this.tweens.add({
+                    targets: enemyFlash,
+                    alpha: 0,
+                    duration: 300,
+                    onComplete: () => enemyFlash.destroy()
+                });
 
                 // Play hurt animation
                 this.tweens.add({
@@ -285,8 +430,12 @@ class BattleScene extends Phaser.Scene {
                     repeat: 2
                 });
 
-                // Display damage text
+                // Display larger damage text for special
+                this.showFloatingDamage(this.enemySprite.x, this.enemySprite.y - 50, damage, 0xffff00);
                 this.battleText.setText(`Special attack! ${damage} damage dealt!`);
+                
+                // Show enemy hurt reaction
+                this.showEnemyDialogue('hurt');
 
                 // Check if enemy is defeated
                 if (this.enemy.health <= 0) {
@@ -315,16 +464,45 @@ class BattleScene extends Phaser.Scene {
 
         // Play attack sound
         if (this.soundManager) {
-            this.soundManager.playAttackSound();
+            this.soundManager.playAttack();
         }
 
-        // Play attack animation
+        // Create red/purple glow effect on enemy
+        const enemyGlow = this.add.circle(this.enemySprite.x, this.enemySprite.y, 60, 0xcc0000, 0.6);
+        this.tweens.add({
+            targets: enemyGlow,
+            alpha: 0,
+            scale: 1.5,
+            duration: 300,
+            onComplete: () => enemyGlow.destroy()
+        });
+
+        // Play attack animation with screen shake
+        this.cameras.main.shake(100, 0.005);
+        
+        // Create dust trail during movement
+        const dustInterval = this.time.addEvent({
+            delay: 30,
+            callback: () => {
+                this.createDustParticles(this.enemySprite.x, this.enemySprite.y + 50);
+            },
+            repeat: 6
+        });
+        
         this.tweens.add({
             targets: this.enemySprite,
             x: 350,
             duration: 200,
             yoyo: true,
+            onYoyo: () => {
+                dustInterval.remove();
+            },
             onComplete: () => {
+                dustInterval.remove();
+                
+                // Create impact particles at player position
+                this.createImpactParticles(this.playerSprite.x, this.playerSprite.y, 0xff6600);
+                
                 // Apply damage to player
                 if (window.gameStateManager) {
                     const currentHealth = gameStateManager.getPlayerHealth();
@@ -337,10 +515,18 @@ class BattleScene extends Phaser.Scene {
 
                 // Play hurt sound
                 if (this.soundManager) {
-                    this.soundManager.playHurtSound();
+                    this.soundManager.playHurt();
                 }
 
-                // Play hurt animation
+                // Play hurt animation with orange flash
+                const playerFlash = this.add.rectangle(this.playerSprite.x, this.playerSprite.y, 100, 100, 0xff6600, 0.5);
+                this.tweens.add({
+                    targets: playerFlash,
+                    alpha: 0,
+                    duration: 200,
+                    onComplete: () => playerFlash.destroy()
+                });
+
                 this.tweens.add({
                     targets: this.playerSprite,
                     alpha: 0.5,
@@ -349,7 +535,8 @@ class BattleScene extends Phaser.Scene {
                     repeat: 3
                 });
 
-                // Display damage text
+                // Display damage text with floating animation
+                this.showFloatingDamage(this.playerSprite.x, this.playerSprite.y - 50, damage, 0xff6600);
                 this.battleText.setText(`Enemy dealt ${damage} damage!`);
 
                 // Reset defense boost from defend action
@@ -424,6 +611,188 @@ class BattleScene extends Phaser.Scene {
             onComplete: () => {
                 // End battle with defeat
                 this.endBattle('defeat');
+            }
+        });
+    }
+
+    /**
+     * Creates impact particle effects at a position
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @param {number} color - Particle color
+     */
+    createImpactParticles(x, y, color) {
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const speed = 50 + Math.random() * 50;
+            const particle = this.add.circle(x, y, 3, color, 0.8);
+            
+            this.tweens.add({
+                targets: particle,
+                x: x + Math.cos(angle) * speed,
+                y: y + Math.sin(angle) * speed,
+                alpha: 0,
+                duration: 400,
+                onComplete: () => particle.destroy()
+            });
+        }
+    }
+
+    /**
+     * Shows floating damage number
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @param {number} damage - Damage amount
+     * @param {number} color - Text color
+     */
+    showFloatingDamage(x, y, damage, color) {
+        const damageText = this.add.text(x, y, `-${damage}`, {
+            fontSize: '32px',
+            fill: `#${color.toString(16).padStart(6, '0')}`,
+            stroke: '#000',
+            strokeThickness: 4,
+            fontFamily: 'monospace',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: damageText,
+            y: y - 60,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Power2',
+            onComplete: () => damageText.destroy()
+        });
+    }
+
+    /**
+     * Creates dust particles at character's feet during movement
+     * @param {number} x - X position
+     * @param {number} y - Y position (at feet level)
+     */
+    createDustParticles(x, y) {
+        // Create 3-4 dust particles for better visibility
+        for (let i = 0; i < 4; i++) {
+            const offsetX = (Math.random() - 0.5) * 25;
+            const size = 4 + Math.random() * 3;
+            const particle = this.add.circle(x + offsetX, y, size, 0xdddddd, 0.8);
+            
+            this.tweens.add({
+                targets: particle,
+                y: y - 15 - Math.random() * 15,
+                x: x + offsetX + (Math.random() - 0.5) * 20,
+                alpha: 0,
+                scale: 1.8,
+                duration: 400 + Math.random() * 200,
+                ease: 'Power2',
+                onComplete: () => particle.destroy()
+            });
+        }
+    }
+
+    /**
+     * Shows a comic-style dialogue box with enemy taunts
+     * @param {string} type - Type of dialogue: 'waiting', 'attacking', or 'hurt'
+     */
+    showEnemyDialogue(type = 'attacking') {
+        // Destroy existing dialogue if any
+        if (this.currentDialogueBubble) {
+            this.currentDialogueBubble.destroy();
+        }
+        if (this.currentDialogueText) {
+            this.currentDialogueText.destroy();
+        }
+        
+        // Different dialogue based on context
+        const slimeWaiting = ["What's taking so long?", "Come on!", "Hurry up!", "I'm waiting...", "Boring!"];
+        const slimeAttacking = ["You're toast!", "Prepare to lose!", "I'm gonna squish you!", "Time to bounce!", "Slime time!"];
+        const slimeHurt = ["Ow!", "That hurt!", "No fair!", "Ouch!", "You'll pay!"];
+        
+        const goblinWaiting = ["Make your move!", "Scared?", "Coward!", "I'm ready!", "Waiting..."];
+        const goblinAttacking = ["You'll regret this!", "Feel my wrath!", "I'll crush you!", "Pathetic human!", "Your doom awaits!", "Hahaha!"];
+        const goblinHurt = ["Argh!", "You dare?!", "Impossible!", "Grr!", "I'll get you!"];
+        
+        let taunts;
+        if (this.enemy.type === 'slime') {
+            taunts = type === 'waiting' ? slimeWaiting : (type === 'hurt' ? slimeHurt : slimeAttacking);
+        } else {
+            taunts = type === 'waiting' ? goblinWaiting : (type === 'hurt' ? goblinHurt : goblinAttacking);
+        }
+        
+        const taunt = taunts[Math.floor(Math.random() * taunts.length)];
+        
+        // Create comic dialogue bubble
+        const bubbleWidth = 150;
+        const bubbleHeight = 50;
+        const bubbleX = this.enemySprite.x + 80;
+        const bubbleY = this.enemySprite.y - 80;
+        
+        // Bubble background (white rounded rectangle)
+        const bubble = this.add.graphics();
+        bubble.fillStyle(0xffffff, 1);
+        bubble.fillRoundedRect(bubbleX - bubbleWidth/2, bubbleY - bubbleHeight/2, bubbleWidth, bubbleHeight, 10);
+        
+        // Bubble border (black outline)
+        bubble.lineStyle(3, 0x000000, 1);
+        bubble.strokeRoundedRect(bubbleX - bubbleWidth/2, bubbleY - bubbleHeight/2, bubbleWidth, bubbleHeight, 10);
+        
+        // Bubble tail (triangle pointing to enemy)
+        bubble.fillStyle(0xffffff, 1);
+        bubble.fillTriangle(
+            bubbleX - 20, bubbleY + bubbleHeight/2,
+            bubbleX - 10, bubbleY + bubbleHeight/2,
+            this.enemySprite.x + 20, this.enemySprite.y - 30
+        );
+        bubble.lineStyle(3, 0x000000, 1);
+        bubble.strokeTriangle(
+            bubbleX - 20, bubbleY + bubbleHeight/2,
+            bubbleX - 10, bubbleY + bubbleHeight/2,
+            this.enemySprite.x + 20, this.enemySprite.y - 30
+        );
+        
+        // Dialogue text
+        const dialogueText = this.add.text(bubbleX, bubbleY, taunt, {
+            fontSize: '16px',
+            fill: '#000',
+            fontFamily: 'Arial',
+            fontStyle: 'bold',
+            align: 'center',
+            wordWrap: { width: bubbleWidth - 20 }
+        }).setOrigin(0.5);
+        
+        // Store references for cleanup
+        this.currentDialogueBubble = bubble;
+        this.currentDialogueText = dialogueText;
+        
+        // Pop-in animation
+        bubble.setAlpha(0);
+        dialogueText.setAlpha(0);
+        bubble.setScale(0.5);
+        dialogueText.setScale(0.5);
+        
+        this.tweens.add({
+            targets: [bubble, dialogueText],
+            alpha: 1,
+            scale: 1,
+            duration: 200,
+            ease: 'Back.easeOut'
+        });
+        
+        // Fade out after duration (longer for waiting dialogue)
+        const duration = type === 'waiting' ? 3000 : 1500;
+        this.time.delayedCall(duration, () => {
+            if (bubble && dialogueText) {
+                this.tweens.add({
+                    targets: [bubble, dialogueText],
+                    alpha: 0,
+                    duration: 200,
+                    onComplete: () => {
+                        if (bubble) bubble.destroy();
+                        if (dialogueText) dialogueText.destroy();
+                        this.currentDialogueBubble = null;
+                        this.currentDialogueText = null;
+                    }
+                });
             }
         });
     }

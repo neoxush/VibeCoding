@@ -5,6 +5,9 @@ const config = {
     height: 600,
     parent: 'game-container',
     backgroundColor: '#87ceeb', // Sky blue background
+    pixelArt: true, // Enable pixel art mode for crisp pixels
+    antialias: false, // Disable anti-aliasing for sharp pixels
+    roundPixels: true, // Round pixel positions to prevent sub-pixel rendering
     physics: {
         default: 'arcade',
         arcade: {

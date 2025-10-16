@@ -6,38 +6,122 @@
 class AssetManager {
     /**
      * Generates the player character texture
-     * Creates a pixel art human character with blue shirt, brown hair, and dark pants
+     * Creates a Lego-style blocky character with studs and defined edges
      * @param {Phaser.Scene} scene - The scene to generate the texture in
      */
     static generatePlayerTexture(scene) {
         const graphics = scene.make.graphics();
 
-        // Body - blue shirt
-        graphics.fillStyle(Constants.COLORS.PLAYER_SHIRT);
-        graphics.fillRect(8, 16, 16, 16);
+        // === HEAD BLOCK ===
+        // Head base - yellow Lego brick
+        graphics.fillStyle(0xffd700); // Bright yellow
+        graphics.fillRect(8, 2, 16, 14);
+        
+        // Head highlight (top-left edge for 3D effect)
+        graphics.fillStyle(0xffed4e); // Lighter yellow
+        graphics.fillRect(8, 2, 14, 2); // Top edge
+        graphics.fillRect(8, 2, 2, 12); // Left edge
+        
+        // Head shadow (bottom-right for depth)
+        graphics.fillStyle(0xccaa00); // Darker yellow
+        graphics.fillRect(22, 4, 2, 12); // Right edge
+        graphics.fillRect(10, 14, 14, 2); // Bottom edge
+        
+        // Head studs (classic Lego bumps on top)
+        graphics.fillStyle(0xffed4e); // Light yellow
+        graphics.fillRect(11, 3, 3, 2); // Left stud
+        graphics.fillRect(18, 3, 3, 2); // Right stud
+        
+        // Face - simple smiley
+        graphics.fillStyle(0x000000); // Black
+        graphics.fillRect(11, 7, 2, 2); // Left eye
+        graphics.fillRect(19, 7, 2, 2); // Right eye
+        graphics.fillRect(13, 11, 6, 2); // Smile
 
-        // Head - skin tone
-        graphics.fillStyle(Constants.COLORS.PLAYER_SKIN);
-        graphics.fillRect(8, 4, 16, 12);
+        // === BODY BLOCK ===
+        // Body base - blue brick
+        graphics.fillStyle(0x0066cc); // Bright blue
+        graphics.fillRect(8, 16, 16, 12);
+        
+        // Body highlight (3D effect)
+        graphics.fillStyle(0x3399ff); // Lighter blue
+        graphics.fillRect(8, 16, 14, 2); // Top edge
+        graphics.fillRect(8, 16, 2, 10); // Left edge
+        
+        // Body shadow
+        graphics.fillStyle(0x004499); // Darker blue
+        graphics.fillRect(22, 18, 2, 10); // Right edge
+        graphics.fillRect(10, 26, 14, 2); // Bottom edge
+        
+        // Body studs
+        graphics.fillStyle(0x3399ff); // Light blue
+        graphics.fillRect(11, 17, 3, 2); // Left stud
+        graphics.fillRect(18, 17, 3, 2); // Right stud
 
-        // Hair - brown
-        graphics.fillStyle(Constants.COLORS.PLAYER_HAIR);
-        graphics.fillRect(8, 4, 16, 4);
+        // === ARMS (as separate blocks) ===
+        // Left arm
+        graphics.fillStyle(0x0066cc); // Blue
+        graphics.fillRect(4, 18, 4, 10);
+        graphics.fillStyle(0x3399ff); // Highlight
+        graphics.fillRect(4, 18, 3, 2);
+        graphics.fillStyle(0x004499); // Shadow
+        graphics.fillRect(7, 20, 1, 8);
+        
+        // Right arm
+        graphics.fillStyle(0x0066cc); // Blue
+        graphics.fillRect(24, 18, 4, 10);
+        graphics.fillStyle(0x3399ff); // Highlight
+        graphics.fillRect(24, 18, 3, 2);
+        graphics.fillStyle(0x004499); // Shadow
+        graphics.fillRect(27, 20, 1, 8);
 
-        // Arms - blue sleeves
-        graphics.fillStyle(Constants.COLORS.PLAYER_SHIRT);
-        graphics.fillRect(4, 16, 4, 12);
-        graphics.fillRect(24, 16, 4, 12);
-
-        // Hands - skin tone
-        graphics.fillStyle(Constants.COLORS.PLAYER_SKIN);
+        // === HANDS (yellow blocks) ===
+        // Left hand
+        graphics.fillStyle(0xffd700); // Yellow
         graphics.fillRect(4, 28, 4, 4);
+        graphics.fillStyle(0xffed4e); // Highlight
+        graphics.fillRect(4, 28, 3, 1);
+        
+        // Right hand
+        graphics.fillStyle(0xffd700); // Yellow
         graphics.fillRect(24, 28, 4, 4);
+        graphics.fillStyle(0xffed4e); // Highlight
+        graphics.fillRect(24, 28, 3, 1);
 
-        // Legs - dark pants
-        graphics.fillStyle(Constants.COLORS.PLAYER_PANTS);
-        graphics.fillRect(8, 32, 6, 16);
-        graphics.fillRect(18, 32, 6, 16);
+        // === LEGS (as separate blocks) ===
+        // Left leg
+        graphics.fillStyle(0x003366); // Dark blue
+        graphics.fillRect(10, 28, 6, 16);
+        graphics.fillStyle(0x004499); // Highlight
+        graphics.fillRect(10, 28, 5, 2);
+        graphics.fillStyle(0x001a33); // Shadow
+        graphics.fillRect(15, 30, 1, 14);
+        
+        // Right leg
+        graphics.fillStyle(0x003366); // Dark blue
+        graphics.fillRect(16, 28, 6, 16);
+        graphics.fillStyle(0x004499); // Highlight
+        graphics.fillRect(16, 28, 5, 2);
+        graphics.fillStyle(0x001a33); // Shadow
+        graphics.fillRect(21, 30, 1, 14);
+        
+        // Leg studs
+        graphics.fillStyle(0x004499); // Light blue
+        graphics.fillRect(11, 29, 2, 2); // Left leg stud
+        graphics.fillRect(17, 29, 2, 2); // Right leg stud
+
+        // === FEET (black blocks) ===
+        // Left foot
+        graphics.fillStyle(0x000000); // Black
+        graphics.fillRect(10, 44, 6, 4);
+        graphics.fillStyle(0x333333); // Highlight
+        graphics.fillRect(10, 44, 5, 1);
+        
+        // Right foot
+        graphics.fillStyle(0x000000); // Black
+        graphics.fillRect(16, 44, 6, 4);
+        graphics.fillStyle(0x333333); // Highlight
+        graphics.fillRect(16, 44, 5, 1);
 
         // Generate the texture
         graphics.generateTexture(

@@ -10,10 +10,31 @@ class UIScene extends Phaser.Scene {
 
         // Initially hide the buttons
         this.hideActionButtons();
+        
+        // Flag to track if buttons are visible
+        this.buttonsVisible = false;
+    }
+    
+    update() {
+        // Only check for keyboard input when buttons are visible
+        if (!this.buttonsVisible) return;
+        
+        // Check for keyboard shortcuts
+        if (Phaser.Input.Keyboard.JustDown(this.aKey)) {
+            this.handleActionClick('attack');
+        } else if (Phaser.Input.Keyboard.JustDown(this.dKey)) {
+            this.handleActionClick('defend');
+        } else if (Phaser.Input.Keyboard.JustDown(this.sKey)) {
+            this.handleActionClick('special');
+        }
     }
 
     createActionButtons() {
-        const actions = ['Attack', 'Defend', 'Special'];
+        const actions = [
+            { name: 'Attack', key: 'A' },
+            { name: 'Defend', key: 'D' },
+            { name: 'Special', key: 'S' }
+        ];
         const buttonY = 500;
 
         actions.forEach((action, index) => {
@@ -21,10 +42,12 @@ class UIScene extends Phaser.Scene {
             const button = this.add.rectangle(200 + (index * 200), buttonY, 150, 50, 0x444444);
             button.setInteractive();
 
-            // Add button text
-            const text = this.add.text(button.x, button.y, action, {
+            // Add button text with keyboard shortcut hint
+            const displayText = `(${action.key.toLowerCase()})${action.name.substring(1)}`;
+            const text = this.add.text(button.x, button.y, displayText, {
                 fontSize: '24px',
-                fill: '#fff'
+                fill: '#fff',
+                fontFamily: 'monospace'
             }).setOrigin(0.5);
 
             // Add hover effect
@@ -38,15 +61,21 @@ class UIScene extends Phaser.Scene {
 
             // Add click handler
             button.on('pointerdown', () => {
-                this.handleActionClick(action.toLowerCase());
+                this.handleActionClick(action.name.toLowerCase());
             });
 
             // Store button reference
             this.actionButtons.push({ button, text });
         });
+
+        // Set up keyboard shortcuts
+        this.aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+        this.dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+        this.sKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     }
 
     showActionButtons() {
+        this.buttonsVisible = true;
         this.actionButtons.forEach(({ button, text }) => {
             button.setVisible(true);
             text.setVisible(true);
@@ -54,6 +83,7 @@ class UIScene extends Phaser.Scene {
     }
 
     hideActionButtons() {
+        this.buttonsVisible = false;
         this.actionButtons.forEach(({ button, text }) => {
             button.setVisible(false);
             text.setVisible(false);
