@@ -12,7 +12,7 @@ const config = {
             debug: true // Enable physics debug to see what's happening
         }
     },
-    scene: [BootScene, GameScene, BattleScene, UIScene] // Skip PreloadScene for simplicity
+    scene: [BootScene, PreloadScene, GameScene, BattleScene, UIScene]
 };
 
 // Create the game instance

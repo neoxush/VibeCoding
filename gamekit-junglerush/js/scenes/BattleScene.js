@@ -1,4 +1,14 @@
+/**
+ * BattleScene - Turn-based combat system with damage calculation.
+ * 
+ * This scene handles turn-based battles between the player and enemies,
+ * including damage calculation, action handling, and battle resolution.
+ * Integrates with GameStateManager for state management and SoundManager for audio.
+ */
 class BattleScene extends Phaser.Scene {
+    /**
+     * Creates a new BattleScene instance.
+     */
     constructor() {
         super('BattleScene');
         this.player = null;
@@ -6,24 +16,35 @@ class BattleScene extends Phaser.Scene {
         this.isPlayerTurn = true;
         this.battleActions = ['attack', 'defend', 'special'];
         this.selectedAction = 0;
+        this.defendActive = false;
+        this.tempDefenseBoost = 0;
     }
 
+    /**
+     * Initializes the battle with player and enemy data.
+     * @param {Object} data - Battle initialization data
+     * @param {Phaser.GameObjects.Sprite} data.player - Player sprite
+     * @param {Phaser.GameObjects.Sprite} data.enemy - Enemy sprite
+     */
     init(data) {
         this.player = data.player;
         this.enemy = data.enemy;
+        this.defendActive = false;
+        this.tempDefenseBoost = 0;
     }
 
+    /**
+     * Creates the battle scene with background, sprites, and UI.
+     */
     create() {
-        // Add battle background - simple dark rectangle
-        this.add.rectangle(0, 0, 800, 600, 0x000033).setOrigin(0, 0);
+        // Add battle background
+        this.add.image(400, 300, 'battle-bg');
 
-        // Create battle sprites - simple colored rectangles
-        this.playerSprite = this.add.rectangle(250, 350, 32, 48, 0x00ff00);
+        // Create battle sprites
+        this.playerSprite = this.add.sprite(250, 350, 'player');
         this.playerSprite.setScale(3);
 
-        const enemyColor = this.enemy.type === 'slime' ? 0xff0000 : 0xff00ff;
-        const enemyHeight = this.enemy.type === 'slime' ? 32 : 48;
-        this.enemySprite = this.add.rectangle(550, 300, 32, enemyHeight, enemyColor);
+        this.enemySprite = this.add.sprite(550, 300, this.enemy.type);
         this.enemySprite.setScale(3);
 
         // Add battle text
@@ -34,8 +55,12 @@ class BattleScene extends Phaser.Scene {
             strokeThickness: 4
         }).setOrigin(0.5);
 
+        // Get player health from GameStateManager or gameData
+        const playerHealth = window.gameStateManager ? 
+            gameStateManager.getPlayerHealth() : gameData.playerHealth;
+
         // Add player health display
-        this.playerHealthText = this.add.text(250, 400, `HP: ${gameData.playerHealth}`, {
+        this.playerHealthText = this.add.text(250, 450, `HP: ${playerHealth}`, {
             fontSize: '24px',
             fill: '#fff',
             stroke: '#000',
@@ -50,16 +75,20 @@ class BattleScene extends Phaser.Scene {
             strokeThickness: 3
         }).setOrigin(0.5);
 
+        // Initialize SoundManager if available
+        if (!this.soundManager && window.SoundManager) {
+            this.soundManager = new SoundManager(this);
+        }
+
         // Start battle
         this.time.delayedCall(1000, () => {
             this.startPlayerTurn();
         });
-
-        // Create dummy sound objects to avoid errors
-        this.attackSound = { play: function() {} };
-        this.hurtSound = { play: function() {} };
     }
 
+    /**
+     * Starts the player's turn and shows action buttons.
+     */
     startPlayerTurn() {
         this.isPlayerTurn = true;
         this.battleText.setText("Your turn! Choose an action.");
@@ -68,6 +97,9 @@ class BattleScene extends Phaser.Scene {
         this.scene.get('UIScene').showActionButtons();
     }
 
+    /**
+     * Starts the enemy's turn and executes enemy AI.
+     */
     startEnemyTurn() {
         this.isPlayerTurn = false;
         this.battleText.setText("Enemy's turn!");
@@ -81,12 +113,43 @@ class BattleScene extends Phaser.Scene {
         });
     }
 
-    playerAttack() {
-        // Calculate damage
-        const damage = gameData.playerAttack;
+    /**
+     * Calculates damage based on attacker and defender stats.
+     * Formula: damage = max(1, attack - defense)
+     * @param {number} attack - Attacker's attack stat
+     * @param {number} defense - Defender's defense stat
+     * @param {boolean} isSpecial - Whether this is a special attack (1.5x multiplier)
+     * @returns {number} Calculated damage
+     */
+    calculateDamage(attack, defense, isSpecial = false) {
+        let damage = attack - defense;
+        
+        // Apply special attack multiplier
+        if (isSpecial) {
+            damage = Math.floor(attack * 1.5) - defense;
+        }
+        
+        // Ensure minimum damage of 1
+        return Math.max(1, damage);
+    }
 
-        // Play attack animation and sound
-        this.attackSound.play();
+    /**
+     * Executes player attack action with damage calculation.
+     */
+    playerAttack() {
+        // Get player attack stat
+        const playerAttack = window.gameStateManager ? 
+            gameStateManager.getPlayerAttack() : gameData.playerAttack;
+
+        // Calculate damage (enemy has no defense stat, so use 0)
+        const damage = this.calculateDamage(playerAttack, 0, false);
+
+        // Play attack sound
+        if (this.soundManager) {
+            this.soundManager.playAttackSound();
+        }
+
+        // Play attack animation
         this.tweens.add({
             targets: this.playerSprite,
             x: 450,
@@ -97,8 +160,12 @@ class BattleScene extends Phaser.Scene {
                 this.enemy.health -= damage;
                 this.enemyHealthText.setText(`HP: ${this.enemy.health}`);
 
+                // Play hurt sound
+                if (this.soundManager) {
+                    this.soundManager.playHurtSound();
+                }
+
                 // Play hurt animation
-                this.hurtSound.play();
                 this.tweens.add({
                     targets: this.enemySprite,
                     alpha: 0.5,
@@ -123,12 +190,29 @@ class BattleScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Executes player defend action, temporarily boosting defense.
+     */
     playerDefend() {
-        // Increase defense temporarily
+        // Increase defense temporarily for next enemy attack
         const defenseBoost = 5;
-        gameData.playerDefense += defenseBoost;
+        this.defendActive = true;
+        this.tempDefenseBoost = defenseBoost;
+
+        // Update defense in state manager
+        if (window.gameStateManager) {
+            const currentDefense = gameStateManager.getPlayerDefense();
+            gameStateManager.setPlayerDefense(currentDefense + defenseBoost);
+        } else {
+            gameData.playerDefense += defenseBoost;
+        }
 
         this.battleText.setText(`Defense increased by ${defenseBoost}!`);
+
+        // Play defend sound (using attack sound as placeholder)
+        if (this.soundManager) {
+            this.soundManager.playAttackSound();
+        }
 
         // Visual effect for defense
         this.tweens.add({
@@ -146,17 +230,36 @@ class BattleScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Executes player special attack - high damage but costs health.
+     * Deals 1.5x damage and costs 10 HP.
+     */
     playerSpecial() {
-        // Special attack with higher damage but costs health
-        const damage = gameData.playerAttack * 1.5;
         const healthCost = 10;
 
-        // Reduce player health
-        gameData.playerHealth -= healthCost;
-        this.playerHealthText.setText(`HP: ${gameData.playerHealth}`);
+        // Get player attack stat
+        const playerAttack = window.gameStateManager ? 
+            gameStateManager.getPlayerAttack() : gameData.playerAttack;
 
-        // Play special attack animation and sound
-        this.attackSound.play();
+        // Calculate special damage (1.5x multiplier, no enemy defense)
+        const damage = this.calculateDamage(playerAttack, 0, true);
+
+        // Reduce player health
+        if (window.gameStateManager) {
+            const currentHealth = gameStateManager.getPlayerHealth();
+            gameStateManager.setPlayerHealth(currentHealth - healthCost);
+            this.playerHealthText.setText(`HP: ${gameStateManager.getPlayerHealth()}`);
+        } else {
+            gameData.playerHealth -= healthCost;
+            this.playerHealthText.setText(`HP: ${gameData.playerHealth}`);
+        }
+
+        // Play special attack sound
+        if (this.soundManager) {
+            this.soundManager.playAttackSound();
+        }
+
+        // Play special attack animation
         this.tweens.add({
             targets: this.playerSprite,
             scale: 3.5,
@@ -167,8 +270,12 @@ class BattleScene extends Phaser.Scene {
                 this.enemy.health -= damage;
                 this.enemyHealthText.setText(`HP: ${this.enemy.health}`);
 
+                // Play hurt sound
+                if (this.soundManager) {
+                    this.soundManager.playHurtSound();
+                }
+
                 // Play hurt animation
-                this.hurtSound.play();
                 this.tweens.add({
                     targets: this.enemySprite,
                     alpha: 0.3,
@@ -194,13 +301,24 @@ class BattleScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Executes enemy attack with damage calculation.
+     * Damage is reduced by player defense.
+     */
     enemyAttack() {
-        // Calculate damage (reduced by player defense)
-        const baseDamage = this.enemy.attack;
-        const damage = Math.max(1, baseDamage - gameData.playerDefense);
+        // Get player defense stat
+        const playerDefense = window.gameStateManager ? 
+            gameStateManager.getPlayerDefense() : gameData.playerDefense;
 
-        // Play attack animation and sound
-        this.attackSound.play();
+        // Calculate damage using proper formula
+        const damage = this.calculateDamage(this.enemy.attack, playerDefense, false);
+
+        // Play attack sound
+        if (this.soundManager) {
+            this.soundManager.playAttackSound();
+        }
+
+        // Play attack animation
         this.tweens.add({
             targets: this.enemySprite,
             x: 350,
@@ -208,11 +326,21 @@ class BattleScene extends Phaser.Scene {
             yoyo: true,
             onComplete: () => {
                 // Apply damage to player
-                gameData.playerHealth -= damage;
-                this.playerHealthText.setText(`HP: ${gameData.playerHealth}`);
+                if (window.gameStateManager) {
+                    const currentHealth = gameStateManager.getPlayerHealth();
+                    gameStateManager.setPlayerHealth(currentHealth - damage);
+                    this.playerHealthText.setText(`HP: ${gameStateManager.getPlayerHealth()}`);
+                } else {
+                    gameData.playerHealth -= damage;
+                    this.playerHealthText.setText(`HP: ${gameData.playerHealth}`);
+                }
+
+                // Play hurt sound
+                if (this.soundManager) {
+                    this.soundManager.playHurtSound();
+                }
 
                 // Play hurt animation
-                this.hurtSound.play();
                 this.tweens.add({
                     targets: this.playerSprite,
                     alpha: 0.5,
@@ -225,10 +353,22 @@ class BattleScene extends Phaser.Scene {
                 this.battleText.setText(`Enemy dealt ${damage} damage!`);
 
                 // Reset defense boost from defend action
-                gameData.playerDefense = 10;
+                if (this.defendActive) {
+                    if (window.gameStateManager) {
+                        const currentDefense = gameStateManager.getPlayerDefense();
+                        gameStateManager.setPlayerDefense(currentDefense - this.tempDefenseBoost);
+                    } else {
+                        gameData.playerDefense -= this.tempDefenseBoost;
+                    }
+                    this.defendActive = false;
+                    this.tempDefenseBoost = 0;
+                }
 
                 // Check if player is defeated
-                if (gameData.playerHealth <= 0) {
+                const playerHealth = window.gameStateManager ? 
+                    gameStateManager.getPlayerHealth() : gameData.playerHealth;
+
+                if (playerHealth <= 0) {
                     this.playerDefeated();
                 } else {
                     // Start player turn after a delay
@@ -240,8 +380,16 @@ class BattleScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Handles enemy defeat with victory animation and sound.
+     */
     enemyDefeated() {
         this.battleText.setText('Enemy defeated!');
+
+        // Play victory sound
+        if (this.soundManager) {
+            this.soundManager.playVictorySound();
+        }
 
         // Fade out enemy sprite
         this.tweens.add({
@@ -256,8 +404,16 @@ class BattleScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Handles player defeat with game over animation and sound.
+     */
     playerDefeated() {
         this.battleText.setText('You were defeated!');
+
+        // Play death sound
+        if (this.soundManager) {
+            this.soundManager.playDeathSound();
+        }
 
         // Fade out player sprite
         this.tweens.add({
@@ -272,6 +428,10 @@ class BattleScene extends Phaser.Scene {
         });
     }
 
+    /**
+     * Ends the battle and emits result to GameScene.
+     * @param {string} result - Battle result ('victory' or 'defeat')
+     */
     endBattle(result) {
         // Emit battle end event to game scene
         this.scene.get('GameScene').events.emit('battle-end', result);
@@ -281,3 +441,4 @@ class BattleScene extends Phaser.Scene {
         this.scene.stop();
     }
 }
+
