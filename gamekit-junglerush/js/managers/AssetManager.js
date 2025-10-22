@@ -413,3 +413,5 @@ class AssetManager {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = AssetManager;
 }
+// Make AssetManager globally available
+window.AssetManager = AssetManager;

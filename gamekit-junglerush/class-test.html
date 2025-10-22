@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Loading Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            color: white;
+            font-family: monospace;
+            padding: 20px;
+        }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+        .loading { color: #ff0; }
+    </style>
+</head>
+<body>
+    <h1>Class Loading Test</h1>
+    <div id="results">Loading...</div>
+
+    <!-- Load utilities first -->
+    <script src="js/utils/Constants.js"></script>
+    
+    <!-- Load config before managers -->
+    <script src="js/config.js"></script>
+    
+    <!-- Load managers after config -->
+    <script src="js/managers/GameStateManager.js"></script>
+    <script src="js/managers/AssetManager.js"></script>
+    <script src="js/managers/SoundManager.js"></script>
+    
+    <!-- Load entities -->
+    <script src="js/entities/Player.js"></script>
+    <script src="js/entities/Enemy.js"></script>
+    
+    <!-- Load scenes -->
+    <script src="js/scenes/BootScene.js"></script>
+    <script src="js/scenes/PreloadScene.js"></script>
+    <script src="js/scenes/GameScene.js"></script>
+    <script src="js/scenes/BattleScene.js"></script>
+    <script src="js/scenes/UIScene.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const results = document.getElementById('results');
+            let html = '<h2>Class Loading Results:</h2>';
+            
+            const requiredClasses = [
+                'Constants', 'GameConfig', 'GameStateManager', 'AssetManager', 'SoundManager',
+                'Player', 'Enemy', 'BootScene', 'PreloadScene', 'GameScene', 'BattleScene', 'UIScene'
+            ];
+            
+            let allLoaded = true;
+            
+            requiredClasses.forEach(className => {
+                const isLoaded = typeof window[className] !== 'undefined';
+                const status = isLoaded ? 'success' : 'error';
+                const symbol = isLoaded ? '✓' : '✗';
+                
+                html += `<div class="${status}">${symbol} ${className}: ${isLoaded ? 'LOADED' : 'MISSING'}</div>`;
+                
+                if (!isLoaded) allLoaded = false;
+            });
+            
+            html += '<br>';
+            if (allLoaded) {
+                html += '<div class="success"><h3>✓ ALL CLASSES LOADED SUCCESSFULLY!</h3></div>';
+                html += '<div>Ready to start the game!</div>';
+            } else {
+                html += '<div class="error"><h3>✗ SOME CLASSES FAILED TO LOAD</h3></div>';
+                html += '<div>Check browser console for errors.</div>';
+            }
+            
+            results.innerHTML = html;
+        });
+    </script>
+</body>
+</html>

@@ -110,3 +110,6 @@ class UIScene extends Phaser.Scene {
         this.hideActionButtons();
     }
 }
+
+// Make UIScene globally available
+window.UIScene = UIScene;

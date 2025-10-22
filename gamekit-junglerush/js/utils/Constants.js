@@ -277,3 +277,5 @@ const Constants = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Constants;
 }
+// Make Constants globally available
+window.Constants = Constants;

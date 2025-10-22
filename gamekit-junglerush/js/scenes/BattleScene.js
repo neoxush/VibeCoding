@@ -811,3 +811,6 @@ class BattleScene extends Phaser.Scene {
     }
 }
 
+// Make BattleScene globally available
+window.BattleScene = BattleScene;
+

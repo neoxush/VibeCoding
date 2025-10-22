@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Main Game with Minimal GameScene</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 1200px;
+            height: 800px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Loading game with minimal GameScene...</div>
+    <div id="game-container"></div>
+
+    <!-- Load utilities first -->
+    <script src="js/utils/Constants.js"></script>
+    
+    <!-- Load config before managers -->
+    <script src="js/config.js"></script>
+    
+    <!-- Load managers after config -->
+    <script src="js/managers/GameStateManager.js"></script>
+    <script src="js/managers/AssetManager.js"></script>
+    <script src="js/managers/SoundManager.js"></script>
+    
+    <!-- Load entities -->
+    <script src="js/entities/Player.js"></script>
+    <script src="js/entities/Enemy.js"></script>
+    
+    <!-- Load scenes -->
+    <script src="js/scenes/BootScene.js"></script>
+    <script src="js/scenes/PreloadScene.js"></script>
+    <script src="js/scenes/GameScene.js"></script>
+    <script src="js/scenes/BattleScene.js"></script>
+    <script src="js/scenes/UIScene.js"></script>
+    
+    <!-- Load main game initialization -->
+    <script src="js/main.js"></script>
+
+    <script>
+        const status = document.getElementById('status');
+        
+        function updateStatus(msg) {
+            console.log(msg);
+            status.innerHTML += '<br>' + msg;
+        }
+
+        // Monitor loading progress
+        updateStatus('Scripts loaded, waiting for DOM...');
+        
+        // Add error handling
+        window.addEventListener('error', function(e) {
+            updateStatus('ERROR: ' + e.message + ' in ' + e.filename);
+        });
+    </script>
+</body>
+</html>

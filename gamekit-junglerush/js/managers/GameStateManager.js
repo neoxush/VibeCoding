@@ -16,10 +16,15 @@ class GameStateManager {
      * Used when starting a new game or restarting after game over
      */
     reset() {
-        this._playerHealth = GameConfig.player.health;
-        this._playerMaxHealth = GameConfig.player.maxHealth;
-        this._playerAttack = GameConfig.player.attack;
-        this._playerDefense = GameConfig.player.defense;
+        // Use GameConfig if available, otherwise use default values
+        const config = (typeof GameConfig !== 'undefined') ? GameConfig : {
+            player: { health: 100, maxHealth: 100, attack: 20, defense: 10 }
+        };
+        
+        this._playerHealth = config.player.health;
+        this._playerMaxHealth = config.player.maxHealth;
+        this._playerAttack = config.player.attack;
+        this._playerDefense = config.player.defense;
         this._level = 1;
         this._score = 0;
         this._enemiesDefeated = 0;
@@ -262,8 +267,12 @@ class GameStateManager {
     }
 }
 
+// Make GameStateManager globally available
+window.GameStateManager = GameStateManager;
+
 // Create a singleton instance for global access
 const gameStateManager = new GameStateManager();
+window.gameStateManager = gameStateManager;
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {

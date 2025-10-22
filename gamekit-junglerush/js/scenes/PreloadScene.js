@@ -134,3 +134,6 @@ class PreloadScene extends Phaser.Scene {
         });
     }
 }
+
+// Make PreloadScene globally available
+window.PreloadScene = PreloadScene;

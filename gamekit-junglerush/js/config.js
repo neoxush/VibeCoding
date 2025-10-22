@@ -5,12 +5,12 @@
 
 const GameConfig = {
     // Game dimensions
-    width: 800,
-    height: 600,
+    width: 1200,
+    height: 800,
     
     // World dimensions
     worldWidth: 2400,
-    worldHeight: 600,
+    worldHeight: 800,
     
     // Physics settings
     physics: {
@@ -178,3 +178,5 @@ const GameConfig = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = GameConfig;
 }
+// Make GameConfig globally available
+window.GameConfig = GameConfig;

@@ -48,3 +48,5 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         }
     }
 }
+// Make Player globally available
+window.Player = Player;

@@ -20,8 +20,8 @@ class BootScene extends Phaser.Scene {
     create() {
         console.log('BootScene started');
 
-        // Display initial loading message
-        this.add.text(400, 300, 'Loading...', {
+        // Display initial loading message - centered for new canvas size
+        this.add.text(600, 400, 'Loading...', {
             fontSize: '32px',
             fill: '#fff'
         }).setOrigin(0.5);
@@ -30,3 +30,6 @@ class BootScene extends Phaser.Scene {
         this.scene.start('PreloadScene');
     }
 }
+
+// Make BootScene globally available
+window.BootScene = BootScene;

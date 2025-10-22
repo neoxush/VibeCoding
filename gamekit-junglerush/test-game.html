@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JungleRush - Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 1200px;
+            height: 800px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <script>
+        // Simple test scene
+        class TestScene extends Phaser.Scene {
+            constructor() {
+                super('TestScene');
+            }
+
+            create() {
+                console.log('Test scene loaded successfully!');
+                this.add.text(600, 400, 'Game Loading Test - SUCCESS!', {
+                    fontSize: '32px',
+                    fill: '#fff'
+                }).setOrigin(0.5);
+
+                this.add.text(600, 450, 'Canvas Size: 1200x800', {
+                    fontSize: '24px',
+                    fill: '#0f0'
+                }).setOrigin(0.5);
+            }
+        }
+
+        // Simple game config
+        const config = {
+            type: Phaser.AUTO,
+            width: 1200,
+            height: 800,
+            parent: 'game-container',
+            backgroundColor: '#87ceeb',
+            scene: [TestScene]
+        };
+
+        // Create the game
+        const game = new Phaser.Game(config);
+        console.log('Phaser game created');
+    </script>
+</body>
+</html>

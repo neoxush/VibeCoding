@@ -5,6 +5,8 @@
 - [x] 1. Create configuration file
 
 
+
+
   - Create js/config.js with game constants (dimensions, physics settings, default stats, enemy configurations)
   - Extract configuration values from game.html inline code
   - _Requirements: 1.3, 9.2_
@@ -126,7 +128,10 @@
   - Add JSDoc comments for all methods
   - _Requirements: 1.2, 5.2, 5.3, 9.1_
 
-- [ ] 13. Refactor Enemy entity class
+- [x] 13. Refactor Enemy entity class
+
+
+
   - Update js/entities/Enemy.js to use pre-generated 'slime' and 'goblin' textures from AssetManager
   - Remove inline texture generation from constructor
   - Extract complete Enemy implementation from game.html inline code
