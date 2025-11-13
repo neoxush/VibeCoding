@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameScene Loading Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            color: white;
+            font-family: monospace;
+            padding: 20px;
+        }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+    </style>
+</head>
+<body>
+    <h1>GameScene Loading Test</h1>
+    <div id="results">Loading dependencies...</div>
+
+    <!-- Load dependencies in order -->
+    <script src="js/utils/Constants.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/managers/GameStateManager.js"></script>
+    <script src="js/managers/AssetManager.js"></script>
+    <script src="js/managers/SoundManager.js"></script>
+    <script src="js/entities/Player.js"></script>
+    <script src="js/entities/Enemy.js"></script>
+
+    <script>
+        const results = document.getElementById('results');
+        
+        function updateResults(message, isError = false) {
+            console.log(message);
+            results.innerHTML += '<div class="' + (isError ? 'error' : 'success') + '">' + message + '</div>';
+        }
+
+        // Check dependencies first
+        const dependencies = ['Constants', 'GameConfig', 'GameStateManager', 'AssetManager', 'SoundManager', 'Player', 'Enemy'];
+        let allDepsLoaded = true;
+
+        dependencies.forEach(dep => {
+            if (typeof window[dep] !== 'undefined') {
+                updateResults('✓ ' + dep + ' loaded');
+            } else {
+                updateResults('✗ ' + dep + ' missing', true);
+                allDepsLoaded = false;
+            }
+        });
+
+        if (allDepsLoaded) {
+            updateResults('All dependencies loaded, now loading GameScene...');
+            
+            // Load GameScene
+            const script = document.createElement('script');
+            script.src = 'js/scenes/GameScene.js';
+            script.onload = function() {
+                if (typeof window.GameScene !== 'undefined') {
+                    updateResults('✓ GameScene loaded successfully!');
+                    updateResults('GameScene type: ' + typeof window.GameScene);
+                    
+                    // Try to create an instance
+                    try {
+                        const testScene = new window.GameScene();
+                        updateResults('✓ GameScene instance created successfully!');
+                    } catch (error) {
+                        updateResults('✗ Error creating GameScene instance: ' + error.message, true);
+                    }
+                } else {
+                    updateResults('✗ GameScene still not available after loading', true);
+                }
+            };
+            script.onerror = function() {
+                updateResults('✗ Failed to load GameScene.js', true);
+            };
+            document.head.appendChild(script);
+        } else {
+            updateResults('Cannot load GameScene due to missing dependencies', true);
+        }
+    </script>
+</body>
+</html>

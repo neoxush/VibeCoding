@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JungleRush - Modular Version (Test)</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 1200px;
+            height: 800px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            position: relative;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        @media (max-width: 1220px) {
+            #game-container {
+                width: 100%;
+                height: auto;
+                aspect-ratio: 3/2;
+            }
+        }
+        @media (max-height: 820px) {
+            #game-container {
+                height: 100vh;
+                width: auto;
+                aspect-ratio: 3/2;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <!-- Load utilities first -->
+    <script src="js/utils/Constants.js"></script>
+    
+    <!-- Load config before managers -->
+    <script src="js/config.js"></script>
+    
+    <!-- Load managers after config -->
+    <script src="js/managers/GameStateManager.js"></script>
+    <script src="js/managers/AssetManager.js"></script>
+    <script src="js/managers/SoundManager.js"></script>
+    
+    <!-- Load entities -->
+    <script src="js/entities/Player.js"></script>
+    <script src="js/entities/Enemy.js"></script>
+    
+    <!-- Load scenes -->
+    <script src="js/scenes/BootScene.js"></script>
+    <script src="js/scenes/PreloadScene.js"></script>
+    <script src="js/scenes/GameScene.js"></script>
+    <script src="js/scenes/BattleScene.js"></script>
+    <script src="js/scenes/UIScene.js"></script>
+    
+    <!-- Load main game initialization -->
+    <script src="js/main.js"></script>
+    
+    <!-- Fallback error display -->
+    <script>
+        // Add error handling for script loading failures
+        window.addEventListener('error', function(e) {
+            console.error('Script loading error:', e.filename, e.message);
+            const container = document.getElementById('game-container');
+            if (container && !container.querySelector('canvas')) {
+                container.innerHTML = '<div style="color: white; padding: 20px; text-align: center;">' +
+                    '<h2>Loading Error</h2>' +
+                    '<p>Failed to load: ' + (e.filename || 'Unknown file') + '</p>' +
+                    '<p>Error: ' + e.message + '</p>' +
+                    '<p>Please check the browser console for more details.</p>' +
+                    '</div>';
+            }
+        });
+        
+        // Timeout fallback
+        setTimeout(function() {
+            const container = document.getElementById('game-container');
+            if (container && !container.querySelector('canvas')) {
+                console.warn('Game did not start within 5 seconds');
+                container.innerHTML = '<div style="color: white; padding: 20px; text-align: center;">' +
+                    '<h2>Loading Timeout</h2>' +
+                    '<p>The game is taking longer than expected to load.</p>' +
+                    '<p>Please check the browser console for errors.</p>' +
+                    '<p>Try refreshing the page.</p>' +
+                    '</div>';
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "webgl-typing-game",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "jest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "three": "^0.158.0",
+    "three-stdlib": "^2.28.9"
+  },
+  "devDependencies": {
+    "@types/three": "^0.158.3",
+    "typescript": "^5.0.2",
+    "vite": "^4.4.5",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "ts-jest": "^29.1.1",
+    "playwright": "^1.40.0"
+  }
+}

@@ -1,0 +1,368 @@
+/* ASCII Icon Button System
+ * This file defines styles for action buttons with ASCII icons
+ * instead of SVG graphics or emojis
+ */
+
+/* Base button style */
+.ascii-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* ASCII icon container */
+.ascii-icon {
+    display: inline-block;
+    font-family: monospace;
+    font-weight: bold;
+    margin-right: 0.5rem;
+    font-size: 1rem;
+    width: 1.25rem;
+    text-align: center;
+}
+
+/* Button color variants */
+.ascii-btn-primary {
+    background-color: #3B82F6;
+    color: white;
+    border-color: #2563EB;
+}
+
+.ascii-btn-primary:hover {
+    background-color: #2563EB;
+}
+
+.ascii-btn-success {
+    background-color: #10B981;
+    color: white;
+    border-color: #059669;
+}
+
+.ascii-btn-success:hover {
+    background-color: #059669;
+}
+
+.ascii-btn-danger {
+    background-color: #EF4444;
+    color: white;
+    border-color: #DC2626;
+}
+
+.ascii-btn-danger:hover {
+    background-color: #DC2626;
+}
+
+.ascii-btn-warning {
+    background-color: #F59E0B;
+    color: white;
+    border-color: #D97706;
+}
+
+.ascii-btn-warning:hover {
+    background-color: #D97706;
+}
+
+.ascii-btn-info {
+    background-color: #3B82F6;
+    color: white;
+    border-color: #2563EB;
+}
+
+.ascii-btn-info:hover {
+    background-color: #2563EB;
+}
+
+.ascii-btn-secondary {
+    background-color: #6B7280;
+    color: white;
+    border-color: #4B5563;
+}
+
+.ascii-btn-secondary:hover {
+    background-color: #4B5563;
+}
+
+/* Light variants */
+.ascii-btn-light-primary {
+    background-color: #EFF6FF;
+    color: #2563EB;
+    border-color: #BFDBFE;
+}
+
+.ascii-btn-light-primary:hover {
+    background-color: #DBEAFE;
+}
+
+.ascii-btn-light-success {
+    background-color: #ECFDF5;
+    color: #059669;
+    border-color: #A7F3D0;
+}
+
+.ascii-btn-light-success:hover {
+    background-color: #D1FAE5;
+}
+
+.ascii-btn-light-danger {
+    background-color: #FEF2F2;
+    color: #DC2626;
+    border-color: #FECACA;
+}
+
+.ascii-btn-light-danger:hover {
+    background-color: #FEE2E2;
+}
+
+.ascii-btn-light-warning {
+    background-color: #FFFBEB;
+    color: #D97706;
+    border-color: #FDE68A;
+}
+
+.ascii-btn-light-warning:hover {
+    background-color: #FEF3C7;
+}
+
+.ascii-btn-light-info {
+    background-color: #EFF6FF;
+    color: #2563EB;
+    border-color: #BFDBFE;
+}
+
+.ascii-btn-light-info:hover {
+    background-color: #DBEAFE;
+}
+
+.ascii-btn-light-secondary {
+    background-color: #F3F4F6;
+    color: #4B5563;
+    border-color: #E5E7EB;
+}
+
+.ascii-btn-light-secondary:hover {
+    background-color: #E5E7EB;
+}
+
+/* Button sizes */
+.ascii-btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.ascii-btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}
+
+/* Disabled state */
+.ascii-btn:disabled,
+.ascii-btn.disabled {
+    opacity: 0.65;
+    pointer-events: none;
+}
+
+/* Loading state */
+.ascii-btn.loading {
+    position: relative;
+    color: transparent !important;
+}
+
+.ascii-btn.loading::after {
+    content: "";
+    position: absolute;
+    width: 1rem;
+    height: 1rem;
+    top: calc(50% - 0.5rem);
+    left: calc(50% - 0.5rem);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Action-specific buttons with ASCII icons */
+/* View */
+.ascii-btn-view .ascii-icon::before {
+    content: "[>]";
+}
+
+/* Edit */
+.ascii-btn-edit .ascii-icon::before {
+    content: "[/]";
+}
+
+/* Delete */
+.ascii-btn-delete .ascii-icon::before {
+    content: "[X]";
+}
+
+/* Approve */
+.ascii-btn-approve .ascii-icon::before {
+    content: "[✓]";
+}
+
+/* Reject */
+.ascii-btn-reject .ascii-icon::before {
+    content: "[✗]";
+}
+
+/* Submit */
+.ascii-btn-submit .ascii-icon::before {
+    content: "[>]";
+}
+
+/* Close */
+.ascii-btn-close .ascii-icon::before {
+    content: "[#]";
+}
+
+/* Comment */
+.ascii-btn-comment .ascii-icon::before {
+    content: "[:]";
+}
+
+/* Refresh */
+.ascii-btn-refresh .ascii-icon::before {
+    content: "[O]";
+}
+
+/* Add */
+.ascii-btn-add .ascii-icon::before {
+    content: "[+]";
+}
+
+/* Remove */
+.ascii-btn-remove .ascii-icon::before {
+    content: "[-]";
+}
+
+/* Save */
+.ascii-btn-save .ascii-icon::before {
+    content: "[S]";
+}
+
+/* Cancel */
+.ascii-btn-cancel .ascii-icon::before {
+    content: "[C]";
+}
+
+/* Back */
+.ascii-btn-back .ascii-icon::before {
+    content: "[<]";
+}
+
+/* Forward */
+.ascii-btn-forward .ascii-icon::before {
+    content: "[>]";
+}
+
+/* Upload */
+.ascii-btn-upload .ascii-icon::before {
+    content: "[^]";
+}
+
+/* Download */
+.ascii-btn-download .ascii-icon::before {
+    content: "[v]";
+}
+
+/* Search */
+.ascii-btn-search .ascii-icon::before {
+    content: "[?]";
+}
+
+/* Filter */
+.ascii-btn-filter .ascii-icon::before {
+    content: "[=]";
+}
+
+/* Sort */
+.ascii-btn-sort .ascii-icon::before {
+    content: "[|]";
+}
+
+/* Settings */
+.ascii-btn-settings .ascii-icon::before {
+    content: "[*]";
+}
+
+/* User */
+.ascii-btn-user .ascii-icon::before {
+    content: "[U]";
+}
+
+/* Admin */
+.ascii-btn-admin .ascii-icon::before {
+    content: "[A]";
+}
+
+/* Lock */
+.ascii-btn-lock .ascii-icon::before {
+    content: "[L]";
+}
+
+/* Unlock */
+.ascii-btn-unlock .ascii-icon::before {
+    content: "[U]";
+}
+
+/* Info */
+.ascii-btn-info .ascii-icon::before {
+    content: "[i]";
+}
+
+/* Warning */
+.ascii-btn-warning .ascii-icon::before {
+    content: "[!]";
+}
+
+/* Error */
+.ascii-btn-error .ascii-icon::before {
+    content: "[!]";
+}
+
+/* Success */
+.ascii-btn-success .ascii-icon::before {
+    content: "[✓]";
+}
+
+/* Help */
+.ascii-btn-help .ascii-icon::before {
+    content: "[?]";
+}
+
+/* Button group */
+.ascii-btn-group {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .ascii-btn {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.8125rem;
+    }
+    
+    .ascii-btn-group {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .ascii-btn-group .ascii-btn {
+        width: 100%;
+    }
+}

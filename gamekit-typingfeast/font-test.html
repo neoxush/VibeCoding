@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Font Test - 3D Letters</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            z-index: 100;
+        }
+        
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>3D Font Test</h3>
+        <p>Testing A-Z letter rendering with clean fonts</p>
+    </div>
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
+        import { FontLoader } from 'https://unpkg.com/three@0.158.0/examples/jsm/loaders/FontLoader.js';
+        import { TextGeometry } from 'https://unpkg.com/three@0.158.0/examples/jsm/geometries/TextGeometry.js';
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Background
+        scene.background = new THREE.Color(0x0f0f23);
+        scene.fog = new THREE.Fog(0x0f0f23, 20, 50);
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(50, 50);
+        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x1a1a2e });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -5;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Camera position
+        camera.position.set(0, 5, 15);
+        camera.lookAt(0, 0, 0);
+
+        // Materials
+        const letterMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xffffff,
+            transparent: false,
+            opacity: 1.0
+        });
+
+        const fallingLetters = [];
+
+        // Create letters without font loading (using simple approach)
+        function createSimpleLetter(letter, position) {
+            // Create a simple but clean letter using CSS-like rendering
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = 128;
+            canvas.height = 128;
+            
+            // Style the text
+            context.fillStyle = 'white';
+            context.font = 'bold 100px Arial';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            
+            // Draw the letter
+            context.fillText(letter, 64, 64);
+            
+            // Create texture from canvas
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            
+            // Create material with the texture
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            
+            // Create geometry (simple plane)
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            const mesh = new THREE.Mesh(geometry, material);
+            
+            mesh.position.copy(position);
+            mesh.castShadow = true;
+            
+            return mesh;
+        }
+
+        // Create falling letters
+        function spawnLetter() {
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const letter = letters[Math.floor(Math.random() * letters.length)];
+            
+            const x = (Math.random() - 0.5) * 20;
+            const y = 10;
+            const z = (Math.random() - 0.5) * 5;
+            
+            const position = new THREE.Vector3(x, y, z);
+            const letterMesh = createSimpleLetter(letter, position);
+            
+            scene.add(letterMesh);
+            
+            fallingLetters.push({
+                mesh: letterMesh,
+                fallSpeed: 1 + Math.random() * 0.5
+            });
+        }
+
+        // Spawn initial letters
+        for (let i = 0; i < 5; i++) {
+            setTimeout(() => spawnLetter(), i * 1000);
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update falling letters
+            fallingLetters.forEach((letterObj, index) => {
+                letterObj.mesh.position.y -= letterObj.fallSpeed * 0.016;
+                
+                // Remove letters that hit the ground
+                if (letterObj.mesh.position.y < -4) {
+                    scene.remove(letterObj.mesh);
+                    letterObj.mesh.geometry.dispose();
+                    letterObj.mesh.material.dispose();
+                    fallingLetters.splice(index, 1);
+                }
+            });
+            
+            // Spawn new letters occasionally
+            if (Math.random() < 0.01 && fallingLetters.length < 10) {
+                spawnLetter();
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>

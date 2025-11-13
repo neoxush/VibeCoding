@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JungleRush - Debug</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 1200px;
+            height: 800px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        #debug-log {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="debug-log">Loading debug info...<br></div>
+    <div id="game-container"></div>
+
+    <script>
+        const debugLog = document.getElementById('debug-log');
+        function log(message) {
+            console.log(message);
+            debugLog.innerHTML += message + '<br>';
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+
+        log('1. Starting debug...');
+
+        // Load scripts one by one and test
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => {
+                    log(`✓ Loaded: ${src}`);
+                    resolve();
+                };
+                script.onerror = () => {
+                    log(`✗ Failed: ${src}`);
+                    reject(new Error(`Failed to load ${src}`));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        async function loadGameFiles() {
+            try {
+                log('2. Loading utilities...');
+                await loadScript('js/utils/Constants.js');
+                
+                log('3. Loading config...');
+                await loadScript('js/config.js');
+                
+                log('4. Loading managers...');
+                await loadScript('js/managers/GameStateManager.js');
+                await loadScript('js/managers/AssetManager.js');
+                await loadScript('js/managers/SoundManager.js');
+                
+                log('5. Loading entities...');
+                await loadScript('js/entities/Player.js');
+                await loadScript('js/entities/Enemy.js');
+                
+                log('6. Loading scenes...');
+                await loadScript('js/scenes/BootScene.js');
+                await loadScript('js/scenes/PreloadScene.js');
+                await loadScript('js/scenes/GameScene.js');
+                await loadScript('js/scenes/BattleScene.js');
+                await loadScript('js/scenes/UIScene.js');
+                
+                log('7. Loading main...');
+                await loadScript('js/main.js');
+                
+                log('8. All files loaded successfully!');
+                
+            } catch (error) {
+                log(`ERROR: ${error.message}`);
+            }
+        }
+
+        loadGameFiles();
+    </script>
+</body>
+</html>
