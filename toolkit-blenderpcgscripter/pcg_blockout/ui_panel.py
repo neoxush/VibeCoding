@@ -327,6 +327,42 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         
         layout.separator()
         
+        # Road Mode Section
+        box = layout.box()
+        
+        # Header with mode indicator
+        row = box.row()
+        if props.road_mode_enabled:
+            row.label(text="Road Mode", icon='CHECKMARK')
+        else:
+            row.label(text="Road Mode", icon='DRIVER_DISTANCE')
+        
+        # Prominent toggle button
+        row = box.row()
+        row.scale_y = 1.5  # Make button bigger
+        if props.road_mode_enabled:
+            row.prop(props, "road_mode_enabled", text="Road Mode: ON", toggle=True, icon='CHECKMARK')
+        else:
+            row.prop(props, "road_mode_enabled", text="Road Mode: OFF", toggle=True, icon='CHECKBOX_DEHLT')
+        
+        if props.road_mode_enabled:
+            box.separator()
+            
+            # Road parameters
+            box.prop(props, "road_width")
+            box.prop(props, "side_placement")
+            
+            # Visual hints
+            box.separator()
+            col = box.column(align=True)
+            col.label(text="→ Buildings on path sides", icon='INFO')
+            col.label(text="→ Clear path in center", icon='INFO')
+        else:
+            # Show what standard mode does
+            box.label(text="Standard: spaces centered on path", icon='DOT')
+        
+        layout.separator()
+        
         # Layout Parameters Section
         box = layout.box()
         box.label(text="Layout Parameters", icon='OUTLINER')

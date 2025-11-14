@@ -50,48 +50,166 @@ class LayoutGenerator:
         spaces = []
         
         for i, point in enumerate(self.spline_points):
-            # Calculate space size with variation
-            base_size = self.params.path_width * 0.5
+            if self.params.road_mode_enabled:
+                # Road mode: create spaces on sides
+                side_spaces = self._create_road_side_spaces(point, i)
+                spaces.extend(side_spaces)
+            else:
+                # Standard mode: create centered space
+                space = self._create_centered_space(point, i)
+                spaces.append(space)
+        
+        # Connect spaces sequentially
+        for i in range(len(spaces) - 1):
+            spaces[i].connections.append(spaces[i + 1].id)
+            spaces[i + 1].connections.append(spaces[i].id)
+        
+        return spaces
+    
+    def _create_centered_space(self, point: SplinePoint, index: int) -> Space:
+        """
+        Create a single space centered on the spline point (standard mode).
+        
+        Args:
+            point: Spline point to create space at
+            index: Index of this point along the spline
+        
+        Returns:
+            Created Space object
+        """
+        # Calculate space size with variation
+        base_size = self.params.path_width * 0.5
+        variation = self.params.space_size_variation
+        
+        # Apply variation based on position and randomness
+        size_factor = 1.0 + (random.random() * 2.0 - 1.0) * variation
+        width = base_size * size_factor
+        depth = base_size * size_factor
+        height = self.params.wall_height
+        
+        # Determine space type based on position
+        rand_val = random.random()
+        if rand_val < 0.3:
+            space_type = "enclosed"
+        elif rand_val < 0.7:
+            space_type = "semi_open"
+        else:
+            space_type = "open"
+        
+        # Calculate orientation from tangent and normal
+        orientation = self._calculate_orientation(point.tangent, point.normal)
+        
+        # Create space
+        space = Space(
+            id=self.next_space_id,
+            position=point.position.copy(),
+            size=mathutils.Vector((width, depth, height)),
+            type=space_type,
+            orientation=orientation,
+            connections=[]
+        )
+        
+        self.next_space_id += 1
+        return space
+    
+    def _create_road_side_spaces(self, point: SplinePoint, index: int) -> List[Space]:
+        """
+        Create spaces on the sides of the road (road mode).
+        
+        Args:
+            point: Spline point to create spaces at
+            index: Index of this point along the spline
+        
+        Returns:
+            List of created Space objects (1 or 2 depending on side_placement)
+        """
+        spaces = []
+        
+        # Calculate orientation from tangent and normal
+        orientation = self._calculate_orientation(point.tangent, point.normal)
+        
+        # Get perpendicular direction (right vector)
+        right_vector = orientation @ mathutils.Vector((1, 0, 0))
+        
+        # Determine which sides to place spaces on
+        sides_to_generate = self._get_sides_for_index(index)
+        
+        for side in sides_to_generate:
+            # Calculate base offset position
+            base_offset_distance = self.params.road_width / 2 + self.params.path_width / 4
+            
+            # Add random variation to offset distance (push some further from road)
+            offset_variation = random.uniform(0.8, 1.4)
+            offset_distance = base_offset_distance * offset_variation
+            
+            if side == "left":
+                offset_vector = -right_vector * offset_distance
+            else:  # right
+                offset_vector = right_vector * offset_distance
+            
+            # Add random perpendicular offset (along the road direction)
+            forward_offset = point.tangent.normalized() * random.uniform(-1.5, 1.5)
+            
+            position = point.position + offset_vector + forward_offset
+            
+            # Calculate space size with MORE variation for random look
+            base_size = self.params.path_width * 0.4
             variation = self.params.space_size_variation
             
-            # Apply variation based on position and randomness
-            size_factor = 1.0 + (random.random() * 2.0 - 1.0) * variation
-            width = base_size * size_factor
-            depth = base_size * size_factor
-            height = self.params.wall_height
+            # Random width and depth (can be different)
+            width_factor = 1.0 + (random.random() * 2.0 - 1.0) * variation
+            depth_factor = 1.0 + (random.random() * 2.0 - 1.0) * variation
             
-            # Determine space type based on position
-            # Vary types along the path for interest
+            width = base_size * width_factor * random.uniform(0.7, 1.5)
+            depth = base_size * depth_factor * random.uniform(0.7, 1.5)
+            height = self.params.wall_height * random.uniform(0.8, 1.3)
+            
+            # Determine space type
             rand_val = random.random()
-            if rand_val < 0.3:
+            if rand_val < 0.4:
                 space_type = "enclosed"
-            elif rand_val < 0.7:
+            elif rand_val < 0.8:
                 space_type = "semi_open"
             else:
                 space_type = "open"
             
-            # Calculate orientation from tangent and normal
-            orientation = self._calculate_orientation(point.tangent, point.normal)
-            
             # Create space
             space = Space(
                 id=self.next_space_id,
-                position=point.position.copy(),
+                position=position,
                 size=mathutils.Vector((width, depth, height)),
                 type=space_type,
                 orientation=orientation,
                 connections=[]
             )
             
-            # Connect to previous space
-            if i > 0:
-                space.connections.append(spaces[-1].id)
-                spaces[-1].connections.append(space.id)
-            
             spaces.append(space)
             self.next_space_id += 1
         
         return spaces
+    
+    def _get_sides_for_index(self, index: int) -> List[str]:
+        """
+        Determine which sides to generate spaces on for this index.
+        
+        Args:
+            index: Index of the current point along the spline
+        
+        Returns:
+            List of sides: ["left"], ["right"], or ["left", "right"]
+        """
+        placement = self.params.side_placement
+        
+        if placement == "left":
+            return ["left"]
+        elif placement == "right":
+            return ["right"]
+        elif placement == "both":
+            return ["left", "right"]
+        elif placement == "alternating":
+            return ["left"] if index % 2 == 0 else ["right"]
+        else:
+            return ["left", "right"]  # Default to both
     
     def _calculate_orientation(self, tangent: mathutils.Vector, normal: mathutils.Vector) -> mathutils.Quaternion:
         """

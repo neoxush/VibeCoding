@@ -225,47 +225,108 @@ class PreviewManager:
         random.seed(seed_to_use)
         
         print(f"Preview using seed: {seed_to_use}")
+        print(f"Preview road mode: {self.params.road_mode_enabled}")
         
         # Simulate the layout generation to show accurate previews
         for i, point in enumerate(points):
-            # Calculate space size with variation (matching layout_generator logic)
-            base_size = self.params.path_width * 0.5
-            variation = self.params.space_size_variation
+            if self.params.road_mode_enabled:
+                # Road mode: create previews on sides
+                self._create_road_side_previews(point, i, random)
+            else:
+                # Standard mode: create centered preview
+                self._create_centered_preview(point, i, random)
+    
+    def _create_centered_preview(self, point: SplinePoint, index: int, random_module):
+        """Create a single centered preview box (standard mode)."""
+        # Calculate space size with variation (matching layout_generator logic)
+        base_size = self.params.path_width * 0.5
+        variation = self.params.space_size_variation
+        
+        # Apply variation based on position and randomness
+        size_factor = 1.0 + (random_module.random() * 2.0 - 1.0) * variation
+        width = base_size * size_factor
+        depth = base_size * size_factor
+        height = self.params.wall_height
+        
+        # Determine space type (matching layout_generator logic)
+        rand_val = random_module.random()
+        if rand_val < 0.3:
+            space_type = "enclosed"
+            color = (1.0, 0.2, 0.2, 1.0)  # Red
+        elif rand_val < 0.7:
+            space_type = "semi_open"
+            color = (1.0, 1.0, 0.2, 1.0)  # Yellow
+        else:
+            space_type = "open"
+            color = (0.2, 1.0, 0.2, 1.0)  # Green
+        
+        # Calculate orientation from tangent and normal
+        orientation = self._calculate_orientation_quat(point.tangent, point.normal)
+        
+        # Create wireframe box at this location
+        self._create_wireframe_box(
+            position=point.position,
+            size=(width, depth, height),
+            orientation=orientation,
+            color=color,
+            name=f"Space_{index:03d}",
+            space_type=space_type
+        )
+    
+    def _create_road_side_previews(self, point: SplinePoint, index: int, random_module):
+        """Create preview boxes on the sides of the road (road mode)."""
+        # Calculate orientation
+        orientation = self._calculate_orientation_quat(point.tangent, point.normal)
+        right_vector = orientation @ mathutils.Vector((1, 0, 0))
+        
+        # Determine which sides to show
+        sides = self._get_preview_sides_for_index(index)
+        
+        for side in sides:
+            # Calculate offset position
+            offset_distance = self.params.road_width / 2 + self.params.path_width / 4
             
-            # Apply variation based on position and randomness
-            size_factor = 1.0 + (random.random() * 2.0 - 1.0) * variation
+            if side == "left":
+                offset_vector = -right_vector * offset_distance
+                color = (0.2, 0.5, 1.0, 1.0)  # Blue for left
+            else:  # right
+                offset_vector = right_vector * offset_distance
+                color = (1.0, 0.5, 0.2, 1.0)  # Orange for right
+            
+            position = point.position + offset_vector
+            
+            # Calculate space size
+            base_size = self.params.path_width * 0.4
+            variation = self.params.space_size_variation
+            size_factor = 1.0 + (random_module.random() * 2.0 - 1.0) * variation
             width = base_size * size_factor
             depth = base_size * size_factor
             height = self.params.wall_height
             
-            # Determine space type (matching layout_generator logic)
-            rand_val = random.random()
-            if rand_val < 0.3:
-                space_type = "enclosed"
-                color = (1.0, 0.2, 0.2, 1.0)  # Red
-            elif rand_val < 0.7:
-                space_type = "semi_open"
-                color = (1.0, 1.0, 0.2, 1.0)  # Yellow
-            else:
-                space_type = "open"
-                color = (0.2, 1.0, 0.2, 1.0)  # Green
-            
-            # Calculate orientation from tangent and normal
-            orientation = self._calculate_orientation_quat(point.tangent, point.normal)
-            
-            # Create wireframe box at this location
+            # Create wireframe box
             self._create_wireframe_box(
-                position=point.position,
+                position=position,
                 size=(width, depth, height),
                 orientation=orientation,
                 color=color,
-                name=f"Space_{i:03d}",
-                space_type=space_type
+                name=f"Space_{index:03d}_{side}",
+                space_type="road_side"
             )
+    
+    def _get_preview_sides_for_index(self, index: int) -> list:
+        """Determine which sides to preview for this index."""
+        placement = self.params.side_placement
         
-        # Add lateral spaces preview if lateral_density > 0
-        if self.params.lateral_density > 0:
-            self._create_lateral_space_previews(points)
+        if placement == "left":
+            return ["left"]
+        elif placement == "right":
+            return ["right"]
+        elif placement == "both":
+            return ["left", "right"]
+        elif placement == "alternating":
+            return ["left"] if index % 2 == 0 else ["right"]
+        else:
+            return ["left", "right"]
     
     def _calculate_orientation_quat(self, tangent: mathutils.Vector, normal: mathutils.Vector) -> mathutils.Quaternion:
         """

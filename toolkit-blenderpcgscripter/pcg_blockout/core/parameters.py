@@ -29,6 +29,11 @@ class GenerationParams:
     height_variation: float = 10.0  # Maximum terrain height variation in meters
     smoothness: float = 0.5  # Terrain smoothness (0.0-1.0)
     terrain_width: float = 50.0  # Width of terrain around spline
+    
+    # Road mode parameters
+    road_mode_enabled: bool = False  # Enable road mode (buildings on sides)
+    road_width: float = 10.0  # Width of clear path in road mode
+    side_placement: str = "both"  # "left", "right", "both", "alternating"
 
 
 class PCG_PropertyGroup(bpy.types.PropertyGroup):
@@ -45,7 +50,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     spacing: bpy.props.FloatProperty(
         name="Spacing",
         description="Distance between spaces along the spline path",
-        default=10.0,
+        default=3.0,
         min=1.0,
         max=100.0,
         unit='LENGTH'
@@ -54,7 +59,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     path_width: bpy.props.FloatProperty(
         name="Path Width",
         description="Width of the generation area around the spline",
-        default=20.0,
+        default=8.0,
         min=5.0,
         max=100.0,
         unit='LENGTH'
@@ -64,7 +69,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     lateral_density: bpy.props.FloatProperty(
         name="Lateral Density",
         description="How many spaces branch off the main path (0.0 = none, 1.0 = maximum)",
-        default=0.5,
+        default=0.0,
         min=0.0,
         max=1.0,
         subtype='FACTOR'
@@ -73,7 +78,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     space_size_variation: bpy.props.FloatProperty(
         name="Space Size Variation",
         description="Amount of variation in space sizes (0.0 = uniform, 1.0 = maximum variation)",
-        default=0.3,
+        default=0.6,
         min=0.0,
         max=1.0,
         subtype='FACTOR'
@@ -99,7 +104,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     wall_height: bpy.props.FloatProperty(
         name="Wall Height",
         description="Default height for wall blocks",
-        default=3.0,
+        default=4.0,
         min=1.0,
         max=20.0,
         unit='LENGTH'
@@ -140,7 +145,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     height_variation: bpy.props.FloatProperty(
         name="Height Variation",
         description="Maximum terrain height variation",
-        default=10.0,
+        default=2.0,
         min=0.0,
         max=50.0,
         unit='LENGTH'
@@ -149,7 +154,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     smoothness: bpy.props.FloatProperty(
         name="Smoothness",
         description="Terrain smoothness (0.0 = rough, 1.0 = smooth)",
-        default=0.5,
+        default=0.8,
         min=0.0,
         max=1.0,
         subtype='FACTOR'
@@ -177,6 +182,34 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
         default=False  # Disabled by default since it can be confusing
     )
     
+    # Road mode parameters
+    road_mode_enabled: bpy.props.BoolProperty(
+        name="Road Mode",
+        description="Generate buildings on sides of path instead of centered",
+        default=True
+    )
+    
+    road_width: bpy.props.FloatProperty(
+        name="Road Width",
+        description="Width of clear path in road mode",
+        default=8.0,
+        min=2.0,
+        max=50.0,
+        unit='LENGTH'
+    )
+    
+    side_placement: bpy.props.EnumProperty(
+        name="Side",
+        description="Which side(s) to place buildings on",
+        items=[
+            ('LEFT', "Left", "Place buildings on left side only"),
+            ('RIGHT', "Right", "Place buildings on right side only"),
+            ('BOTH', "Both", "Place buildings on both sides"),
+            ('ALTERNATING', "Alternating", "Alternate between left and right")
+        ],
+        default='BOTH'
+    )
+    
     def to_generation_params(self) -> GenerationParams:
         """Convert PropertyGroup to GenerationParams dataclass."""
         block_types = set()
@@ -202,7 +235,10 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
             terrain_enabled=self.terrain_enabled,
             height_variation=self.height_variation,
             smoothness=self.smoothness,
-            terrain_width=self.terrain_width
+            terrain_width=self.terrain_width,
+            road_mode_enabled=self.road_mode_enabled,
+            road_width=self.road_width,
+            side_placement=self.side_placement.lower()
         )
 
 

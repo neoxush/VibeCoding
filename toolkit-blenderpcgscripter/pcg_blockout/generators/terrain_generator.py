@@ -246,6 +246,60 @@ class TerrainGenerator:
         
         return heightmap
     
+    def create_road_surface(self, heightmap: List[List[float]], 
+                           bounds: Tuple[float, float, float, float]) -> List[List[float]]:
+        """
+        Create a flat road surface along the spline path (for road mode).
+        
+        Args:
+            heightmap: The heightmap to modify
+            bounds: (min_x, max_x, min_y, max_y) terrain boundaries
+        
+        Returns:
+            Modified heightmap with flat road surface
+        """
+        if not self.params.road_mode_enabled:
+            return heightmap
+        
+        min_x, max_x, min_y, max_y = bounds
+        rows = len(heightmap)
+        cols = len(heightmap[0]) if rows > 0 else 0
+        
+        road_width = self.params.road_width
+        
+        for i in range(rows):
+            for j in range(cols):
+                # Calculate world position of this cell
+                world_x = min_x + (j / (cols - 1)) * (max_x - min_x) if cols > 1 else min_x
+                world_y = min_y + (i / (rows - 1)) * (max_y - min_y) if rows > 1 else min_y
+                cell_pos = mathutils.Vector((world_x, world_y, 0))
+                
+                # Find nearest spline point and distance
+                min_dist = float('inf')
+                nearest_height = 0.0
+                
+                for point in self.spline_points:
+                    # Calculate 2D distance (ignore Z)
+                    dist_2d = math.sqrt(
+                        (point.position.x - cell_pos.x)**2 + 
+                        (point.position.y - cell_pos.y)**2
+                    )
+                    
+                    if dist_2d < min_dist:
+                        min_dist = dist_2d
+                        nearest_height = point.position.z
+                
+                # Flatten road surface
+                if min_dist < road_width / 2:
+                    # Inside road - completely flat at spline elevation
+                    heightmap[i][j] = nearest_height
+                elif min_dist < road_width:
+                    # Road edge - blend smoothly to terrain
+                    blend_factor = (min_dist - road_width / 2) / (road_width / 2)
+                    heightmap[i][j] = nearest_height * (1 - blend_factor) + heightmap[i][j] * blend_factor
+        
+        return heightmap
+    
     def generate(self, spaces: List = None) -> Optional[bpy.types.Object]:
         """
         Orchestrate the full terrain generation process.
@@ -277,6 +331,10 @@ class TerrainGenerator:
         # Blend with spline elevation
         heightmap = self.align_to_spline_path(heightmap, bounds)
         
+        # Create road surface if in road mode
+        if self.params.road_mode_enabled:
+            heightmap = self.create_road_surface(heightmap, bounds)
+        
         # Create flat zones around spaces if provided
         if spaces:
             flat_zones = []
@@ -290,4 +348,81 @@ class TerrainGenerator:
         # Convert to mesh
         terrain_obj = self.create_terrain_mesh(heightmap, bounds)
         
+        # Create road mesh if in road mode
+        if self.params.road_mode_enabled and terrain_obj:
+            road_mesh = self._create_road_mesh()
+            if road_mesh:
+                # Parent road to terrain or return both
+                # For now, just create it separately
+                pass
+        
         return terrain_obj
+    
+    def _create_road_mesh(self) -> Optional[bpy.types.Object]:
+        """
+        Create a simple road mesh along the spline path.
+        
+        Returns:
+            Road mesh object or None
+        """
+        if not self.spline_points or len(self.spline_points) < 2:
+            return None
+        
+        # Create vertices along both edges of the road
+        vertices = []
+        faces = []
+        road_width = self.params.road_width
+        
+        for i, point in enumerate(self.spline_points):
+            # Calculate perpendicular direction
+            tangent = point.tangent.normalized()
+            up = point.normal.normalized()
+            right = tangent.cross(up).normalized()
+            
+            # Create vertices on left and right edges
+            left_pos = point.position - right * (road_width / 2)
+            right_pos = point.position + right * (road_width / 2)
+            
+            vertices.append(left_pos)
+            vertices.append(right_pos)
+            
+            # Create face connecting to previous segment
+            if i > 0:
+                # Quad face indices
+                v0 = (i - 1) * 2      # Previous left
+                v1 = (i - 1) * 2 + 1  # Previous right
+                v2 = i * 2 + 1        # Current right
+                v3 = i * 2            # Current left
+                faces.append((v0, v1, v2, v3))
+        
+        # Create mesh
+        mesh = bpy.data.meshes.new("RoadSurface")
+        obj = bpy.data.objects.new("Road", mesh)
+        
+        # Link to scene
+        bpy.context.collection.objects.link(obj)
+        
+        # Create mesh from data
+        mesh.from_pydata(vertices, [], faces)
+        mesh.update()
+        
+        # Create material for road
+        mat_name = "PCG_Road_Material"
+        mat = bpy.data.materials.get(mat_name)
+        
+        if mat is None:
+            mat = bpy.data.materials.new(name=mat_name)
+            mat.use_nodes = True
+            nodes = mat.node_tree.nodes
+            bsdf = nodes.get("Principled BSDF")
+            if bsdf:
+                bsdf.inputs["Base Color"].default_value = (0.2, 0.2, 0.2, 1.0)  # Dark gray
+                bsdf.inputs["Roughness"].default_value = 0.8
+        
+        # Assign material
+        if obj.data.materials:
+            obj.data.materials[0] = mat
+        else:
+            obj.data.materials.append(mat)
+        
+        return obj

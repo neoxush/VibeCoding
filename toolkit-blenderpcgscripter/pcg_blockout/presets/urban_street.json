@@ -1,0 +1,19 @@
+{
+  "name": "Urban Street",
+  "description": "Random blockouts on both sides of a street with varied sizes and positions",
+  "spacing": 3.0,
+  "path_width": 8.0,
+  "lateral_density": 0.0,
+  "space_size_variation": 0.6,
+  "seed": 0,
+  "grid_size": 2.0,
+  "wall_height": 4.0,
+  "block_types": ["wall", "floor", "platform"],
+  "terrain_enabled": true,
+  "height_variation": 2.0,
+  "smoothness": 0.8,
+  "terrain_width": 30.0,
+  "road_mode_enabled": true,
+  "road_width": 8.0,
+  "side_placement": "both"
+}
