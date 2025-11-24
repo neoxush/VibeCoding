@@ -50,14 +50,6 @@ A procedural content generation (PCG) tool for Blender 3.6.22 that automates the
 - **Smoothness**: Terrain smoothness (0.0 = rough, 1.0 = smooth)
 - **Terrain Width**: Width of terrain around spline
 
-## Workflow
-
-```
-Draw Spline → Adjust Parameters → Generate → Review → Iterate
-     ↑                                                    ↓
-     └────────────────────────────────────────────────────┘
-```
-
 ## Tips
 
 1. **Start simple**: Use default parameters first
@@ -65,35 +57,6 @@ Draw Spline → Adjust Parameters → Generate → Review → Iterate
 3. **Use seeds**: Note the seed number to recreate good results
 4. **Iterate quickly**: The tool is designed for rapid iteration
 5. **Clean up**: Previous generations are kept in separate collections
-
-## Troubleshooting
-
-### Panel doesn't appear
-- Make sure the addon is enabled in Preferences > Add-ons
-- Try restarting Blender
-- Check the system console for errors
-
-### Generation fails
-- Ensure a valid curve object is selected
-- Check that the curve has at least 2 points
-- Verify parameters are within valid ranges
-- Check the system console for error messages
-
-### Performance issues
-- Reduce spacing to create fewer spaces
-- Disable terrain generation for faster results
-- Lower lateral density to reduce complexity
-
-## Development
-
-To reload the addon after code changes:
-1. Disable the addon in Preferences
-2. Enable it again
-3. Or restart Blender
-
-To view error logs:
-- **Windows**: `Window > Toggle System Console`
-- **macOS/Linux**: Run Blender from terminal
 
 ## Requirements
 
