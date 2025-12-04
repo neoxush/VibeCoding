@@ -7,6 +7,7 @@ import random
 from enum import Enum
 from typing import Optional, List
 from ..core.parameters import GenerationParams
+from ..core.layer_system import PlacementRule, LayerConfig
 
 
 class BlockType(Enum):
@@ -190,87 +191,139 @@ class BuildingBlockGenerator:
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
 
     
-    def populate_space(self, space) -> List[bpy.types.Object]:
+    def populate_space(self, space) -> dict[str, List[bpy.types.Object]]:
         """
-        Fill a space with appropriate building blocks.
+        Fill a space with objects based on configured layers.
         
         Args:
             space: Space object to populate
         
         Returns:
-            List of created block objects
+            Dictionary mapping layer names to lists of created block objects
         """
         import random
         random.seed(self.seed + space.id)
         
+        blocks_by_layer = {}
+        
+        # Iterate through all enabled layers
+        for layer_idx, layer in enumerate(self.params.layers):
+            if not layer.enabled:
+                continue
+                
+            layer_blocks = self._process_layer(layer, space, layer_idx)
+            if layer_blocks:
+                blocks_by_layer[layer.name] = layer_blocks
+            
+        return blocks_by_layer
+
+    def _process_layer(self, layer: LayerConfig, space, layer_idx: int) -> List[bpy.types.Object]:
+        """Process a single layer for a given space."""
         blocks = []
-        
-        # Get space dimensions
         width, depth, height = space.size
-        half_width = width / 2
-        half_depth = depth / 2
         
-        # Create floor if enabled
-        if "floor" in self.params.block_types:
-            floor_pos = space.position.copy()
-            floor_dims = mathutils.Vector((width, depth, self.params.grid_size * 0.25))
-            floor = self.generate_block(BlockType.FLOOR, floor_pos, floor_dims, space.id, len(blocks))
-            blocks.append(floor)
+        # Determine placement points based on rule
+        points = []
         
-        # Create walls for enclosed spaces
-        if space.type == "enclosed" and "wall" in self.params.block_types:
-            wall_height = self.params.wall_height
-            wall_thickness = self.params.grid_size * 0.5
+        if layer.rule == PlacementRule.EDGE_LOOP:
+            # Place along edges
+            perimeter = (width + depth) * 2
+            num_points = int(perimeter * layer.density * 0.1)
+            if num_points < 1: num_points = 1
             
-            # Front wall
-            wall_pos = space.position + mathutils.Vector((0, half_depth, wall_height / 2))
-            wall_dims = mathutils.Vector((width, wall_thickness, wall_height))
-            wall = self.generate_block(BlockType.WALL, wall_pos, wall_dims, space.id, len(blocks))
-            blocks.append(wall)
+            for i in range(num_points):
+                t = i / num_points
+                pos = self._get_perimeter_point(width, depth, t)
+                points.append(pos)
+                
+        elif layer.rule == PlacementRule.FILL_GRID:
+            # Grid fill
+            step = self.params.grid_size / layer.density
+            x_steps = int(width / step)
+            y_steps = int(depth / step)
             
-            # Back wall
-            wall_pos = space.position + mathutils.Vector((0, -half_depth, wall_height / 2))
-            wall = self.generate_block(BlockType.WALL, wall_pos, wall_dims, space.id, len(blocks))
-            blocks.append(wall)
+            for x in range(x_steps):
+                for y in range(y_steps):
+                    pos = mathutils.Vector((
+                        (x - x_steps/2 + 0.5) * step,
+                        (y - y_steps/2 + 0.5) * step,
+                        0
+                    ))
+                    points.append(pos)
+                    
+        elif layer.rule == PlacementRule.SCATTER:
+            # Random scatter
+            area = width * depth
+            num_points = int(area * layer.density * 0.1)
             
-            # Left wall
-            wall_pos = space.position + mathutils.Vector((-half_width, 0, wall_height / 2))
-            wall_dims = mathutils.Vector((wall_thickness, depth, wall_height))
-            wall = self.generate_block(BlockType.WALL, wall_pos, wall_dims, space.id, len(blocks))
-            blocks.append(wall)
-            
-            # Right wall
-            wall_pos = space.position + mathutils.Vector((half_width, 0, wall_height / 2))
-            wall = self.generate_block(BlockType.WALL, wall_pos, wall_dims, space.id, len(blocks))
-            blocks.append(wall)
+            for _ in range(num_points):
+                pos = mathutils.Vector((
+                    random.uniform(-width/2, width/2),
+                    random.uniform(-depth/2, depth/2),
+                    0
+                ))
+                points.append(pos)
         
-        # Add some platforms for vertical variation
-        if "platform" in self.params.block_types and random.random() < 0.3:
-            platform_height = self.params.wall_height * random.uniform(0.3, 0.7)
-            platform_size = min(width, depth) * random.uniform(0.3, 0.6)
+        # Instantiate objects at points
+        for i, local_pos in enumerate(points):
+            # Apply offsets
+            world_pos = space.position + local_pos + mathutils.Vector((0, 0, layer.z_offset))
             
-            platform_pos = space.position + mathutils.Vector((
-                random.uniform(-half_width * 0.5, half_width * 0.5),
-                random.uniform(-half_depth * 0.5, half_depth * 0.5),
-                platform_height
-            ))
-            platform_dims = mathutils.Vector((platform_size, platform_size, platform_height * 0.5))
-            platform = self.generate_block(BlockType.PLATFORM, platform_pos, platform_dims, space.id, len(blocks))
-            blocks.append(platform)
-        
-        # Add occasional ramps
-        if "ramp" in self.params.block_types and random.random() < 0.2:
-            ramp_pos = space.position + mathutils.Vector((
-                random.uniform(-half_width * 0.5, half_width * 0.5),
-                random.uniform(-half_depth * 0.5, half_depth * 0.5),
-                0
-            ))
-            ramp_dims = mathutils.Vector((
-                self.params.grid_size * 2,
-                self.params.grid_size * 3,
-                self.params.wall_height * 0.5
-            ))
-            ramp = self.generate_block(BlockType.RAMP, ramp_pos, ramp_dims, space.id, len(blocks))
-            blocks.append(ramp)
-        
+            # Try to get assets from collection
+            source_obj = None
+            if layer.collection_name:
+                coll = bpy.data.collections.get(layer.collection_name)
+                if coll:
+                    # Filter for mesh objects
+                    meshes = [o for o in coll.objects if o.type == 'MESH']
+                    if meshes:
+                        source_obj = random.choice(meshes)
+            
+            if source_obj:
+                # Create instance
+                obj = source_obj.copy()
+                # Link to scene so it's visible and can be manipulated
+                bpy.context.collection.objects.link(obj)
+                obj.location = world_pos
+            else:
+                # Fallback to cube
+                bpy.ops.mesh.primitive_cube_add(size=1.0, location=world_pos)
+                obj = bpy.context.active_object
+            
+            obj.name = f"{layer.name}_{space.id}_{i}"
+            
+            # Apply random transforms
+            if layer.random_rotation:
+                obj.rotation_euler.z = random.uniform(0, math.pi * 2)
+            
+            if layer.random_scale:
+                s = random.uniform(layer.scale_min, layer.scale_max)
+                obj.scale = (s, s, s)
+            
+            blocks.append(obj)
+            
         return blocks
+
+    def _get_perimeter_point(self, width: float, depth: float, t: float) -> mathutils.Vector:
+        """Get a point along the perimeter rectangle at parameter t (0-1)."""
+        perimeter = (width + depth) * 2
+        dist = t * perimeter
+        
+        half_w = width / 2
+        half_d = depth / 2
+        
+        # Walk the perimeter: Top -> Right -> Bottom -> Left
+        if dist < width: # Top edge
+            return mathutils.Vector((-half_w + dist, half_d, 0))
+        dist -= width
+        
+        if dist < depth: # Right edge
+            return mathutils.Vector((half_w, half_d - dist, 0))
+        dist -= depth
+        
+        if dist < width: # Bottom edge
+            return mathutils.Vector((half_w - dist, -half_d, 0))
+        dist -= width
+        
+        # Left edge
+        return mathutils.Vector((-half_w, -half_d + dist, 0))

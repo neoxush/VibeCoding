@@ -44,20 +44,7 @@ def save_preset(name: str, parameters: GenerationParams) -> bool:
         preset_data = {
             "name": name,
             "version": "1.0",
-            "parameters": {
-                "spacing": parameters.spacing,
-                "path_width": parameters.path_width,
-                "lateral_density": parameters.lateral_density,
-                "space_size_variation": parameters.space_size_variation,
-                "seed": parameters.seed,
-                "grid_size": parameters.grid_size,
-                "wall_height": parameters.wall_height,
-                "block_types": list(parameters.block_types),
-                "terrain_enabled": parameters.terrain_enabled,
-                "height_variation": parameters.height_variation,
-                "smoothness": parameters.smoothness,
-                "terrain_width": parameters.terrain_width
-            }
+            "parameters": parameters.to_dict()
         }
         
         # Write to file
@@ -196,3 +183,26 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
         props.smoothness = preset_params["smoothness"]
     if "terrain_width" in preset_params:
         props.terrain_width = preset_params["terrain_width"]
+        
+    # Apply layers
+    if "layers" in preset_params:
+        # Clear existing layers
+        props.layers.clear()
+        
+        # Add new layers
+        for layer_data in preset_params["layers"]:
+            layer = props.layers.add()
+            layer.name = layer_data.get("name", "Layer")
+            layer.enabled = layer_data.get("enabled", True)
+            layer.rule = layer_data.get("rule", "edge_loop")
+            layer.collection_name = layer_data.get("collection_name", "")
+            layer.density = layer_data.get("density", 1.0)
+            layer.offset = layer_data.get("offset", 0.0)
+            layer.z_offset = layer_data.get("z_offset", 0.0)
+            layer.random_rotation = layer_data.get("random_rotation", False)
+            layer.random_scale = layer_data.get("random_scale", False)
+            layer.scale_min = layer_data.get("scale_min", 0.8)
+            layer.scale_max = layer_data.get("scale_max", 1.2)
+            
+        # Reset active index
+        props.active_layer_index = 0 if len(props.layers) > 0 else -1

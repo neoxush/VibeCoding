@@ -23,61 +23,17 @@ if "bpy" in locals():
         importlib.reload(parameters)
 
 from . import core
-from .core import seed_manager, scene_manager, parameters
+from .core import seed_manager, scene_manager, parameters, preset_manager
 from .core.spline_sampler import SplineSampler
+from .core.adapters import BlenderCurveAdapter
+from .core.errors import PCGError
 from .core.preview_manager import PreviewManager
 from .generators.layout_generator import LayoutGenerator
 from .generators.building_generator import BuildingBlockGenerator
 from .generators.terrain_generator import TerrainGenerator
 
 
-class PCG_OT_ShowPreview(bpy.types.Operator):
-    """Show generation preview with sample points and path guide"""
-    bl_idname = "pcg.show_preview"
-    bl_label = "Show Preview"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    def execute(self, context):
-        props = context.scene.pcg_props
-        
-        # Validate spline
-        if props.spline_object is None:
-            self.report({'ERROR'}, "No spline object selected")
-            return {'CANCELLED'}
-        
-        # Convert properties to GenerationParams
-        params = props.to_generation_params()
-        
-        # Create preview
-        preview_mgr = PreviewManager(params, props.spline_object)
-        success = preview_mgr.create_preview()
-        
-        if success:
-            info = preview_mgr.get_preview_info()
-            self.report({'INFO'}, f"Preview created: {info['point_count']} sample points")
-        else:
-            self.report({'ERROR'}, "Failed to create preview")
-            return {'CANCELLED'}
-        
-        return {'FINISHED'}
 
-
-class PCG_OT_ClearPreview(bpy.types.Operator):
-    """Clear generation preview"""
-    bl_idname = "pcg.clear_preview"
-    bl_label = "Clear Preview"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    def execute(self, context):
-        props = context.scene.pcg_props
-        params = props.to_generation_params()
-        
-        # Clear preview
-        preview_mgr = PreviewManager(params, props.spline_object)
-        preview_mgr.clear_preview()
-        
-        self.report({'INFO'}, "Preview cleared")
-        return {'FINISHED'}
 
 
 class PCG_OT_CreateDefaultSpline(bpy.types.Operator):
@@ -140,6 +96,13 @@ class PCG_OT_Generate(bpy.types.Operator):
             
             wm.progress_update(10)
             
+            # Handle seed randomization
+            if props.randomize_on_generate:
+                new_seed = seed_manager.generate_random_seed()
+                props.seed = new_seed
+                params.seed = new_seed
+                self.report({'INFO'}, f"Randomized seed: {new_seed}")
+            
             # Initialize seed
             seed = seed_manager.initialize_seed(params.seed)
             self.report({'INFO'}, f"Using seed: {seed}")
@@ -147,12 +110,9 @@ class PCG_OT_Generate(bpy.types.Operator):
             wm.progress_update(20)
             
             # Sample spline
-            sampler = SplineSampler(params.spline_object)
-            is_valid, error_msg = sampler.validate_spline()
-            
-            if not is_valid:
-                self.report({'ERROR'}, f"Invalid spline: {error_msg}")
-                return {'CANCELLED'}
+            adapter = BlenderCurveAdapter(params.spline_object)
+            sampler = SplineSampler(adapter)
+            sampler.validate_spline()
             
             spline_points = sampler.sample_points(params.spacing)
             
@@ -177,17 +137,28 @@ class PCG_OT_Generate(bpy.types.Operator):
             
             # Generate building blocks
             building_gen = BuildingBlockGenerator(seed, params)
-            all_blocks = []
+            all_blocks_by_layer = {}
+            total_blocks = 0
             
             for space in spaces:
-                blocks = building_gen.populate_space(space)
-                all_blocks.extend(blocks)
+                blocks_map = building_gen.populate_space(space)
+                for layer_name, blocks in blocks_map.items():
+                    if layer_name not in all_blocks_by_layer:
+                        all_blocks_by_layer[layer_name] = []
+                    all_blocks_by_layer[layer_name].extend(blocks)
+                    total_blocks += len(blocks)
             
             # Organize blocks into collection
-            if all_blocks:
-                scene_manager.organize_objects(all_blocks, struct_coll.name)
+            for layer_name, blocks in all_blocks_by_layer.items():
+                if blocks:
+                    # Create sub-collection for layer
+                    layer_coll_name = f"{struct_coll.name}_{layer_name}"
+                    layer_coll = bpy.data.collections.new(layer_name)
+                    struct_coll.children.link(layer_coll)
+                    
+                    scene_manager.organize_objects(blocks, layer_coll.name)
             
-            self.report({'INFO'}, f"Generated {len(all_blocks)} building blocks")
+            self.report({'INFO'}, f"Generated {total_blocks} building blocks")
             
             wm.progress_update(80)
             
@@ -210,6 +181,10 @@ class PCG_OT_Generate(bpy.types.Operator):
             self.report({'INFO'}, "Generation complete!")
             return {'FINISHED'}
         
+        except PCGError as e:
+            self.report({'ERROR'}, str(e))
+            return {'CANCELLED'}
+            
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -231,6 +206,53 @@ class PCG_OT_RandomizeSeed(bpy.types.Operator):
         context.scene.pcg_props.seed = new_seed
         
         self.report({'INFO'}, f"New seed: {new_seed}")
+        return {'FINISHED'}
+
+
+class PCG_OT_SavePreset(bpy.types.Operator):
+    """Save current parameters as a preset"""
+    bl_idname = "pcg.save_preset"
+    bl_label = "Save Preset"
+    
+    preset_name: bpy.props.StringProperty(name="Preset Name")
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        props = context.scene.pcg_props
+        params = props.to_generation_params()
+        
+        if preset_manager.save_preset(self.preset_name, params):
+            self.report({'INFO'}, f"Preset '{self.preset_name}' saved")
+        else:
+            self.report({'ERROR'}, "Failed to save preset")
+            
+        return {'FINISHED'}
+
+
+class PCG_OT_LoadPreset(bpy.types.Operator):
+    """Load parameters from a preset"""
+    bl_idname = "pcg.load_preset"
+    bl_label = "Load Preset"
+    
+    preset_name: bpy.props.EnumProperty(
+        name="Preset",
+        items=lambda self, context: [(p, p, "") for p in preset_manager.get_preset_list()]
+    )
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        preset_data = preset_manager.load_preset(self.preset_name)
+        
+        if preset_data:
+            preset_manager.apply_preset_to_scene(preset_data, context.scene)
+            self.report({'INFO'}, f"Preset '{self.preset_name}' loaded")
+        else:
+            self.report({'ERROR'}, "Failed to load preset")
+            
         return {'FINISHED'}
 
 
@@ -265,6 +287,76 @@ class PCG_OT_ResetParameters(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class PCG_UL_LayerList(bpy.types.UIList):
+    """UI List for managing generation layers"""
+    
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        # We could draw some custom icons here based on the rule type
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            layout.prop(item, "enabled", text="")
+            layout.prop(item, "name", text="", emboss=False)
+            layout.label(text=item.rule, icon='MODIFIER')
+        elif self.layout_type == 'GRID':
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='MODIFIER')
+
+
+class PCG_OT_AddLayer(bpy.types.Operator):
+    """Add a new generation layer"""
+    bl_idname = "pcg.add_layer"
+    bl_label = "Add Layer"
+    
+    def execute(self, context):
+        props = context.scene.pcg_props
+        layer = props.layers.add()
+        layer.name = f"Layer {len(props.layers)}"
+        props.active_layer_index = len(props.layers) - 1
+        return {'FINISHED'}
+
+
+class PCG_OT_RemoveLayer(bpy.types.Operator):
+    """Remove the active generation layer"""
+    bl_idname = "pcg.remove_layer"
+    bl_label = "Remove Layer"
+    
+    @classmethod
+    def poll(cls, context):
+        props = context.scene.pcg_props
+        return len(props.layers) > 0
+    
+    def execute(self, context):
+        props = context.scene.pcg_props
+        props.layers.remove(props.active_layer_index)
+        props.active_layer_index = min(max(0, props.active_layer_index - 1), len(props.layers) - 1)
+        return {'FINISHED'}
+
+
+class PCG_OT_MoveLayer(bpy.types.Operator):
+    """Move the active layer up or down"""
+    bl_idname = "pcg.move_layer"
+    bl_label = "Move Layer"
+    
+    direction: bpy.props.EnumProperty(items=[('UP', "Up", ""), ('DOWN', "Down", "")])
+    
+    @classmethod
+    def poll(cls, context):
+        props = context.scene.pcg_props
+        return len(props.layers) > 0
+    
+    def execute(self, context):
+        props = context.scene.pcg_props
+        idx = props.active_layer_index
+        
+        if self.direction == 'UP' and idx > 0:
+            props.layers.move(idx, idx - 1)
+            props.active_layer_index -= 1
+        elif self.direction == 'DOWN' and idx < len(props.layers) - 1:
+            props.layers.move(idx, idx + 1)
+            props.active_layer_index += 1
+            
+        return {'FINISHED'}
+
+
 class PCG_PT_MainPanel(bpy.types.Panel):
     """Main panel container for PCG Level Blockout"""
     bl_label = "PCG Level Blockout"
@@ -296,36 +388,7 @@ class PCG_PT_MainPanel(bpy.types.Panel):
             else:
                 box.label(text="Selected object is not a curve!", icon='ERROR')
         
-        layout.separator()
-        
-        # Preview Section
-        box = layout.box()
-        box.label(text="Preview", icon='HIDE_OFF')
-        
-        if props.spline_object is None:
-            box.label(text="Select a spline to preview", icon='INFO')
-        else:
-            row = box.row(align=True)
-            row.operator("pcg.show_preview", text="Show Preview", icon='HIDE_OFF')
-            row.operator("pcg.clear_preview", text="Clear", icon='X')
-            
-            # Preview options
-            box.prop(props, "show_preview_labels", text="Show Metrics")
-            box.prop(props, "show_path_guide", text="Show Path Guide")
-            
-            # Show preview info if it exists
-            preview_coll = bpy.data.collections.get("PCG_Preview")
-            if preview_coll:
-                point_count = sum(1 for obj in preview_coll.objects 
-                                if obj.name.startswith("Preview_Point_"))
-                box.label(text=f"Preview: {point_count} sample points", icon='CHECKMARK')
-                
-                # Show key metrics
-                if props.show_preview_labels:
-                    box.label(text=f"Spacing: {props.spacing:.1f}m", icon='ARROW_LEFTRIGHT')
-                    box.label(text=f"Path Width: {props.path_width:.1f}m", icon='FULLSCREEN_ENTER')
-        
-        layout.separator()
+
         
         # Road Mode Section
         box = layout.box()
@@ -339,7 +402,7 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         
         # Prominent toggle button
         row = box.row()
-        row.scale_y = 1.5  # Make button bigger
+        # row.scale_y = 1.5  # Removed custom scale
         if props.road_mode_enabled:
             row.prop(props, "road_mode_enabled", text="Road Mode: ON", toggle=True, icon='CHECKMARK')
         else:
@@ -372,7 +435,9 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         if props.spline_object and props.spline_object.type == 'CURVE':
             try:
                 from .core.spline_sampler import SplineSampler
-                sampler = SplineSampler(props.spline_object)
+                from .core.adapters import BlenderCurveAdapter
+                adapter = BlenderCurveAdapter(props.spline_object)
+                sampler = SplineSampler(adapter)
                 spline_length = sampler.get_spline_length()
                 estimated_spaces = int(spline_length / props.spacing) if props.spacing > 0 else 0
                 box.label(text=f"→ Will generate ~{estimated_spaces} spaces", icon='INFO')
@@ -382,7 +447,10 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         box.prop(props, "path_width")
         box.prop(props, "lateral_density")
         box.prop(props, "space_size_variation")
-        box.prop(props, "seed")
+        
+        row = box.row(align=True)
+        row.prop(props, "seed")
+        row.prop(props, "randomize_on_generate", text="", icon='FILE_REFRESH', toggle=True)
         
         # Warning about seed = 0
         if props.seed == 0:
@@ -391,19 +459,44 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         
         layout.separator()
         
-        # Building Block Parameters Section
-        box = layout.box()
-        box.label(text="Building Blocks", icon='MESH_CUBE')
-        box.prop(props, "grid_size")
-        box.prop(props, "wall_height")
+        layout.separator()
         
-        # Block type checkboxes
-        col = box.column(align=True)
-        col.label(text="Block Types:")
-        col.prop(props, "block_type_wall")
-        col.prop(props, "block_type_floor")
-        col.prop(props, "block_type_platform")
-        col.prop(props, "block_type_ramp")
+        # V2 Layer Management Section
+        box = layout.box()
+        box.label(text="Generation Layers", icon='MODIFIER')
+        
+        row = box.row()
+        row.template_list("PCG_UL_LayerList", "", props, "layers", props, "active_layer_index")
+        
+        col = row.column(align=True)
+        col.operator("pcg.add_layer", icon='ADD', text="")
+        col.operator("pcg.remove_layer", icon='REMOVE', text="")
+        col.separator()
+        col.operator("pcg.move_layer", icon='TRIA_UP', text="").direction = 'UP'
+        col.operator("pcg.move_layer", icon='TRIA_DOWN', text="").direction = 'DOWN'
+        
+        # Active Layer Properties
+        if props.layers and props.active_layer_index >= 0 and props.active_layer_index < len(props.layers):
+            active_layer = props.layers[props.active_layer_index]
+            box = layout.box()
+            box.label(text=f"Properties: {active_layer.name}")
+            
+            box.prop(active_layer, "name")
+            box.prop(active_layer, "rule")
+            box.prop_search(active_layer, "collection_name", bpy.data, "collections")
+            
+            col = box.column(align=True)
+            col.prop(active_layer, "density")
+            col.prop(active_layer, "offset")
+            col.prop(active_layer, "z_offset")
+            
+            col = box.column(align=True)
+            col.prop(active_layer, "random_rotation")
+            col.prop(active_layer, "random_scale")
+            if active_layer.random_scale:
+                row = col.row(align=True)
+                row.prop(active_layer, "scale_min")
+                row.prop(active_layer, "scale_max")
         
         layout.separator()
         
@@ -429,15 +522,29 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         col.operator("pcg.generate", text="Generate", icon='PLAY')
         col.operator("pcg.randomize_seed", text="Randomize Seed", icon='FILE_REFRESH')
         col.operator("pcg.reset_parameters", text="Reset Parameters", icon='LOOP_BACK')
+        
+        layout.separator()
+        
+        # Presets Section
+        box = layout.box()
+        box.label(text="Presets", icon='PRESET')
+        row = box.row(align=True)
+        row.operator("pcg.save_preset", text="Save", icon='FILE_TICK')
+        row.operator("pcg.load_preset", text="Load", icon='FILE_FOLDER')
 
 
 # List of classes to register
 classes = [
-    PCG_OT_ShowPreview,
-    PCG_OT_ClearPreview,
+
     PCG_OT_CreateDefaultSpline,
     PCG_OT_Generate,
     PCG_OT_RandomizeSeed,
+    PCG_OT_SavePreset,
+    PCG_OT_LoadPreset,
     PCG_OT_ResetParameters,
+    PCG_OT_AddLayer,
+    PCG_OT_RemoveLayer,
+    PCG_OT_MoveLayer,
+    PCG_UL_LayerList,
     PCG_PT_MainPanel,
 ]

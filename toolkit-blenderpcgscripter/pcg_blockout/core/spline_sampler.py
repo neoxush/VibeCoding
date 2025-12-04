@@ -15,42 +15,33 @@ class SplinePoint:
     distance: float             # Distance along spline from start
 
 
+from .interfaces import AbstractCurve
+from .errors import InvalidSplineError
+
 class SplineSampler:
-    """Samples points along Blender curve objects."""
+    """Samples points along curve objects."""
     
-    def __init__(self, curve_object: bpy.types.Object):
+    def __init__(self, curve: AbstractCurve):
         """
         Initialize the spline sampler.
         
         Args:
-            curve_object: Blender curve object to sample from
+            curve: Abstract curve object to sample from
         """
-        self.curve_object = curve_object
-        self.curve_data = curve_object.data if curve_object else None
+        self.curve = curve
     
-    def validate_spline(self) -> Tuple[bool, str]:
+    def validate_spline(self) -> None:
         """
         Check if the curve is valid for generation.
         
-        Returns:
-            Tuple of (is_valid, error_message)
+        Raises:
+            InvalidSplineError: If the spline is invalid
         """
-        if self.curve_object is None:
-            return False, "No curve object provided"
+        if self.curve is None:
+            raise InvalidSplineError("No curve object provided")
         
-        if self.curve_object.type != 'CURVE':
-            return False, "Selected object is not a curve"
-        
-        if not self.curve_data:
-            return False, "Curve has no data"
-        
-        if not self.curve_data.splines:
-            return False, "Curve has no splines"
-        
-        if len(self.curve_data.splines) == 0:
-            return False, "Curve has no splines"
-        
-        return True, ""
+        if not self.curve.splines:
+            raise InvalidSplineError("Curve has no splines")
     
     def get_spline_length(self) -> float:
         """
@@ -59,15 +50,15 @@ class SplineSampler:
         Returns:
             Total length in Blender units
         """
-        if not self.curve_data or not self.curve_data.splines:
+        if not self.curve.splines:
             return 0.0
         
         total_length = 0.0
         
         # Calculate length for each spline
-        for spline in self.curve_data.splines:
+        for spline in self.curve.splines:
             # Use resolution to estimate length
-            resolution = self.curve_data.resolution_u
+            resolution = spline.resolution_u
             
             if spline.type == 'BEZIER':
                 # For Bezier curves, sample points and calculate distances
@@ -90,8 +81,8 @@ class SplineSampler:
                 # For poly curves, sum distances between points
                 points = spline.points
                 for i in range(len(points) - 1):
-                    p1 = self.curve_object.matrix_world @ mathutils.Vector(points[i].co[:3])
-                    p2 = self.curve_object.matrix_world @ mathutils.Vector(points[i + 1].co[:3])
+                    p1 = self.curve.matrix_world @ mathutils.Vector(points[i].co[:3])
+                    p2 = self.curve.matrix_world @ mathutils.Vector(points[i + 1].co[:3])
                     total_length += (p2 - p1).length
         
         return total_length
@@ -109,7 +100,7 @@ class SplineSampler:
         """
         num_segments = len(spline.bezier_points) - 1
         if num_segments < 1:
-            return self.curve_object.matrix_world @ spline.bezier_points[0].co
+            return self.curve.matrix_world @ spline.bezier_points[0].co
         
         # Determine which segment we're on
         segment_t = t * num_segments
@@ -136,7 +127,7 @@ class SplineSampler:
         point = mt3 * a + 3 * mt2 * local_t * b + 3 * mt * t2 * c + t3 * d
         
         # Transform to world space
-        return self.curve_object.matrix_world @ point
+        return self.curve.matrix_world @ point
 
     
     def sample_points(self, spacing: float) -> List[SplinePoint]:
@@ -149,14 +140,14 @@ class SplineSampler:
         Returns:
             List of SplinePoint objects
         """
-        if not self.curve_data or not self.curve_data.splines:
+        if not self.curve.splines:
             return []
         
         sample_points = []
         total_distance = 0.0
         
         # Sample each spline in the curve
-        for spline in self.curve_data.splines:
+        for spline in self.curve.splines:
             spline_samples = self._sample_single_spline(spline, spacing, total_distance)
             sample_points.extend(spline_samples)
             
@@ -269,8 +260,8 @@ class SplineSampler:
         next_sample_distance = 0.0
         
         for i in range(len(points) - 1):
-            p1 = self.curve_object.matrix_world @ mathutils.Vector(points[i].co[:3])
-            p2 = self.curve_object.matrix_world @ mathutils.Vector(points[i + 1].co[:3])
+            p1 = self.curve.matrix_world @ mathutils.Vector(points[i].co[:3])
+            p2 = self.curve.matrix_world @ mathutils.Vector(points[i + 1].co[:3])
             
             segment_vec = p2 - p1
             segment_length = segment_vec.length
@@ -341,7 +332,7 @@ class SplineSampler:
         tangent = 3 * mt2 * (b - a) + 6 * mt * local_t * (c - b) + 3 * t2 * (d - c)
         
         # Transform to world space (rotation only)
-        tangent = self.curve_object.matrix_world.to_3x3() @ tangent
+        tangent = self.curve.matrix_world.to_3x3() @ tangent
         
         if tangent.length < 0.001:
             return mathutils.Vector((1, 0, 0))

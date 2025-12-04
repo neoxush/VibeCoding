@@ -2,7 +2,8 @@
 
 import bpy
 from dataclasses import dataclass, field
-from typing import Set, Optional, Tuple, List
+from typing import Set, Optional, Tuple, List, Dict, Any
+from .layer_system import PlacementRule, LayerConfig
 
 
 @dataclass
@@ -34,6 +35,41 @@ class GenerationParams:
     road_mode_enabled: bool = False  # Enable road mode (buildings on sides)
     road_width: float = 10.0  # Width of clear path in road mode
     side_placement: str = "both"  # "left", "right", "both", "alternating"
+    
+    # V2 Layer System
+    layers: List[LayerConfig] = field(default_factory=list)
+
+
+class PCG_LayerProperty(bpy.types.PropertyGroup):
+    """Blender PropertyGroup for a single generation layer."""
+    
+    name: bpy.props.StringProperty(name="Name", default="New Layer")
+    enabled: bpy.props.BoolProperty(name="Enabled", default=True)
+    
+    rule: bpy.props.EnumProperty(
+        name="Rule",
+        items=[
+            (PlacementRule.EDGE_LOOP.value, "Edge Loop", "Place along edges"),
+            (PlacementRule.FILL_GRID.value, "Fill Grid", "Fill interior space"),
+            (PlacementRule.SCATTER.value, "Scatter", "Random scatter"),
+            (PlacementRule.CENTER_LINE.value, "Center Line", "Place along center"),
+        ],
+        default=PlacementRule.EDGE_LOOP.value
+    )
+    
+    collection_name: bpy.props.StringProperty(
+        name="Asset Collection",
+        description="Name of collection containing assets to place"
+    )
+    
+    density: bpy.props.FloatProperty(name="Density", default=1.0, min=0.1, max=10.0)
+    offset: bpy.props.FloatProperty(name="Offset", default=0.0, unit='LENGTH')
+    z_offset: bpy.props.FloatProperty(name="Z Offset", default=0.0, unit='LENGTH')
+    
+    random_rotation: bpy.props.BoolProperty(name="Random Rotation", default=False)
+    random_scale: bpy.props.BoolProperty(name="Random Scale", default=False)
+    scale_min: bpy.props.FloatProperty(name="Min Scale", default=0.8, min=0.1)
+    scale_max: bpy.props.FloatProperty(name="Max Scale", default=1.2, min=0.1)
 
 
 class PCG_PropertyGroup(bpy.types.PropertyGroup):
@@ -89,6 +125,12 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
         description="Random seed for reproducible generation (0 = random)",
         default=0,
         min=0
+    )
+
+    randomize_on_generate: bpy.props.BoolProperty(
+        name="Randomize on Generate",
+        description="Generate a new random seed every time",
+        default=False
     )
     
     # Building block parameters
@@ -210,6 +252,10 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
         default='BOTH'
     )
     
+    # V2 Layer System
+    layers: bpy.props.CollectionProperty(type=PCG_LayerProperty)
+    active_layer_index: bpy.props.IntProperty(name="Active Layer Index", default=0)
+    
     def to_generation_params(self) -> GenerationParams:
         """Convert PropertyGroup to GenerationParams dataclass."""
         block_types = set()
@@ -238,12 +284,114 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
             terrain_width=self.terrain_width,
             road_mode_enabled=self.road_mode_enabled,
             road_width=self.road_width,
-            side_placement=self.side_placement.lower()
+            side_placement=self.side_placement.lower(),
+            layers=self._get_layer_configs()
         )
+
+    def _get_layer_configs(self) -> List[LayerConfig]:
+        """Convert Blender layer properties to LayerConfig objects."""
+        configs = []
+        for layer in self.layers:
+            config = LayerConfig(
+                name=layer.name,
+                enabled=layer.enabled,
+                rule=PlacementRule(layer.rule),
+                collection_name=layer.collection_name,
+                density=layer.density,
+                offset=layer.offset,
+                z_offset=layer.z_offset,
+                random_rotation=layer.random_rotation,
+                random_scale=layer.random_scale,
+                scale_min=layer.scale_min,
+                scale_max=layer.scale_max
+            )
+            configs.append(config)
+        return configs
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert parameters to dictionary for serialization."""
+        # Convert layers to dict list
+        layers_data = []
+        for layer in self.layers:
+            layers_data.append({
+                "name": layer.name,
+                "enabled": layer.enabled,
+                "rule": layer.rule.value,
+                "collection_name": layer.collection_name,
+                "density": layer.density,
+                "offset": layer.offset,
+                "z_offset": layer.z_offset,
+                "random_rotation": layer.random_rotation,
+                "random_scale": layer.random_scale,
+                "scale_min": layer.scale_min,
+                "scale_max": layer.scale_max
+            })
+
+        return {
+            "spacing": self.spacing,
+            "path_width": self.path_width,
+            "lateral_density": self.lateral_density,
+            "space_size_variation": self.space_size_variation,
+            "seed": self.seed,
+            "grid_size": self.grid_size,
+            "wall_height": self.wall_height,
+            "block_types": list(self.block_types),
+            "terrain_enabled": self.terrain_enabled,
+            "height_variation": self.height_variation,
+            "smoothness": self.smoothness,
+            "terrain_width": self.terrain_width,
+            "road_mode_enabled": self.road_mode_enabled,
+            "road_width": self.road_width,
+            "side_placement": self.side_placement,
+            "layers": layers_data
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'GenerationParams':
+        """Create GenerationParams from dictionary."""
+        params = cls()
+        
+        if "spacing" in data: params.spacing = data["spacing"]
+        if "path_width" in data: params.path_width = data["path_width"]
+        if "lateral_density" in data: params.lateral_density = data["lateral_density"]
+        if "space_size_variation" in data: params.space_size_variation = data["space_size_variation"]
+        if "seed" in data: params.seed = data["seed"]
+        if "grid_size" in data: params.grid_size = data["grid_size"]
+        if "wall_height" in data: params.wall_height = data["wall_height"]
+        if "block_types" in data: params.block_types = set(data["block_types"])
+        if "terrain_enabled" in data: params.terrain_enabled = data["terrain_enabled"]
+        if "height_variation" in data: params.height_variation = data["height_variation"]
+        if "smoothness" in data: params.smoothness = data["smoothness"]
+        if "terrain_width" in data: params.terrain_width = data["terrain_width"]
+        if "road_mode_enabled" in data: params.road_mode_enabled = data["road_mode_enabled"]
+        if "road_width" in data: params.road_width = data["road_width"]
+        if "side_placement" in data: params.side_placement = data["side_placement"]
+        
+        if "layers" in data:
+            params.layers = []
+            for layer_data in data["layers"]:
+                # Handle potential missing keys with defaults
+                config = LayerConfig(
+                    name=layer_data.get("name", "Layer"),
+                    enabled=layer_data.get("enabled", True),
+                    rule=PlacementRule(layer_data.get("rule", "edge_loop")),
+                    collection_name=layer_data.get("collection_name", ""),
+                    density=layer_data.get("density", 1.0),
+                    offset=layer_data.get("offset", 0.0),
+                    z_offset=layer_data.get("z_offset", 0.0),
+                    random_rotation=layer_data.get("random_rotation", False),
+                    random_scale=layer_data.get("random_scale", False),
+                    scale_min=layer_data.get("scale_min", 0.8),
+                    scale_max=layer_data.get("scale_max", 1.2)
+                )
+                params.layers.append(config)
+        
+        return params
 
 
 def register():
     """Register PropertyGroup with Blender."""
+    bpy.utils.register_class(PCG_LayerProperty)
     bpy.utils.register_class(PCG_PropertyGroup)
     bpy.types.Scene.pcg_props = bpy.props.PointerProperty(type=PCG_PropertyGroup)
 
@@ -252,6 +400,7 @@ def unregister():
     """Unregister PropertyGroup from Blender."""
     del bpy.types.Scene.pcg_props
     bpy.utils.unregister_class(PCG_PropertyGroup)
+    bpy.utils.unregister_class(PCG_LayerProperty)
 
 
 
