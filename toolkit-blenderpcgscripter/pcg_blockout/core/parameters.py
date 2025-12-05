@@ -40,6 +40,19 @@ class GenerationParams:
     layers: List[LayerConfig] = field(default_factory=list)
 
 
+    layers: List[LayerConfig] = field(default_factory=list)
+
+
+class PCG_HistoryItem(bpy.types.PropertyGroup):
+    """Blender PropertyGroup for storing a history state."""
+    name: bpy.props.StringProperty(name="Name")
+    timestamp: bpy.props.StringProperty(name="Timestamp")
+    is_snapshot: bpy.props.BoolProperty(name="Is Snapshot", default=False)
+    
+    # Store parameters as a JSON string for simplicity and flexibility
+    data_json: bpy.props.StringProperty(name="Data JSON")
+
+
 class PCG_LayerProperty(bpy.types.PropertyGroup):
     """Blender PropertyGroup for a single generation layer."""
     
@@ -132,6 +145,22 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
         description="Generate a new random seed every time",
         default=False
     )
+    
+    randomize_params_with_seed: bpy.props.BoolProperty(
+        name="Randomize Parameters",
+        description="Randomize all parameters when randomizing seed",
+        default=True
+    )
+    
+    # Granular Randomization Flags
+    random_include_spacing: bpy.props.BoolProperty(name="Spacing", default=True)
+    random_include_width: bpy.props.BoolProperty(name="Path Width", default=True)
+    random_include_density: bpy.props.BoolProperty(name="Lateral Density", default=True)
+    random_include_variation: bpy.props.BoolProperty(name="Size Variation", default=True)
+    random_include_grid: bpy.props.BoolProperty(name="Grid Size", default=True)
+    random_include_height: bpy.props.BoolProperty(name="Wall Height", default=True)
+    random_include_terrain: bpy.props.BoolProperty(name="Terrain", default=True)
+    random_include_road: bpy.props.BoolProperty(name="Road Mode", default=True)
     
     # Building block parameters
     grid_size: bpy.props.FloatProperty(
@@ -256,6 +285,10 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     layers: bpy.props.CollectionProperty(type=PCG_LayerProperty)
     active_layer_index: bpy.props.IntProperty(name="Active Layer Index", default=0)
     
+    # History System
+    history: bpy.props.CollectionProperty(type=PCG_HistoryItem)
+    active_history_index: bpy.props.IntProperty(name="Active History Index", default=-1)
+    
     def to_generation_params(self) -> GenerationParams:
         """Convert PropertyGroup to GenerationParams dataclass."""
         block_types = set()
@@ -316,7 +349,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
             layers_data.append({
                 "name": layer.name,
                 "enabled": layer.enabled,
-                "rule": layer.rule.value,
+                "rule": layer.rule,
                 "collection_name": layer.collection_name,
                 "density": layer.density,
                 "offset": layer.offset,
@@ -333,9 +366,17 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
             "lateral_density": self.lateral_density,
             "space_size_variation": self.space_size_variation,
             "seed": self.seed,
+            "randomize_params_with_seed": self.randomize_params_with_seed,
             "grid_size": self.grid_size,
             "wall_height": self.wall_height,
-            "block_types": list(self.block_types),
+            "block_types": [
+                t for t, enabled in [
+                    ("wall", self.block_type_wall),
+                    ("floor", self.block_type_floor),
+                    ("platform", self.block_type_platform),
+                    ("ramp", self.block_type_ramp)
+                ] if enabled
+            ],
             "terrain_enabled": self.terrain_enabled,
             "height_variation": self.height_variation,
             "smoothness": self.smoothness,
@@ -356,6 +397,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
         if "lateral_density" in data: params.lateral_density = data["lateral_density"]
         if "space_size_variation" in data: params.space_size_variation = data["space_size_variation"]
         if "seed" in data: params.seed = data["seed"]
+        if "randomize_params_with_seed" in data: params.randomize_params_with_seed = data["randomize_params_with_seed"]
         if "grid_size" in data: params.grid_size = data["grid_size"]
         if "wall_height" in data: params.wall_height = data["wall_height"]
         if "block_types" in data: params.block_types = set(data["block_types"])
@@ -391,6 +433,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
 
 def register():
     """Register PropertyGroup with Blender."""
+    bpy.utils.register_class(PCG_HistoryItem)
     bpy.utils.register_class(PCG_LayerProperty)
     bpy.utils.register_class(PCG_PropertyGroup)
     bpy.types.Scene.pcg_props = bpy.props.PointerProperty(type=PCG_PropertyGroup)
@@ -401,6 +444,7 @@ def unregister():
     del bpy.types.Scene.pcg_props
     bpy.utils.unregister_class(PCG_PropertyGroup)
     bpy.utils.unregister_class(PCG_LayerProperty)
+    bpy.utils.unregister_class(PCG_HistoryItem)
 
 
 

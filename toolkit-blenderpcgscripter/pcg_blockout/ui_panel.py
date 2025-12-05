@@ -23,7 +23,7 @@ if "bpy" in locals():
         importlib.reload(parameters)
 
 from . import core
-from .core import seed_manager, scene_manager, parameters, preset_manager
+from .core import seed_manager, scene_manager, parameters, preset_manager, history_manager
 from .core.spline_sampler import SplineSampler
 from .core.adapters import BlenderCurveAdapter
 from .core.errors import PCGError
@@ -78,6 +78,35 @@ class PCG_OT_Generate(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
+        # Save current state to history before generating (if it's a manual generation)
+        # We might want to avoid duplicates if this was triggered by RandomizeSeed, 
+        # but RandomizeSeed calls this operator via bpy.ops, which is a separate execution.
+        # However, RandomizeSeed ALREADY pushed history.
+        # If we push here too, we might get double history for Randomize actions.
+        # But for manual "Generate" clicks, we definitely want history.
+        # A simple check: if the last history item has the SAME parameters as current, skip?
+        # Or just let it be. Let's just push for now, user can clear.
+        # Actually, better: RandomizeSeed changes params THEN calls generate.
+        # So RandomizeSeed saves the OLD state.
+        # Generate should save the CURRENT state? No, history is usually "undo stack" style or "previous results".
+        # If I click Generate, I want to save what I HAD before I clicked, in case I ruin it?
+        # OR do I want to save what I just GENERATED so I can go back to it?
+        # The user said "memorize if there's a good one".
+        # So if I generate something cool, I want it in history.
+        # So we should probably push AFTER generation or BEFORE?
+        # If I change params and click Generate, I produce a NEW result.
+        # If that result is good, I want it in history.
+        # So really, we should push the state used for generation.
+        
+        # Let's push at the START. If I have a good state, and I change params and click Generate,
+        # I want to save that previous good state.
+        # But wait, if I change params, the "current state" in UI is the NEW params.
+        # So pushing at start of Generate saves the NEW params.
+        # Which effectively saves the "Result" of this generation.
+        # So yes, pushing at start of Generate is correct for "Saving this generation".
+        
+        history_manager.push_history(context)
+        
         wm = context.window_manager
         
         # Start progress reporting
@@ -202,10 +231,48 @@ class PCG_OT_RandomizeSeed(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
-        new_seed = seed_manager.generate_random_seed()
-        context.scene.pcg_props.seed = new_seed
+        # Save current state to history before changing
+        history_manager.push_history(context)
         
-        self.report({'INFO'}, f"New seed: {new_seed}")
+        import random
+        
+        props = context.scene.pcg_props
+        new_seed = seed_manager.generate_random_seed()
+        props.seed = new_seed
+        
+        # Randomize parameters if enabled
+        # We now check individual flags
+        
+        # Layout parameters
+        if props.random_include_spacing:
+            props.spacing = random.uniform(5.0, 20.0)
+        if props.random_include_width:
+            props.path_width = random.uniform(10.0, 30.0)
+        if props.random_include_density:
+            props.lateral_density = random.uniform(0.2, 0.8)
+        if props.random_include_variation:
+            props.space_size_variation = random.uniform(0.2, 0.8)
+        
+        # Building parameters
+        if props.random_include_grid:
+            props.grid_size = random.choice([1.0, 2.0, 3.0, 4.0])
+        if props.random_include_height:
+            props.wall_height = random.uniform(2.5, 6.0)
+        
+        # Terrain parameters
+        if props.terrain_enabled and props.random_include_terrain:
+            props.height_variation = random.uniform(5.0, 20.0)
+            props.smoothness = random.uniform(0.3, 0.9)
+            props.terrain_width = random.uniform(30.0, 80.0)
+        
+        # Road mode parameters
+        if props.road_mode_enabled and props.random_include_road:
+            props.road_width = random.uniform(6.0, 15.0)
+            
+        self.report({'INFO'}, f"Remixed parameters (Seed: {new_seed})")
+        
+        # NO automatic generation
+            
         return {'FINISHED'}
 
 
@@ -357,6 +424,122 @@ class PCG_OT_MoveLayer(bpy.types.Operator):
         return {'FINISHED'}
 
 
+        row.operator("pcg.load_preset", text="Load", icon='FILE_FOLDER')
+
+
+class PCG_OT_RestoreHistory(bpy.types.Operator):
+    """Restore a state from history"""
+    bl_idname = "pcg.restore_history"
+    bl_label = "Restore"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    index: bpy.props.IntProperty()
+    
+    def execute(self, context):
+        history_manager.restore_history(context, self.index)
+        
+        # Trigger generation if spline is selected
+        if context.scene.pcg_props.spline_object:
+            bpy.ops.pcg.generate()
+            
+        self.report({'INFO'}, "Restored from history")
+        return {'FINISHED'}
+
+
+class PCG_OT_Snapshot(bpy.types.Operator):
+    """Save current state as a snapshot"""
+    bl_idname = "pcg.snapshot"
+    bl_label = "Snapshot"
+    
+    def execute(self, context):
+        history_manager.push_history(context, is_snapshot=True)
+        self.report({'INFO'}, "Snapshot saved")
+        return {'FINISHED'}
+
+
+class PCG_OT_ClearHistory(bpy.types.Operator):
+    """Clear history items"""
+    bl_idname = "pcg.clear_history"
+    bl_label = "Clear History"
+    
+    def execute(self, context):
+        history_manager.clear_history(context)
+        self.report({'INFO'}, "History cleared")
+        return {'FINISHED'}
+
+
+class PCG_PT_HistoryPopover(bpy.types.Panel):
+    """Popover for History and Snapshots"""
+    bl_label = "History"
+    bl_idname = "PCG_PT_history_popover"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'INSTANCED'}
+    
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.pcg_props
+        
+        # Snapshot button
+        layout.operator("pcg.snapshot", text="Save Snapshot", icon='BOOKMARKS')
+        
+        layout.separator()
+        
+        # List history items
+        if len(props.history) > 0:
+            box = layout.box()
+            box.label(text="Recent Generations", icon='TIME')
+            
+            # Show in reverse order (newest first)
+            for i in range(len(props.history) - 1, -1, -1):
+                item = props.history[i]
+                row = box.row()
+                
+                # Icon based on type
+                icon = 'BOOKMARKS' if item.is_snapshot else 'TIME'
+                
+                # Label
+                row.label(text=item.name, icon=icon)
+                
+                # Restore button
+                op = row.operator("pcg.restore_history", text="", icon='LOOP_BACK')
+                op.index = i
+            
+            layout.separator()
+            layout.operator("pcg.clear_history", text="Clear History", icon='TRASH')
+        else:
+            layout.label(text="No history yet", icon='INFO')
+
+
+class PCG_PT_RandomizeConfigPopover(bpy.types.Panel):
+    """Popover for configuring randomization"""
+    bl_label = "Randomize Settings"
+    bl_idname = "PCG_PT_randomize_config_popover"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'INSTANCED'}
+    
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.pcg_props
+        
+        layout.label(text="Include in Remix:", icon='CHECKBOX_HLT')
+        
+        col = layout.column(align=True)
+        col.prop(props, "random_include_spacing")
+        col.prop(props, "random_include_width")
+        col.prop(props, "random_include_density")
+        col.prop(props, "random_include_variation")
+        
+        col.separator()
+        col.prop(props, "random_include_grid")
+        col.prop(props, "random_include_height")
+        
+        col.separator()
+        col.prop(props, "random_include_terrain")
+        col.prop(props, "random_include_road")
+
+
 class PCG_PT_MainPanel(bpy.types.Panel):
     """Main panel container for PCG Level Blockout"""
     bl_label = "PCG Level Blockout"
@@ -448,14 +631,11 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         box.prop(props, "lateral_density")
         box.prop(props, "space_size_variation")
         
-        row = box.row(align=True)
-        row.prop(props, "seed")
-        row.prop(props, "randomize_on_generate", text="", icon='FILE_REFRESH', toggle=True)
+
         
-        # Warning about seed = 0
-        if props.seed == 0:
-            box.label(text="⚠ Seed=0: Preview won't match output", icon='ERROR')
-            box.label(text="   Use 'Randomize Seed' or set a number", icon='INFO')
+        # Removed Seed and Randomize toggles from here as requested
+        
+        layout.separator()
         
         layout.separator()
         
@@ -519,8 +699,29 @@ class PCG_PT_MainPanel(bpy.types.Panel):
         if props.spline_object is None:
             col.enabled = False
         
-        col.operator("pcg.generate", text="Generate", icon='PLAY')
-        col.operator("pcg.randomize_seed", text="Randomize Seed", icon='FILE_REFRESH')
+
+        
+        # History Popover next to Generate
+        # We need to use a row to put them side by side, but 'col' is already a column.
+        # However, we want Generate to be big.
+        # Let's try to put them in a row.
+        
+        # Re-create the layout for this section
+        # Remove the previous col.operator("pcg.generate") line from above replacement if possible, 
+        # but since I'm replacing the whole block:
+        
+        row = col.row(align=True)
+        row.scale_y = 1.2 # Make it a bit bigger
+        row.operator("pcg.generate", text="Generate", icon='PLAY')
+        row.popover(panel="PCG_PT_history_popover", text="", icon='TIME')
+        
+        col.separator()
+        
+        # Remix Parameters row
+        row = col.row(align=True)
+        row.operator("pcg.randomize_seed", text="Remix Parameters", icon='FILE_REFRESH')
+        row.popover(panel="PCG_PT_randomize_config_popover", text="", icon='PREFERENCES')
+        
         col.operator("pcg.reset_parameters", text="Reset Parameters", icon='LOOP_BACK')
         
         layout.separator()
@@ -546,5 +747,10 @@ classes = [
     PCG_OT_RemoveLayer,
     PCG_OT_MoveLayer,
     PCG_UL_LayerList,
+    PCG_OT_RestoreHistory,
+    PCG_OT_Snapshot,
+    PCG_OT_ClearHistory,
+    PCG_PT_HistoryPopover,
+    PCG_PT_RandomizeConfigPopover,
     PCG_PT_MainPanel,
 ]

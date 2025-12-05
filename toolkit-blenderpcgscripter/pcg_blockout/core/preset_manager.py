@@ -165,6 +165,16 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
         props.grid_size = preset_params["grid_size"]
     if "wall_height" in preset_params:
         props.wall_height = preset_params["wall_height"]
+    if "randomize_params_with_seed" in preset_params:
+        props.randomize_params_with_seed = preset_params["randomize_params_with_seed"]
+        
+    # Apply road mode parameters
+    if "road_mode_enabled" in preset_params:
+        props.road_mode_enabled = preset_params["road_mode_enabled"]
+    if "road_width" in preset_params:
+        props.road_width = preset_params["road_width"]
+    if "side_placement" in preset_params:
+        props.side_placement = preset_params["side_placement"]
     
     # Apply block types
     if "block_types" in preset_params:
