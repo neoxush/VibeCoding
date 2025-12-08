@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Split Tab Manager
 // @namespace    http://tampermonkey.net/
-// @version      0.6
-// @description  Link two tabs: one as Source (sends links), one as Target (opens links)
+// @version      0.17
+// @description  Link two tabs: Auto-Promote Source on Split, Auto-Target. Hybrid Persistence. Debug Dashboard.
 // @author       You
 // @match        *://*/*
+// @run-at       document-start
 // @grant        GM_registerMenuCommand
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -12,92 +13,166 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
+// --- LAST UPDATED: 2025-12-08 18:25:00 ---
+
 (function () {
     'use strict';
 
-    // Configuration Keys
-    const KEY_TARGET_URL = 'split_tab_target_url';
-    const KEY_TIMESTAMP = 'split_tab_timestamp';
-    const KEY_SOURCE_HEARTBEAT = 'split_tab_source_heartbeat';
-    const SESSION_KEY_MODE = 'split_tab_mode'; // Persist mode in this tab
+    console.log('Split Tab: Script initialized at document-start (v0.17)');
 
-    // Local State
-    let currentMode = sessionStorage.getItem(SESSION_KEY_MODE) || 'idle'; // 'idle', 'source', 'target'
+    // --- Configuration & Keys ---
+    const STATE_PREFIX = 'SPLIT_TAB_STATE=';
+    const SESSION_KEY_ROLE = 'split_tab_role';
+    const SESSION_KEY_ID = 'split_tab_id';
+
+    // Global keys (GM storage)
+    const KEY_LATEST_CLICK = 'split_tab_latest_click'; // { sourceId, timestamp }
+    const getTargetUrlKey = (id) => `split_tab_url_${id}`;
+    const getTimestampKey = (id) => `split_tab_ts_${id}`;
+
+    // --- State Management (Hybrid: Session + Window.name) ---
+
+    function saveState(role, id) {
+        if (role === 'idle') {
+            sessionStorage.removeItem(SESSION_KEY_ROLE);
+            sessionStorage.removeItem(SESSION_KEY_ID);
+        } else {
+            sessionStorage.setItem(SESSION_KEY_ROLE, role);
+            sessionStorage.setItem(SESSION_KEY_ID, id);
+        }
+
+        if (role !== 'idle') {
+            const state = { role, id };
+            window.name = STATE_PREFIX + JSON.stringify(state);
+        } else {
+            if (window.name && window.name.startsWith(STATE_PREFIX)) {
+                window.name = '';
+            }
+        }
+    }
+
+    function loadState() {
+        const sessionRole = sessionStorage.getItem(SESSION_KEY_ROLE);
+        const sessionId = sessionStorage.getItem(SESSION_KEY_ID);
+
+        if (sessionRole && sessionId) {
+            return { role: sessionRole, id: sessionId };
+        }
+
+        if (window.name && window.name.startsWith(STATE_PREFIX)) {
+            try {
+                const state = JSON.parse(window.name.substring(STATE_PREFIX.length));
+                sessionStorage.setItem(SESSION_KEY_ROLE, state.role);
+                sessionStorage.setItem(SESSION_KEY_ID, state.id);
+                return state;
+            } catch (e) {
+                console.error('Split Tab: Failed to parse window.name', e);
+            }
+        }
+
+        return { role: 'idle', id: null };
+    }
+
+    // Load current state
+    const currentState = loadState();
+    let myRole = currentState.role;
+    let myId = currentState.id;
     let statusIndicator = null;
-    let autoJoinBtn = null;
 
-    // --- Styles ---
-    GM_addStyle(`
-        #split-tab-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.6); z-index: 99999;
-            display: flex; justify-content: center; align-items: center;
+    // --- Styles (Injected safely) ---
+    function injectStyles() {
+        if (document.head) {
+            GM_addStyle(`
+                #split-tab-overlay {
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                    background: rgba(0, 0, 0, 0.6); z-index: 2147483647;
+                    display: flex; justify-content: center; align-items: center;
+                }
+                #split-tab-modal {
+                    background: #222; color: #fff; padding: 25px; border-radius: 12px;
+                    box-shadow: 0 8px 20px rgba(0,0,0,0.4); text-align: center;
+                    font-family: sans-serif; min-width: 320px;
+                }
+                #split-tab-modal h2 { margin-top: 0; font-size: 20px; margin-bottom: 15px; }
+                .split-btn {
+                    background: #444; color: #fff; border: 1px solid #555;
+                    padding: 12px 24px; margin: 8px; cursor: pointer;
+                    border-radius: 6px; font-size: 14px; transition: all 0.2s; font-weight: bold;
+                }
+                .split-btn:hover { background: #555; transform: translateY(-1px); }
+                .split-btn.source { background: #28a745; border-color: #1e7e34; }
+                .split-btn.source:hover { background: #218838; }
+                .split-btn.cancel { background: transparent; border: 1px solid #666; color: #aaa; }
+                .split-btn.cancel:hover { background: #333; color: #fff; }
+                
+                #split-status-indicator {
+                    position: fixed; bottom: 20px; right: 0;
+                    padding: 8px 16px; 
+                    font-family: sans-serif; font-size: 13px; font-weight: bold;
+                    z-index: 2147483647;
+                    cursor: pointer; user-select: none;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    transition: transform 0.2s;
+                    display: flex; align-items: center;
+                    background: #28a745; color: #fff; 
+                    border-radius: 20px 0 0 20px;
+                    margin-right: -5px;
+                }
+                #split-status-indicator:hover { transform: scale(1.05); }
+                .status-dot {
+                    display: inline-block; width: 10px; height: 10px;
+                    border-radius: 50%; margin-right: 8px; background: #fff;
+                }
+                
+                /* Debug Dashboard */
+                #split-debug-dashboard {
+                    position: fixed; bottom: 10px; left: 10px;
+                    background: rgba(0, 0, 0, 0.85); color: #0f0;
+                    padding: 10px; border-radius: 8px;
+                    font-family: monospace; font-size: 11px;
+                    z-index: 2147483647; pointer-events: none;
+                    border: 1px solid #333;
+                    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+                    min-width: 200px;
+                }
+                #split-debug-dashboard table { width: 100%; }
+                #split-debug-dashboard td { padding: 2px 5px; }
+                #split-debug-dashboard .label { color: #aaa; }
+                #split-debug-dashboard .val { font-weight: bold; }
+            `);
+        } else {
+            setTimeout(injectStyles, 100);
         }
-        #split-tab-modal {
-            background: #222; color: #fff; padding: 25px; border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.4); text-align: center;
-            font-family: sans-serif; min-width: 320px;
-        }
-        #split-tab-modal h2 { margin-top: 0; font-size: 20px; margin-bottom: 15px; }
-        #split-tab-modal p { color: #ccc; margin-bottom: 20px; line-height: 1.4; }
-        .split-btn {
-            background: #444; color: #fff; border: 1px solid #555;
-            padding: 12px 24px; margin: 8px; cursor: pointer;
-            border-radius: 6px; font-size: 14px; transition: all 0.2s;
-            font-weight: bold;
-        }
-        .split-btn:hover { background: #555; transform: translateY(-1px); }
-        .split-btn.source { background: #28a745; border-color: #1e7e34; }
-        .split-btn.source:hover { background: #218838; }
-        .split-btn.target { background: #007bff; border-color: #0069d9; }
-        .split-btn.target:hover { background: #0069d9; }
-        .split-btn.cancel { background: transparent; border: 1px solid #666; color: #aaa; }
-        .split-btn.cancel:hover { background: #333; color: #fff; }
-        .split-btn.reset { background: #dc3545; border-color: #bd2130; margin-top: 15px; font-size: 12px; padding: 8px 16px; }
-        .split-btn.reset:hover { background: #c82333; }
-        
-        #split-status-indicator {
-            position: fixed; bottom: 20px;
-            padding: 8px 16px; 
-            font-family: sans-serif; font-size: 13px; font-weight: bold;
-            z-index: 99998; cursor: pointer; user-select: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transition: transform 0.2s;
-            display: flex; align-items: center;
-        }
-        #split-status-indicator:hover { transform: scale(1.05); }
-        .status-dot {
-            display: inline-block; width: 10px; height: 10px;
-            border-radius: 50%; margin-right: 8px;
-        }
-        
-        /* Alignment Rules */
-        .mode-source { 
-            background: #28a745; color: #fff; 
-            right: 0; left: auto; 
-            border-radius: 20px 0 0 20px; /* Rounded left side */
-            margin-right: -5px; /* Stick to edge */
-        }
-        .mode-target { 
-            background: #007bff; color: #fff; 
-            left: 0; right: auto; 
-            border-radius: 0 20px 20px 0; /* Rounded right side */
-            margin-left: -5px; /* Stick to edge */
-        }
-        
-        .dot-source { background: #fff; }
-        .dot-target { background: #fff; }
+    }
+    injectStyles();
 
-        #split-autojoin-btn {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: #007bff; color: #fff; padding: 10px 20px;
-            border-radius: 30px; font-family: sans-serif; font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0,123,255,0.4);
-            cursor: pointer; z-index: 99998;
-            animation: fadeIn 0.5s ease-out;
+    // --- Debug Dashboard ---
+    function updateDebugDashboard() {
+        if (!document.body) return;
+
+        let dashboard = document.getElementById('split-debug-dashboard');
+        if (!dashboard) {
+            dashboard = document.createElement('div');
+            dashboard.id = 'split-debug-dashboard';
+            document.body.appendChild(dashboard);
         }
-        @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
-    `);
+
+        const latestClick = GM_getValue(KEY_LATEST_CLICK) || { sourceId: 'None', timestamp: 0 };
+        const timeAgo = latestClick.timestamp ? ((Date.now() - latestClick.timestamp) / 1000).toFixed(1) + 's' : 'Never';
+
+        dashboard.innerHTML = `
+            <table>
+                <tr><td class="label">Role:</td><td class="val" style="color: ${myRole === 'source' ? '#0f0' : (myRole === 'target' ? '#00f' : '#fff')}">${myRole.toUpperCase()}</td></tr>
+                <tr><td class="label">My ID:</td><td class="val">${myId || '-'}</td></tr>
+                <tr><td colspan="2"><hr style="border-color:#333"></td></tr>
+                <tr><td class="label">Global Source:</td><td class="val">${latestClick.sourceId}</td></tr>
+                <tr><td class="label">Last Click:</td><td class="val">${timeAgo} ago</td></tr>
+            </table>
+        `;
+    }
+
+    // Poll for debug updates
+    setInterval(updateDebugDashboard, 500);
 
     // --- UI Functions ---
 
@@ -109,21 +184,17 @@
         overlay.innerHTML = `
             <div id="split-tab-modal">
                 <h2>Split Tab Manager</h2>
-                <p>Link this tab with another to split your workflow.</p>
+                <p>Set this tab as a Source to control new tabs.</p>
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <button class="split-btn source" id="btn-set-source">Set as SOURCE</button>
-                    <button class="split-btn target" id="btn-set-target">Set as TARGET</button>
                     <button class="split-btn cancel" id="btn-cancel">Cancel / Disable</button>
                 </div>
-                <button class="split-btn reset" id="btn-reset">⚠️ Reset Global State</button>
             </div>
         `;
         document.body.appendChild(overlay);
 
-        document.getElementById('btn-set-source').onclick = () => setMode('source');
-        document.getElementById('btn-set-target').onclick = () => setMode('target');
-        document.getElementById('btn-cancel').onclick = () => setMode('idle');
-        document.getElementById('btn-reset').onclick = resetGlobalState;
+        document.getElementById('btn-set-source').onclick = () => setAsSource();
+        document.getElementById('btn-cancel').onclick = () => disableSource();
     }
 
     function closeOverlay() {
@@ -131,137 +202,177 @@
         if (overlay) overlay.remove();
     }
 
-    function updateStatusIndicator() {
-        if (!statusIndicator) {
-            statusIndicator = document.createElement('div');
-            statusIndicator.id = 'split-status-indicator';
-            statusIndicator.title = 'Click to configure';
-            statusIndicator.onclick = showConfigOverlay;
-            document.body.appendChild(statusIndicator);
+    function updateUI() {
+        if (!document.body) {
+            setTimeout(updateUI, 100);
+            return;
         }
 
-        if (currentMode === 'idle') {
-            statusIndicator.style.display = 'none';
-        } else {
+        if (myRole === 'source') {
+            if (!statusIndicator) {
+                statusIndicator = document.createElement('div');
+                statusIndicator.id = 'split-status-indicator';
+                statusIndicator.title = 'Click to configure';
+                statusIndicator.onclick = showConfigOverlay;
+                document.body.appendChild(statusIndicator);
+            }
+            statusIndicator.innerHTML = `<span class="status-dot"></span>SOURCE`;
             statusIndicator.style.display = 'flex';
-            statusIndicator.className = `mode-${currentMode}`;
-            // Removed directional text as requested
-            const label = currentMode === 'source' ? 'SOURCE' : 'TARGET';
-            statusIndicator.innerHTML = `<span class="status-dot dot-${currentMode}"></span>${label}`;
-
-            // Hide auto-join button if we are in a mode
-            if (autoJoinBtn) autoJoinBtn.style.display = 'none';
+        } else {
+            if (statusIndicator) statusIndicator.style.display = 'none';
         }
-    }
-
-    function showAutoJoinButton() {
-        if (currentMode !== 'idle' || document.getElementById('split-autojoin-btn')) return;
-
-        autoJoinBtn = document.createElement('div');
-        autoJoinBtn.id = 'split-autojoin-btn';
-        autoJoinBtn.innerHTML = '🔗 Join as Target?';
-        autoJoinBtn.onclick = () => {
-            setMode('target');
-            autoJoinBtn.remove();
-        };
-        document.body.appendChild(autoJoinBtn);
-
-        // Auto-hide after 10 seconds
-        setTimeout(() => {
-            if (autoJoinBtn) autoJoinBtn.remove();
-        }, 10000);
+        updateDebugDashboard();
     }
 
     // --- Logic ---
 
-    function setMode(mode) {
-        currentMode = mode;
-        if (mode === 'idle') {
-            sessionStorage.removeItem(SESSION_KEY_MODE);
-        } else {
-            sessionStorage.setItem(SESSION_KEY_MODE, mode);
-        }
+    function generateId() {
+        return Math.random().toString(36).substr(2, 9);
+    }
+
+    function setAsSource() {
+        myRole = 'source';
+        myId = generateId();
+        saveState(myRole, myId);
         closeOverlay();
-        updateStatusIndicator();
+        updateUI();
+    }
+
+    function disableSource() {
+        myRole = 'idle';
+        myId = null;
+        saveState('idle', null);
+        closeOverlay();
+        updateUI();
     }
 
     function resetGlobalState() {
-        if (confirm("This will clear all Source/Target connections. Continue?")) {
-            GM_setValue(KEY_TARGET_URL, '');
-            GM_setValue(KEY_TIMESTAMP, 0);
-            GM_setValue(KEY_SOURCE_HEARTBEAT, 0);
-            setMode('idle');
-            alert("Global state reset.");
+        if (confirm("Reset all Split Tab connections for this tab?")) {
+            saveState('idle', null);
+            window.location.reload();
         }
     }
 
-    // 1. Source Logic: Intercept Clicks & Heartbeat
-    function handleLinkClick(e) {
-        if (currentMode !== 'source') return;
+    // --- Auto-Promote & Click Handling ---
 
+    function recordClick() {
+        if (myRole === 'source' && myId) {
+            GM_setValue(KEY_LATEST_CLICK, {
+                sourceId: myId,
+                timestamp: Date.now()
+            });
+            updateDebugDashboard();
+        }
+    }
+
+    function autoPromoteIfNeeded(reason) {
+        console.log(`Split Tab: Auto-promote check triggered by ${reason}`);
+        if (myRole === 'idle') {
+            console.log('Split Tab: Auto-promoting to Source');
+            setAsSource();
+        }
+        recordClick();
+    }
+
+    // 1. Intercept Link Clicks (Left Click + Modifiers)
+    function handleLinkClick(e) {
         const link = e.target.closest('a');
         if (!link || !link.href) return;
-
         if (link.href.startsWith('javascript:') || link.href.includes('#')) return;
 
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Send URL to Target
-        GM_setValue(KEY_TARGET_URL, link.href);
-        GM_setValue(KEY_TIMESTAMP, Date.now()); // Trigger change event
-
-        // Visual feedback for click
-        const originalText = statusIndicator.innerHTML;
-        statusIndicator.innerHTML = 'Sent! 🚀';
-        setTimeout(() => {
-            if (currentMode === 'source') statusIndicator.innerHTML = originalText;
-        }, 1000);
-    }
-
-    // Heartbeat loop for Source
-    setInterval(() => {
-        if (currentMode === 'source') {
-            GM_setValue(KEY_SOURCE_HEARTBEAT, Date.now());
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {
+            autoPromoteIfNeeded('Modifier Click');
+            return;
         }
-    }, 2000);
 
-    // 2. Target Logic: Listen for Changes
-    GM_addValueChangeListener(KEY_TIMESTAMP, function (key, oldVal, newVal, remote) {
-        if (currentMode !== 'target') return;
-        if (!remote) return;
+        if (myRole === 'source' && e.button === 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            recordClick();
 
-        const url = GM_getValue(KEY_TARGET_URL);
-        if (url) {
-            window.location.href = url;
-        }
-    });
+            GM_setValue(getTargetUrlKey(myId), link.href);
+            GM_setValue(getTimestampKey(myId), Date.now());
 
-    // 3. Idle Logic: Check for Source Heartbeat (Immediate & Listener)
-    function checkHeartbeat() {
-        if (currentMode !== 'idle') return;
-        const lastHeartbeat = GM_getValue(KEY_SOURCE_HEARTBEAT, 0);
-        if (Date.now() - lastHeartbeat < 5000) { // Source active in last 5s
-            showAutoJoinButton();
+            const originalText = statusIndicator.innerHTML;
+            statusIndicator.innerHTML = 'Sent! 🚀';
+            setTimeout(() => {
+                if (myRole === 'source') statusIndicator.innerHTML = originalText;
+            }, 1000);
         }
     }
 
-    if (currentMode === 'idle') {
-        checkHeartbeat(); // Check immediately on load
+    // 2. Intercept Mousedown (Right Click / Middle Click)
+    function handleMouseDown(e) {
+        if (e.button === 2 || e.button === 1) {
+            const link = e.target.closest('a');
+            if (link) {
+                autoPromoteIfNeeded('Mouse Button ' + e.button);
+            }
+        }
+    }
 
-        // Also listen for new heartbeats (if Source starts AFTER this tab opened)
-        GM_addValueChangeListener(KEY_SOURCE_HEARTBEAT, function (key, oldVal, newVal, remote) {
-            if (remote) checkHeartbeat();
+    // 3. Intercept Context Menu (Backup)
+    function handleContextMenu(e) {
+        const link = e.target.closest('a');
+        if (link) {
+            autoPromoteIfNeeded('Context Menu');
+        }
+    }
+
+    // 4. Intercept Aux Click
+    function handleAuxClick(e) {
+        if (e.button === 1) {
+            const link = e.target.closest('a');
+            if (link) autoPromoteIfNeeded('Aux Click');
+        }
+    }
+
+    // 5. New Tab: Check for recent Source click
+    if (myRole === 'idle') {
+        const latestClick = GM_getValue(KEY_LATEST_CLICK);
+        if (latestClick && latestClick.sourceId) {
+            const timeDiff = Date.now() - latestClick.timestamp;
+            if (timeDiff < 3000) {
+                myRole = 'target';
+                myId = latestClick.sourceId;
+                saveState(myRole, myId);
+
+                setTimeout(() => {
+                    updateUI();
+                    setupTargetListener();
+                }, 100);
+                console.log(`Split Tab: Auto-bound to Source ${myId} (Latency: ${timeDiff}ms)`);
+            }
+        }
+    }
+
+    // --- Core Functionality ---
+
+    function setupTargetListener() {
+        if (myRole !== 'target' || !myId) return;
+
+        GM_addValueChangeListener(getTimestampKey(myId), function (key, oldVal, newVal, remote) {
+            if (!remote) return;
+            const url = GM_getValue(getTargetUrlKey(myId));
+            if (url) {
+                window.location.href = url;
+            }
         });
     }
 
-    // Event Listeners
-    document.addEventListener('click', handleLinkClick, true);
-    GM_registerMenuCommand("Configure Split Tab", showConfigOverlay);
+    // Initialization
+    window.addEventListener('click', handleLinkClick, true);
+    window.addEventListener('mousedown', handleMouseDown, true);
+    window.addEventListener('contextmenu', handleContextMenu, true);
+    window.addEventListener('auxclick', handleAuxClick, true);
 
-    // Initial Check
-    if (currentMode !== 'idle') {
-        updateStatusIndicator();
+    GM_registerMenuCommand("Configure Split Tab", showConfigOverlay);
+    GM_registerMenuCommand("⚠️ Reset / Clear Role", resetGlobalState);
+
+    if (myRole === 'target') {
+        setupTargetListener();
     }
+
+    updateUI();
 
 })();
