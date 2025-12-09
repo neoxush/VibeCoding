@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Split Tab Manager
 // @namespace    http://tampermonkey.net/
-// @version      0.25
+// @version      0.32
 // @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
 // @author       You
 // @match        *://*/*
@@ -13,12 +13,12 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
-// --- LAST UPDATED: 2025-12-09 10:26:00 ---
+// --- LAST UPDATED: 2025-12-09 14:31:00 ---
 
 (function () {
     'use strict';
 
-    console.log('Split Tab: Script initialized at document-start (v0.25)');
+    console.log('Split Tab: Script initialized at document-start (v0.32)');
 
     // --- Configuration & Keys ---
     const STATE_PREFIX = 'SPLIT_TAB_STATE=';
@@ -30,7 +30,8 @@
 
     // Global keys (GM storage)
     const KEY_LATEST_CLICK = 'split_tab_latest_click'; // { sourceId, timestamp }
-    const KEY_TARGET_STATE = 'split_tab_target_state'; // { sourceId, timestamp } - for cross-origin persistence
+    const KEY_TARGET_STATE = 'split_tab_target_state'; // { sourceId, timestamp } - for TARGET cross-origin persistence
+    const KEY_SOURCE_STATE = 'split_tab_source_state'; // { sourceId, timestamp } - for SOURCE cross-origin persistence
     const getTargetUrlKey = (id) => `split_tab_url_${id}`;
     const getTimestampKey = (id) => `split_tab_ts_${id}`;
     const getCloseSignalKey = (id) => `split_tab_close_${id}`;
@@ -271,6 +272,10 @@
         closeOverlay();
         updateUI();
 
+        // Set up listeners for the new ID
+        setupSwapListener();
+        setupCloseListener();
+
         // Record click so new tabs can auto-bind
         recordClick();
         console.log('Split Tab: Manually set as SOURCE (new), ID:', myId);
@@ -328,21 +333,25 @@
     }
 
     function cleanupOnClose() {
-        // Only send close signal if NOT an intentional navigation
-        if (isIntentionalNavigation) {
-            console.log('Split Tab: Skipping close signal (intentional navigation)');
-            return;
-        }
-
-        // Signal the paired tab that we're actually closing
-        if (myId && (myRole === 'source' || myRole === 'target')) {
-            const closeKey = getCloseSignalKey(myId);
-            GM_setValue(closeKey, {
-                action: 'tab_closed',
+        // Save state for both SOURCE and TARGET before navigation
+        // This allows restoration after cross-origin navigation
+        if (myId && myRole === 'source') {
+            // SOURCE: Save state to dedicated key for reliable restoration
+            GM_setValue(KEY_SOURCE_STATE, {
+                sourceId: myId,
                 timestamp: Date.now()
             });
-            console.log('Split Tab: Sent close signal to paired tab');
+            console.log('Split Tab: SOURCE saved state before navigation');
+        } else if (myId && myRole === 'target' && !isIntentionalNavigation) {
+            // TARGET: Only save if not already handled by setupTargetListener
+            GM_setValue(KEY_TARGET_STATE, {
+                sourceId: myId,
+                timestamp: Date.now()
+            });
+            console.log('Split Tab: TARGET saved state before navigation');
         }
+        // Never send close signals on beforeunload - can't distinguish navigation from actual close
+        // Connection persists until user manually resets
     }
 
     // --- Auto-Promote & Click Handling ---
@@ -399,38 +408,56 @@
         }
     }
 
-    // New Tab / Navigation: Restore TARGET state first, then check for new binding
+    // New Tab / Navigation: Restore state (SOURCE or TARGET) after cross-origin navigation
     if (myRole === 'idle') {
-        // First, check if we're a TARGET tab that just navigated (cross-origin)
-        const savedTargetState = GM_getValue(KEY_TARGET_STATE);
-        if (savedTargetState && savedTargetState.sourceId && (Date.now() - savedTargetState.timestamp) < 10000) {
-            // Restore TARGET state after cross-origin navigation
-            myRole = 'target';
-            myId = savedTargetState.sourceId;
+        // 1. Check if we're a SOURCE tab that just navigated
+        const savedSourceState = GM_getValue(KEY_SOURCE_STATE);
+        if (savedSourceState && savedSourceState.sourceId && (Date.now() - savedSourceState.timestamp) < 30000) {
+            // Restore SOURCE state after cross-origin navigation
+            myRole = 'source';
+            myId = savedSourceState.sourceId;
             saveState(myRole, myId);
-            console.log(`Split Tab: Restored TARGET state after navigation (ID: ${myId})`);
+            // Clear SOURCE state to prevent future mis-restoration
+            GM_setValue(KEY_SOURCE_STATE, null);
+            console.log(`Split Tab: Restored SOURCE state after navigation (ID: ${myId})`);
             setTimeout(() => {
                 updateUI();
-                setupTargetListener();
                 setupSwapListener();
                 setupCloseListener();
             }, 100);
-        } else {
-            // Check for new tab auto-binding
-            const latestClick = GM_getValue(KEY_LATEST_CLICK);
-            if (latestClick && latestClick.sourceId) {
-                const timeDiff = Date.now() - latestClick.timestamp;
-                if (timeDiff < 3000) {
+        }
+        // 2. Check if we're a TARGET tab that just navigated
+        else {
+            const savedTargetState = GM_getValue(KEY_TARGET_STATE);
+            if (savedTargetState && savedTargetState.sourceId && (Date.now() - savedTargetState.timestamp) < 30000) {
+                // Restore TARGET state after cross-origin navigation
+                myRole = 'target';
+                myId = savedTargetState.sourceId;
+                saveState(myRole, myId);
+                // Clear TARGET state to prevent future mis-restoration
+                GM_setValue(KEY_TARGET_STATE, null);
+                console.log(`Split Tab: Restored TARGET state after navigation (ID: ${myId})`);
+                setTimeout(() => {
+                    updateUI();
+                    setupTargetListener();
+                    setupSwapListener();
+                    setupCloseListener();
+                }, 100);
+            }
+            // 3. Check for new tab auto-binding (only if no saved state)
+            else {
+                const latestClick = GM_getValue(KEY_LATEST_CLICK);
+                if (latestClick && latestClick.sourceId && (Date.now() - latestClick.timestamp) < 3000) {
                     myRole = 'target';
                     myId = latestClick.sourceId;
                     saveState(myRole, myId);
+                    console.log(`Split Tab: Auto-bound to Source ${myId}`);
                     setTimeout(() => {
                         updateUI();
                         setupTargetListener();
                         setupSwapListener();
                         setupCloseListener();
                     }, 100);
-                    console.log(`Split Tab: Auto-bound to Source ${myId} (Latency: ${timeDiff}ms)`);
                 }
             }
         }
@@ -451,6 +478,7 @@
                     myRole = 'source';
                     saveState(myRole, myId);
                     updateUI();
+                    recordClick(); // Register as new SOURCE
                     console.log('Split Tab: Received swap signal, became Source');
                 }
             } else if (newVal && newVal.action === 'become_target') {
