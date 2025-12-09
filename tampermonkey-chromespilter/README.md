@@ -1,4 +1,4 @@
-# Tampermonkey Chrome Splitter (Pre-release)
+# Enhanced Split View (Pre-release)
 
 > 🚧 **预发布版本 | Pre-release** 🚧
 
