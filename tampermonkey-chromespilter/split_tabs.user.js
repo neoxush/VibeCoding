@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Split Tab Manager
 // @namespace    http://tampermonkey.net/
-// @version      0.32
+// @version      0.33
 // @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
 // @author       You
 // @match        *://*/*
@@ -13,14 +13,15 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
-// --- LAST UPDATED: 2025-12-09 14:31:00 ---
+// --- LAST UPDATED: 2025-12-09 14:58:00 ---
 
 (function () {
     'use strict';
 
-    console.log('Split Tab: Script initialized at document-start (v0.32)');
+    console.log('Split Tab: Script initialized at document-start (v0.33)');
 
     // --- Configuration & Keys ---
+    const VERSION = '0.33';
     const STATE_PREFIX = 'SPLIT_TAB_STATE=';
     const SESSION_KEY_ROLE = 'split_tab_role';
     const SESSION_KEY_ID = 'split_tab_id';
@@ -114,20 +115,21 @@
                 .split-btn.cancel { background: transparent; border: 1px solid #666; color: #aaa; }
                 .split-btn.cancel:hover { background: #333; color: #fff; }
                 
-                #split-status-indicator {
-                    position: fixed; bottom: 20px; right: 0;
-                    padding: 8px 16px; 
-                    font-family: sans-serif; font-size: 13px; font-weight: bold;
-                    z-index: 2147483647;
-                    cursor: pointer; user-select: none;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                    transition: transform 0.2s;
-                    display: flex; align-items: center;
-                    background: #28a745; color: #fff;
-                    border-radius: 20px 0 0 20px;
-                    margin-right: -5px;
+                #stm-ctrl {
+                    position: fixed !important; bottom: 20px !important; right: 0 !important;
+                    padding: 8px 16px !important; 
+                    font-family: sans-serif !important; font-size: 13px !important; font-weight: bold !important;
+                    z-index: 2147483647 !important;
+                    cursor: pointer !important; user-select: none !important;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+                    transition: transform 0.2s !important;
+                    display: flex !important; align-items: center !important;
+                    background: #28a745 !important; color: #fff !important;
+                    border-radius: 20px 0 0 20px !important;
+                    margin-right: -5px !important;
+                    visibility: visible !important; opacity: 1 !important;
                 }
-                #split-status-indicator:hover { transform: scale(1.05); }
+                #stm-ctrl:hover { transform: scale(1.05) !important; }
                 .status-dot {
                     display: inline-block; width: 10px; height: 10px;
                     border-radius: 50%; margin-right: 8px; background: #fff;
@@ -215,29 +217,48 @@
         if (overlay) overlay.remove();
     }
 
+    // Unique badge ID (obscure to avoid adblocker patterns)
+    const BADGE_ID = 'stm-ctrl';
+
     function updateUI() {
-        if (!document.body) {
+        if (!document.documentElement) {
             setTimeout(updateUI, 100);
             return;
         }
+
+        // Check if badge already exists in DOM
+        const existingBadge = document.getElementById(BADGE_ID);
 
         // Remove existing indicator to force refresh
         if (statusIndicator && statusIndicator.parentNode) {
             statusIndicator.remove();
             statusIndicator = null;
         }
+        if (existingBadge && existingBadge !== statusIndicator) {
+            existingBadge.remove();
+        }
 
         // Only show badge for SOURCE tabs
         if (myRole === 'source') {
             statusIndicator = document.createElement('div');
-            statusIndicator.id = 'split-status-indicator';
+            statusIndicator.id = BADGE_ID;
             statusIndicator.title = 'Click to configure';
             statusIndicator.onclick = showConfigOverlay;
-            statusIndicator.innerHTML = `<span class="status-dot"></span>SOURCE`;
-            document.body.appendChild(statusIndicator);
+            statusIndicator.innerHTML = `<span class="status-dot"></span>SOURCE v${VERSION}`;
+            // Append to documentElement instead of body (more stable)
+            document.documentElement.appendChild(statusIndicator);
         }
         updateDebugDashboard();
     }
+
+    // Periodic badge check - re-inject if removed (handles SPA DOM replacement)
+    function ensureBadgeVisible() {
+        if (myRole === 'source' && !document.getElementById(BADGE_ID)) {
+            console.log('Split Tab: Badge missing, re-injecting...');
+            updateUI();
+        }
+    }
+    setInterval(ensureBadgeVisible, 2000);
 
     // --- Logic ---
 
