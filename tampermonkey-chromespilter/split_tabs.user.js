@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Split Tab Manager
 // @namespace    http://tampermonkey.net/
-// @version      0.17
-// @description  Link two tabs: Auto-Promote Source on Split, Auto-Target. Hybrid Persistence. Debug Dashboard.
+// @version      0.25
+// @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
 // @author       You
 // @match        *://*/*
 // @run-at       document-start
@@ -13,22 +13,27 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
-// --- LAST UPDATED: 2025-12-08 18:25:00 ---
+// --- LAST UPDATED: 2025-12-09 10:26:00 ---
 
 (function () {
     'use strict';
 
-    console.log('Split Tab: Script initialized at document-start (v0.17)');
+    console.log('Split Tab: Script initialized at document-start (v0.25)');
 
     // --- Configuration & Keys ---
     const STATE_PREFIX = 'SPLIT_TAB_STATE=';
     const SESSION_KEY_ROLE = 'split_tab_role';
     const SESSION_KEY_ID = 'split_tab_id';
 
+    // Debug mode detection (check for -debug in URL)
+    const DEBUG_MODE = window.location.href.includes('-debug');
+
     // Global keys (GM storage)
     const KEY_LATEST_CLICK = 'split_tab_latest_click'; // { sourceId, timestamp }
+    const KEY_TARGET_STATE = 'split_tab_target_state'; // { sourceId, timestamp } - for cross-origin persistence
     const getTargetUrlKey = (id) => `split_tab_url_${id}`;
     const getTimestampKey = (id) => `split_tab_ts_${id}`;
+    const getCloseSignalKey = (id) => `split_tab_close_${id}`;
 
     // --- State Management (Hybrid: Session + Window.name) ---
 
@@ -78,6 +83,9 @@
     let myRole = currentState.role;
     let myId = currentState.id;
     let statusIndicator = null;
+    let isIntentionalNavigation = false; // Flag to prevent false close signals
+
+    console.log(`Split Tab: Loaded state - Role: ${myRole}, ID: ${myId}`);
 
     // --- Styles (Injected safely) ---
     function injectStyles() {
@@ -114,7 +122,7 @@
                     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                     transition: transform 0.2s;
                     display: flex; align-items: center;
-                    background: #28a745; color: #fff; 
+                    background: #28a745; color: #fff;
                     border-radius: 20px 0 0 20px;
                     margin-right: -5px;
                 }
@@ -148,7 +156,7 @@
 
     // --- Debug Dashboard ---
     function updateDebugDashboard() {
-        if (!document.body) return;
+        if (!document.body || !DEBUG_MODE) return;
 
         let dashboard = document.getElementById('split-debug-dashboard');
         if (!dashboard) {
@@ -171,8 +179,10 @@
         `;
     }
 
-    // Poll for debug updates
-    setInterval(updateDebugDashboard, 500);
+    // Poll for debug updates only in debug mode
+    if (DEBUG_MODE) {
+        setInterval(updateDebugDashboard, 500);
+    }
 
     // --- UI Functions ---
 
@@ -187,6 +197,7 @@
                 <p>Set this tab as a Source to control new tabs.</p>
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <button class="split-btn source" id="btn-set-source">Set as SOURCE</button>
+                    <button class="split-btn" id="btn-switch-source" style="background: #007bff; border-color: #0056b3;">Switch Source to Other Window</button>
                     <button class="split-btn cancel" id="btn-cancel">Cancel / Disable</button>
                 </div>
             </div>
@@ -194,6 +205,7 @@
         document.body.appendChild(overlay);
 
         document.getElementById('btn-set-source').onclick = () => setAsSource();
+        document.getElementById('btn-switch-source').onclick = () => switchSourceToOtherWindow();
         document.getElementById('btn-cancel').onclick = () => disableSource();
     }
 
@@ -208,18 +220,20 @@
             return;
         }
 
+        // Remove existing indicator to force refresh
+        if (statusIndicator && statusIndicator.parentNode) {
+            statusIndicator.remove();
+            statusIndicator = null;
+        }
+
+        // Only show badge for SOURCE tabs
         if (myRole === 'source') {
-            if (!statusIndicator) {
-                statusIndicator = document.createElement('div');
-                statusIndicator.id = 'split-status-indicator';
-                statusIndicator.title = 'Click to configure';
-                statusIndicator.onclick = showConfigOverlay;
-                document.body.appendChild(statusIndicator);
-            }
+            statusIndicator = document.createElement('div');
+            statusIndicator.id = 'split-status-indicator';
+            statusIndicator.title = 'Click to configure';
+            statusIndicator.onclick = showConfigOverlay;
             statusIndicator.innerHTML = `<span class="status-dot"></span>SOURCE`;
-            statusIndicator.style.display = 'flex';
-        } else {
-            if (statusIndicator) statusIndicator.style.display = 'none';
+            document.body.appendChild(statusIndicator);
         }
         updateDebugDashboard();
     }
@@ -231,11 +245,35 @@
     }
 
     function setAsSource() {
+        // If we're currently a Target or Source in an existing group, keep the same ID
+        if (myId && (myRole === 'target' || myRole === 'source')) {
+            // Signal the other tab to become TARGET
+            const swapKey = `split_tab_swap_${myId}`;
+            GM_setValue(swapKey, {
+                action: 'become_target',
+                timestamp: Date.now()
+            });
+
+            // Set this tab as SOURCE (keep same ID)
+            myRole = 'source';
+            saveState(myRole, myId);
+            closeOverlay();
+            updateUI();
+            recordClick();
+            console.log('Split Tab: Set as SOURCE (replaced), ID:', myId);
+            return;
+        }
+
+        // Otherwise, create a new Source with new ID (idle tab)
         myRole = 'source';
         myId = generateId();
         saveState(myRole, myId);
         closeOverlay();
         updateUI();
+
+        // Record click so new tabs can auto-bind
+        recordClick();
+        console.log('Split Tab: Manually set as SOURCE (new), ID:', myId);
     }
 
     function disableSource() {
@@ -246,6 +284,42 @@
         updateUI();
     }
 
+    function switchSourceToOtherWindow() {
+        if (myRole === 'source' && myId) {
+            // Signal the target tab to become source, then become target ourselves
+            const swapKey = `split_tab_swap_${myId}`;
+            GM_setValue(swapKey, {
+                action: 'swap',
+                timestamp: Date.now()
+            });
+
+            // Immediately swap roles locally
+            myRole = 'target';
+            saveState(myRole, myId);
+            closeOverlay();
+            updateUI();
+            setupTargetListener();
+            console.log('Split Tab: Switched to Target role');
+        } else if (myRole === 'target' && myId) {
+            // We're the target, become source and signal the other tab
+            const swapKey = `split_tab_swap_${myId}`;
+            GM_setValue(swapKey, {
+                action: 'become_target',
+                timestamp: Date.now()
+            });
+
+            myRole = 'source';
+            saveState(myRole, myId);
+            closeOverlay();
+            updateUI();
+            recordClick();
+            console.log('Split Tab: Switched to Source role');
+        } else {
+            // If idle, just set as source
+            setAsSource();
+        }
+    }
+
     function resetGlobalState() {
         if (confirm("Reset all Split Tab connections for this tab?")) {
             saveState('idle', null);
@@ -253,100 +327,162 @@
         }
     }
 
-    // --- Auto-Promote & Click Handling ---
+    function cleanupOnClose() {
+        // Only send close signal if NOT an intentional navigation
+        if (isIntentionalNavigation) {
+            console.log('Split Tab: Skipping close signal (intentional navigation)');
+            return;
+        }
 
-    function recordClick() {
-        if (myRole === 'source' && myId) {
-            GM_setValue(KEY_LATEST_CLICK, {
-                sourceId: myId,
+        // Signal the paired tab that we're actually closing
+        if (myId && (myRole === 'source' || myRole === 'target')) {
+            const closeKey = getCloseSignalKey(myId);
+            GM_setValue(closeKey, {
+                action: 'tab_closed',
                 timestamp: Date.now()
             });
-            updateDebugDashboard();
+            console.log('Split Tab: Sent close signal to paired tab');
         }
     }
 
-    function autoPromoteIfNeeded(reason) {
-        console.log(`Split Tab: Auto-promote check triggered by ${reason}`);
+    // --- Auto-Promote & Click Handling ---
+
+    function recordClick() {
+        if (myRole !== 'source' || !myId) return;
+        GM_setValue(KEY_LATEST_CLICK, {
+            sourceId: myId,
+            timestamp: Date.now()
+        });
+        if (DEBUG_MODE) updateDebugDashboard();
+    }
+
+    function autoPromoteOnSplitView() {
         if (myRole === 'idle') {
-            console.log('Split Tab: Auto-promoting to Source');
+            console.log('Split Tab: Auto-promoting to Source (split view detected)');
             setAsSource();
         }
         recordClick();
     }
 
-    // 1. Intercept Link Clicks (Left Click + Modifiers)
+    // Intercept Link Clicks (Left Click only for SOURCE tabs)
     function handleLinkClick(e) {
+        if (myRole !== 'source' || e.button !== 0) return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+
         const link = e.target.closest('a');
         if (!link || !link.href) return;
         if (link.href.startsWith('javascript:') || link.href.includes('#')) return;
 
-        if (e.ctrlKey || e.metaKey || e.shiftKey) {
-            autoPromoteIfNeeded('Modifier Click');
-            return;
-        }
+        e.preventDefault();
+        e.stopPropagation();
+        recordClick();
 
-        if (myRole === 'source' && e.button === 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            recordClick();
+        GM_setValue(getTargetUrlKey(myId), link.href);
+        GM_setValue(getTimestampKey(myId), Date.now());
 
-            GM_setValue(getTargetUrlKey(myId), link.href);
-            GM_setValue(getTimestampKey(myId), Date.now());
-
+        if (statusIndicator) {
             const originalText = statusIndicator.innerHTML;
             statusIndicator.innerHTML = 'Sent! 🚀';
             setTimeout(() => {
-                if (myRole === 'source') statusIndicator.innerHTML = originalText;
+                if (myRole === 'source' && statusIndicator) {
+                    statusIndicator.innerHTML = originalText;
+                }
             }, 1000);
         }
     }
 
-    // 2. Intercept Mousedown (Right Click / Middle Click)
-    function handleMouseDown(e) {
-        if (e.button === 2 || e.button === 1) {
-            const link = e.target.closest('a');
-            if (link) {
-                autoPromoteIfNeeded('Mouse Button ' + e.button);
-            }
-        }
-    }
-
-    // 3. Intercept Context Menu (Backup)
+    // Context menu handler - auto-promote on right-click on links (Chrome split view)
     function handleContextMenu(e) {
         const link = e.target.closest('a');
-        if (link) {
-            autoPromoteIfNeeded('Context Menu');
+        if (link && link.href && !link.href.startsWith('javascript:')) {
+            autoPromoteOnSplitView();
         }
     }
 
-    // 4. Intercept Aux Click
-    function handleAuxClick(e) {
-        if (e.button === 1) {
-            const link = e.target.closest('a');
-            if (link) autoPromoteIfNeeded('Aux Click');
-        }
-    }
-
-    // 5. New Tab: Check for recent Source click
+    // New Tab / Navigation: Restore TARGET state first, then check for new binding
     if (myRole === 'idle') {
-        const latestClick = GM_getValue(KEY_LATEST_CLICK);
-        if (latestClick && latestClick.sourceId) {
-            const timeDiff = Date.now() - latestClick.timestamp;
-            if (timeDiff < 3000) {
-                myRole = 'target';
-                myId = latestClick.sourceId;
-                saveState(myRole, myId);
-
-                setTimeout(() => {
-                    updateUI();
-                    setupTargetListener();
-                }, 100);
-                console.log(`Split Tab: Auto-bound to Source ${myId} (Latency: ${timeDiff}ms)`);
+        // First, check if we're a TARGET tab that just navigated (cross-origin)
+        const savedTargetState = GM_getValue(KEY_TARGET_STATE);
+        if (savedTargetState && savedTargetState.sourceId && (Date.now() - savedTargetState.timestamp) < 10000) {
+            // Restore TARGET state after cross-origin navigation
+            myRole = 'target';
+            myId = savedTargetState.sourceId;
+            saveState(myRole, myId);
+            console.log(`Split Tab: Restored TARGET state after navigation (ID: ${myId})`);
+            setTimeout(() => {
+                updateUI();
+                setupTargetListener();
+                setupSwapListener();
+                setupCloseListener();
+            }, 100);
+        } else {
+            // Check for new tab auto-binding
+            const latestClick = GM_getValue(KEY_LATEST_CLICK);
+            if (latestClick && latestClick.sourceId) {
+                const timeDiff = Date.now() - latestClick.timestamp;
+                if (timeDiff < 3000) {
+                    myRole = 'target';
+                    myId = latestClick.sourceId;
+                    saveState(myRole, myId);
+                    setTimeout(() => {
+                        updateUI();
+                        setupTargetListener();
+                        setupSwapListener();
+                        setupCloseListener();
+                    }, 100);
+                    console.log(`Split Tab: Auto-bound to Source ${myId} (Latency: ${timeDiff}ms)`);
+                }
             }
         }
     }
 
     // --- Core Functionality ---
+
+    function setupSwapListener() {
+        if (!myId) return;
+
+        const swapKey = `split_tab_swap_${myId}`;
+        GM_addValueChangeListener(swapKey, function (key, oldVal, newVal, remote) {
+            if (!remote) return;
+
+            if (newVal && newVal.action === 'swap') {
+                // The source tab initiated swap, we (target) become source
+                if (myRole === 'target') {
+                    myRole = 'source';
+                    saveState(myRole, myId);
+                    updateUI();
+                    console.log('Split Tab: Received swap signal, became Source');
+                }
+            } else if (newVal && newVal.action === 'become_target') {
+                // The target tab became source, we (source) become target
+                if (myRole === 'source') {
+                    myRole = 'target';
+                    saveState(myRole, myId);
+                    updateUI();
+                    setupTargetListener();
+                    console.log('Split Tab: Received become_target signal, became Target');
+                }
+            }
+        });
+    }
+
+    function setupCloseListener() {
+        if (!myId) return;
+
+        const closeKey = getCloseSignalKey(myId);
+        GM_addValueChangeListener(closeKey, function (key, oldVal, newVal, remote) {
+            if (!remote) return;
+
+            if (newVal && newVal.action === 'tab_closed') {
+                // The paired tab was closed, reset our state
+                console.log('Split Tab: Paired tab closed, resetting state');
+                myRole = 'idle';
+                myId = null;
+                saveState('idle', null);
+                updateUI();
+            }
+        });
+    }
 
     function setupTargetListener() {
         if (myRole !== 'target' || !myId) return;
@@ -355,6 +491,15 @@
             if (!remote) return;
             const url = GM_getValue(getTargetUrlKey(myId));
             if (url) {
+                // Mark as intentional navigation to prevent false close signal
+                isIntentionalNavigation = true;
+
+                // Save TARGET state to GM storage before navigation
+                GM_setValue(KEY_TARGET_STATE, {
+                    sourceId: myId,
+                    timestamp: Date.now()
+                });
+                console.log('Split Tab: Navigating to:', url);
                 window.location.href = url;
             }
         });
@@ -362,15 +507,24 @@
 
     // Initialization
     window.addEventListener('click', handleLinkClick, true);
-    window.addEventListener('mousedown', handleMouseDown, true);
     window.addEventListener('contextmenu', handleContextMenu, true);
-    window.addEventListener('auxclick', handleAuxClick, true);
+
+    // Cleanup on tab close
+    window.addEventListener('beforeunload', cleanupOnClose);
+    window.addEventListener('unload', cleanupOnClose);
 
     GM_registerMenuCommand("Configure Split Tab", showConfigOverlay);
     GM_registerMenuCommand("⚠️ Reset / Clear Role", resetGlobalState);
 
     if (myRole === 'target') {
+        console.log('Split Tab: Setting up target listener for ID:', myId);
         setupTargetListener();
+    }
+
+    // Setup swap listener for both source and target
+    if (myId) {
+        setupSwapListener();
+        setupCloseListener();
     }
 
     updateUI();
