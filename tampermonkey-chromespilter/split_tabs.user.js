@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Split Tab Manager
+// @name         Split Tab Manager (Dev)
 // @namespace    http://tampermonkey.net/
-// @version      0.33
-// @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
+// @version      0.21
+// @description  FIX: Drag-to-pair now only sets the currently visible tab as Target, preventing background tabs from being accidentally paired.
 // @author       You
 // @match        *://*/*
 // @run-at       document-start
@@ -10,52 +10,64 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
+// @grant        GM_removeValueChangeListener
 // @grant        GM_addStyle
+// @grant        GM_notification
 // ==/UserScript==
-
-// --- LAST UPDATED: 2025-12-09 14:58:00 ---
 
 (function () {
     'use strict';
 
-    console.log('Split Tab: Script initialized at document-start (v0.33)');
+    console.log('Split Tab (Dev): Script initialized (v0.21)');
 
     // --- Configuration & Keys ---
-    const VERSION = '0.33';
-    const STATE_PREFIX = 'SPLIT_TAB_STATE=';
-    const SESSION_KEY_ROLE = 'split_tab_role';
-    const SESSION_KEY_ID = 'split_tab_id';
+    const STATE_PREFIX = 'STM_STATE_V18=';
+    const SESSION_KEY_ROLE = 'stm_role_v18';
+    const SESSION_KEY_ID = 'stm_id_v18';
 
-    // Debug mode detection (check for -debug in URL)
-    const DEBUG_MODE = window.location.href.includes('-debug');
+    const GM_PREFIX = 'stm_gm_v18_';
+    const KEY_LATEST_SOURCE = `${GM_PREFIX}latest_source`;
+    const KEY_DRAG_PAIR_REQUEST = `${GM_PREFIX}drag_pair_request`;
+    const KEY_CONFIG = `${GM_PREFIX}config`;
+    const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
+    const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
+    const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
 
-    // Global keys (GM storage)
-    const KEY_LATEST_CLICK = 'split_tab_latest_click'; // { sourceId, timestamp }
-    const KEY_TARGET_STATE = 'split_tab_target_state'; // { sourceId, timestamp } - for TARGET cross-origin persistence
-    const KEY_SOURCE_STATE = 'split_tab_source_state'; // { sourceId, timestamp } - for SOURCE cross-origin persistence
-    const getTargetUrlKey = (id) => `split_tab_url_${id}`;
-    const getTimestampKey = (id) => `split_tab_ts_${id}`;
-    const getCloseSignalKey = (id) => `split_tab_close_${id}`;
+    // Default configuration
+    const DEFAULT_CONFIG = {
+        sourceKey: { button: 1, ctrl: true, alt: false, shift: false },
+        targetKey: { button: 1, ctrl: false, alt: true, shift: false }
+    };
 
-    // --- State Management (Hybrid: Session + Window.name) ---
+    // --- State Management ---
+    let myRole = 'idle';
+    let myId = null;
+    let ui = null;
+    let configPanel = null;
+    let activeListeners = [];
+    let config = null;
+
+    function loadConfig() {
+        config = GM_getValue(KEY_CONFIG, DEFAULT_CONFIG);
+    }
+
+    function saveConfig(newConfig) {
+        config = newConfig;
+        GM_setValue(KEY_CONFIG, config);
+    }
 
     function saveState(role, id) {
+        myRole = role; myId = id;
         if (role === 'idle') {
-            sessionStorage.removeItem(SESSION_KEY_ROLE);
-            sessionStorage.removeItem(SESSION_KEY_ID);
+            [SESSION_KEY_ROLE, SESSION_KEY_ID].forEach(k => sessionStorage.removeItem(k));
+            if (window.name.startsWith(STATE_PREFIX)) window.name = '';
         } else {
             sessionStorage.setItem(SESSION_KEY_ROLE, role);
             sessionStorage.setItem(SESSION_KEY_ID, id);
+            window.name = STATE_PREFIX + JSON.stringify({ role, id });
         }
-
-        if (role !== 'idle') {
-            const state = { role, id };
-            window.name = STATE_PREFIX + JSON.stringify(state);
-        } else {
-            if (window.name && window.name.startsWith(STATE_PREFIX)) {
-                window.name = '';
-            }
-        }
+        updateUI();
+        attachRoleSpecificListeners();
     }
 
     function loadState() {
@@ -66,516 +78,278 @@
             return { role: sessionRole, id: sessionId };
         }
 
-        if (window.name && window.name.startsWith(STATE_PREFIX)) {
-            try {
-                const state = JSON.parse(window.name.substring(STATE_PREFIX.length));
-                sessionStorage.setItem(SESSION_KEY_ROLE, state.role);
-                sessionStorage.setItem(SESSION_KEY_ID, state.id);
-                return state;
-            } catch (e) {
-                console.error('Split Tab: Failed to parse window.name', e);
-            }
-        }
-
         return { role: 'idle', id: null };
     }
 
-    // Load current state
-    const currentState = loadState();
-    let myRole = currentState.role;
-    let myId = currentState.id;
-    let statusIndicator = null;
-    let isIntentionalNavigation = false; // Flag to prevent false close signals
 
-    console.log(`Split Tab: Loaded state - Role: ${myRole}, ID: ${myId}`);
-
-    // --- Styles (Injected safely) ---
+    // --- UI Logic ---
     function injectStyles() {
-        if (document.head) {
-            GM_addStyle(`
-                #split-tab-overlay {
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background: rgba(0, 0, 0, 0.6); z-index: 2147483647;
-                    display: flex; justify-content: center; align-items: center;
-                }
-                #split-tab-modal {
-                    background: #222; color: #fff; padding: 25px; border-radius: 12px;
-                    box-shadow: 0 8px 20px rgba(0,0,0,0.4); text-align: center;
-                    font-family: sans-serif; min-width: 320px;
-                }
-                #split-tab-modal h2 { margin-top: 0; font-size: 20px; margin-bottom: 15px; }
-                .split-btn {
-                    background: #444; color: #fff; border: 1px solid #555;
-                    padding: 12px 24px; margin: 8px; cursor: pointer;
-                    border-radius: 6px; font-size: 14px; transition: all 0.2s; font-weight: bold;
-                }
-                .split-btn:hover { background: #555; transform: translateY(-1px); }
-                .split-btn.source { background: #28a745; border-color: #1e7e34; }
-                .split-btn.source:hover { background: #218838; }
-                .split-btn.cancel { background: transparent; border: 1px solid #666; color: #aaa; }
-                .split-btn.cancel:hover { background: #333; color: #fff; }
-                
-                #stm-ctrl {
-                    position: fixed !important; bottom: 20px !important; right: 0 !important;
-                    padding: 8px 16px !important; 
-                    font-family: sans-serif !important; font-size: 13px !important; font-weight: bold !important;
-                    z-index: 2147483647 !important;
-                    cursor: pointer !important; user-select: none !important;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-                    transition: transform 0.2s !important;
-                    display: flex !important; align-items: center !important;
-                    background: #28a745 !important; color: #fff !important;
-                    border-radius: 20px 0 0 20px !important;
-                    margin-right: -5px !important;
-                    visibility: visible !important; opacity: 1 !important;
-                }
-                #stm-ctrl:hover { transform: scale(1.05) !important; }
-                .status-dot {
-                    display: inline-block; width: 10px; height: 10px;
-                    border-radius: 50%; margin-right: 8px; background: #fff;
-                }
-                
-                /* Debug Dashboard */
-                #split-debug-dashboard {
-                    position: fixed; bottom: 10px; left: 10px;
-                    background: rgba(0, 0, 0, 0.85); color: #0f0;
-                    padding: 10px; border-radius: 8px;
-                    font-family: monospace; font-size: 11px;
-                    z-index: 2147483647; pointer-events: none;
-                    border: 1px solid #333;
-                    box-shadow: 0 0 10px rgba(0,0,0,0.5);
-                    min-width: 200px;
-                }
-                #split-debug-dashboard table { width: 100%; }
-                #split-debug-dashboard td { padding: 2px 5px; }
-                #split-debug-dashboard .label { color: #aaa; }
-                #split-debug-dashboard .val { font-weight: bold; }
-            `);
-        } else {
-            setTimeout(injectStyles, 100);
-        }
-    }
-    injectStyles();
-
-    // --- Debug Dashboard ---
-    function updateDebugDashboard() {
-        if (!document.body || !DEBUG_MODE) return;
-
-        let dashboard = document.getElementById('split-debug-dashboard');
-        if (!dashboard) {
-            dashboard = document.createElement('div');
-            dashboard.id = 'split-debug-dashboard';
-            document.body.appendChild(dashboard);
-        }
-
-        const latestClick = GM_getValue(KEY_LATEST_CLICK) || { sourceId: 'None', timestamp: 0 };
-        const timeAgo = latestClick.timestamp ? ((Date.now() - latestClick.timestamp) / 1000).toFixed(1) + 's' : 'Never';
-
-        dashboard.innerHTML = `
-            <table>
-                <tr><td class="label">Role:</td><td class="val" style="color: ${myRole === 'source' ? '#0f0' : (myRole === 'target' ? '#00f' : '#fff')}">${myRole.toUpperCase()}</td></tr>
-                <tr><td class="label">My ID:</td><td class="val">${myId || '-'}</td></tr>
-                <tr><td colspan="2"><hr style="border-color:#333"></td></tr>
-                <tr><td class="label">Global Source:</td><td class="val">${latestClick.sourceId}</td></tr>
-                <tr><td class="label">Last Click:</td><td class="val">${timeAgo} ago</td></tr>
-            </table>
-        `;
+        GM_addStyle(`
+            @keyframes stm-pulse { 0% {transform: scale(1);} 50% {transform: scale(1.2);} 100% {transform: scale(1);} }
+            .stm-pulse-animate { animation: stm-pulse 0.5s ease-out; }
+            #stm-ui-container { position: fixed; top: 85px; z-index: 2147483647; user-select: none; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+            #stm-ui-container.stm-side-right { right: 0; }
+            #stm-ui-container.stm-side-left { left: 0; }
+            #stm-status-dot { width: 100%; height: 100%; box-shadow: 0 2px 5px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; font-family: sans-serif; font-size: 14px; font-weight: bold; color: white; cursor: grab; transition: transform 0.2s, background-color 0.3s; border: 1px solid rgba(255,255,255,0.5); }
+            #stm-status-dot:active { cursor: grabbing; }
+            #stm-ui-container.stm-side-right #stm-status-dot { background-color: #28a745; border-radius: 8px 0 0 8px; border-right: none; }
+            #stm-ui-container.stm-side-left #stm-status-dot { background-color: #007bff; border-radius: 0 8px 8px 0; border-left: none; }
+            #stm-ui-container.stm-side-right:hover #stm-status-dot { transform: translateX(-3px); }
+            #stm-ui-container.stm-side-left:hover #stm-status-dot { transform: translateX(3px); }
+            #stm-menu { display: none; position: absolute; top: 100%; background-color: #333; border-radius: 4px; width: 120px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); font-family: sans-serif; font-size: 12px; }
+            #stm-ui-container.stm-side-right #stm-menu { right: 0; border-top-right-radius: 0; }
+            #stm-ui-container.stm-side-left #stm-menu { left: 0; border-top-left-radius: 0; }
+            .stm-menu-item { padding: 8px 12px; color: #fff; cursor: pointer; transition: background-color 0.2s; }
+            .stm-menu-item:hover { background-color: #555; }
+            #stm-config-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2c2c2c; border-radius: 8px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); z-index: 2147483648; font-family: sans-serif; color: #fff; min-width: 400px; }
+            #stm-config-panel h3 { margin: 0 0 15px 0; font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 10px; }
+            .stm-config-section { margin-bottom: 20px; padding: 15px; background: #333; border-radius: 4px; }
+            .stm-config-section h4 { margin: 0 0 10px 0; font-size: 14px; color: #4CAF50; }
+            .stm-config-row { display: flex; gap: 10px; margin-bottom: 8px; }
+            .stm-config-label { flex: 1; font-size: 13px; display: flex; align-items: center; }
+            .stm-config-input { display: flex; gap: 5px; align-items: center; }
+            .stm-config-input label { font-size: 12px; cursor: pointer; }
+            .stm-config-input input[type="checkbox"] { cursor: pointer; }
+            .stm-config-input select { background: #444; color: #fff; border: 1px solid #555; border-radius: 3px; padding: 3px 5px; cursor: pointer; }
+            .stm-config-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; }
+            .stm-config-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: background-color 0.2s; }
+            .stm-config-btn-save { background-color: #4CAF50; color: white; }
+            .stm-config-btn-save:hover { background-color: #45a049; }
+            .stm-config-btn-cancel { background-color: #666; color: white; }
+            .stm-config-btn-cancel:hover { background-color: #555; }
+            .stm-config-btn-reset { background-color: #f44336; color: white; }
+            .stm-config-btn-reset:hover { background-color: #da190b; }
+            #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2147483647; }
+        `);
     }
 
-    // Poll for debug updates only in debug mode
-    if (DEBUG_MODE) {
-        setInterval(updateDebugDashboard, 500);
-    }
-
-    // --- UI Functions ---
-
-    function showConfigOverlay() {
-        if (document.getElementById('split-tab-overlay')) return;
-
+    function createConfigPanel() {
         const overlay = document.createElement('div');
-        overlay.id = 'split-tab-overlay';
-        overlay.innerHTML = `
-            <div id="split-tab-modal">
-                <h2>Split Tab Manager</h2>
-                <p>Set this tab as a Source to control new tabs.</p>
-                <div style="display: flex; flex-direction: column; gap: 5px;">
-                    <button class="split-btn source" id="btn-set-source">Set as SOURCE</button>
-                    <button class="split-btn" id="btn-switch-source" style="background: #007bff; border-color: #0056b3;">Switch Source to Other Window</button>
-                    <button class="split-btn cancel" id="btn-cancel">Cancel / Disable</button>
+        overlay.id = 'stm-config-overlay';
+        const panel = document.createElement('div');
+        panel.id = 'stm-config-panel';
+        panel.innerHTML = `
+            <h3>Split Tab Manager - Key Configuration</h3>
+            <div class="stm-config-section">
+                <h4>Create Source Tab</h4>
+                <div class="stm-config-row">
+                    <div class="stm-config-label">Mouse Button:</div>
+                    <div class="stm-config-input">
+                        <select id="stm-source-button">
+                            <option value="0">Left (0)</option>
+                            <option value="1">Middle (1)</option>
+                            <option value="2">Right (2)</option>
+                        </select>
+                    </div>
                 </div>
+                <div class="stm-config-row">
+                    <div class="stm-config-label">Modifiers:</div>
+                    <div class="stm-config-input">
+                        <label><input type="checkbox" id="stm-source-ctrl"> Ctrl</label>
+                        <label><input type="checkbox" id="stm-source-alt"> Alt</label>
+                        <label><input type="checkbox" id="stm-source-shift"> Shift</label>
+                    </div>
+                </div>
+            </div>
+            <div class="stm-config-section">
+                <h4>Create Target Tab</h4>
+                <div class="stm-config-row">
+                    <div class="stm-config-label">Mouse Button:</div>
+                    <div class="stm-config-input">
+                        <select id="stm-target-button">
+                            <option value="0">Left (0)</option>
+                            <option value="1">Middle (1)</option>
+                            <option value="2">Right (2)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="stm-config-row">
+                    <div class="stm-config-label">Modifiers:</div>
+                    <div class="stm-config-input">
+                        <label><input type="checkbox" id="stm-target-ctrl"> Ctrl</label>
+                        <label><input type="checkbox" id="stm-target-alt"> Alt</label>
+                        <label><input type="checkbox" id="stm-target-shift"> Shift</label>
+                    </div>
+                </div>
+            </div>
+            <div class="stm-config-buttons">
+                <button class="stm-config-btn stm-config-btn-reset" id="stm-config-reset">Reset to Default</button>
+                <button class="stm-config-btn stm-config-btn-cancel" id="stm-config-cancel">Cancel</button>
+                <button class="stm-config-btn stm-config-btn-save" id="stm-config-save">Save</button>
             </div>
         `;
         document.body.appendChild(overlay);
-
-        document.getElementById('btn-set-source').onclick = () => setAsSource();
-        document.getElementById('btn-switch-source').onclick = () => switchSourceToOtherWindow();
-        document.getElementById('btn-cancel').onclick = () => disableSource();
+        document.body.appendChild(panel);
+        overlay.addEventListener('click', hideConfigPanel);
+        panel.querySelector('#stm-config-cancel').addEventListener('click', hideConfigPanel);
+        panel.querySelector('#stm-config-save').addEventListener('click', saveConfigFromPanel);
+        panel.querySelector('#stm-config-reset').addEventListener('click', resetConfigToDefault);
+        return { overlay, panel };
     }
 
-    function closeOverlay() {
-        const overlay = document.getElementById('split-tab-overlay');
-        if (overlay) overlay.remove();
+    function showConfigPanel() {
+        if (!configPanel) { configPanel = createConfigPanel(); }
+        document.getElementById('stm-source-button').value = config.sourceKey.button;
+        document.getElementById('stm-source-ctrl').checked = config.sourceKey.ctrl;
+        document.getElementById('stm-source-alt').checked = config.sourceKey.alt;
+        document.getElementById('stm-source-shift').checked = config.sourceKey.shift;
+        document.getElementById('stm-target-button').value = config.targetKey.button;
+        document.getElementById('stm-target-ctrl').checked = config.targetKey.ctrl;
+        document.getElementById('stm-target-alt').checked = config.targetKey.alt;
+        document.getElementById('stm-target-shift').checked = config.targetKey.shift;
+        configPanel.overlay.style.display = 'block';
+        configPanel.panel.style.display = 'block';
     }
 
-    // Unique badge ID (obscure to avoid adblocker patterns)
-    const BADGE_ID = 'stm-ctrl';
+    function hideConfigPanel() {
+        if (configPanel) {
+            configPanel.overlay.style.display = 'none';
+            configPanel.panel.style.display = 'none';
+        }
+    }
+
+    function saveConfigFromPanel() {
+        const newConfig = {
+            sourceKey: { button: parseInt(document.getElementById('stm-source-button').value), ctrl: document.getElementById('stm-source-ctrl').checked, alt: document.getElementById('stm-source-alt').checked, shift: document.getElementById('stm-source-shift').checked },
+            targetKey: { button: parseInt(document.getElementById('stm-target-button').value), ctrl: document.getElementById('stm-target-ctrl').checked, alt: document.getElementById('stm-target-alt').checked, shift: document.getElementById('stm-target-shift').checked }
+        };
+        saveConfig(newConfig);
+        hideConfigPanel();
+        GM_notification({ text: 'Configuration saved!' });
+    }
+
+    function resetConfigToDefault() {
+        saveConfig(DEFAULT_CONFIG);
+        showConfigPanel();
+        GM_notification({ text: 'Configuration reset to defaults!' });
+    }
 
     function updateUI() {
-        if (!document.documentElement) {
-            setTimeout(updateUI, 100);
-            return;
+        if (!document.body) { window.addEventListener('DOMContentLoaded', updateUI, { once: true }); return; }
+        if (!ui) {
+            ui = { container: document.createElement('div'), dot: document.createElement('div'), menu: document.createElement('div') };
+            ui.container.id = 'stm-ui-container';
+            ui.dot.id = 'stm-status-dot';
+            ui.menu.id = 'stm-menu';
+            ui.container.append(ui.menu, ui.dot);
+            document.body.appendChild(ui.container);
+            ui.dot.addEventListener('mousedown', handleDragStart);
+            ui.menu.addEventListener('click', handleMenuClick);
+            window.addEventListener('click', (e) => { if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) toggleMenu(); }, true);
         }
-
-        // Check if badge already exists in DOM
-        const existingBadge = document.getElementById(BADGE_ID);
-
-        // Remove existing indicator to force refresh
-        if (statusIndicator && statusIndicator.parentNode) {
-            statusIndicator.remove();
-            statusIndicator = null;
-        }
-        if (existingBadge && existingBadge !== statusIndicator) {
-            existingBadge.remove();
-        }
-
-        // Only show badge for SOURCE tabs
+        ui.container.style.display = (myRole === 'idle') ? 'none' : 'flex';
+        ui.container.classList.remove('stm-side-left', 'stm-side-right');
         if (myRole === 'source') {
-            statusIndicator = document.createElement('div');
-            statusIndicator.id = BADGE_ID;
-            statusIndicator.title = 'Click to configure';
-            statusIndicator.onclick = showConfigOverlay;
-            statusIndicator.innerHTML = `<span class="status-dot"></span>SOURCE v${VERSION}`;
-            // Append to documentElement instead of body (more stable)
-            document.documentElement.appendChild(statusIndicator);
+            ui.container.classList.add('stm-side-right');
+            ui.dot.textContent = 'S';
+        } else if (myRole === 'target') {
+            ui.container.classList.add('stm-side-left');
+            ui.dot.textContent = 'T';
         }
-        updateDebugDashboard();
-    }
-
-    // Periodic badge check - re-inject if removed (handles SPA DOM replacement)
-    function ensureBadgeVisible() {
-        if (myRole === 'source' && !document.getElementById(BADGE_ID)) {
-            console.log('Split Tab: Badge missing, re-injecting...');
-            updateUI();
-        }
-    }
-    setInterval(ensureBadgeVisible, 2000);
-
-    // --- Logic ---
-
-    function generateId() {
-        return Math.random().toString(36).substr(2, 9);
-    }
-
-    function setAsSource() {
-        // If we're currently a Target or Source in an existing group, keep the same ID
-        if (myId && (myRole === 'target' || myRole === 'source')) {
-            // Signal the other tab to become TARGET
-            const swapKey = `split_tab_swap_${myId}`;
-            GM_setValue(swapKey, {
-                action: 'become_target',
-                timestamp: Date.now()
-            });
-
-            // Set this tab as SOURCE (keep same ID)
-            myRole = 'source';
-            saveState(myRole, myId);
-            closeOverlay();
-            updateUI();
-            recordClick();
-            console.log('Split Tab: Set as SOURCE (replaced), ID:', myId);
-            return;
-        }
-
-        // Otherwise, create a new Source with new ID (idle tab)
-        myRole = 'source';
-        myId = generateId();
-        saveState(myRole, myId);
-        closeOverlay();
-        updateUI();
-
-        // Set up listeners for the new ID
-        setupSwapListener();
-        setupCloseListener();
-
-        // Record click so new tabs can auto-bind
-        recordClick();
-        console.log('Split Tab: Manually set as SOURCE (new), ID:', myId);
-    }
-
-    function disableSource() {
-        myRole = 'idle';
-        myId = null;
-        saveState('idle', null);
-        closeOverlay();
-        updateUI();
-    }
-
-    function switchSourceToOtherWindow() {
-        if (myRole === 'source' && myId) {
-            // Signal the target tab to become source, then become target ourselves
-            const swapKey = `split_tab_swap_${myId}`;
-            GM_setValue(swapKey, {
-                action: 'swap',
-                timestamp: Date.now()
-            });
-
-            // Immediately swap roles locally
-            myRole = 'target';
-            saveState(myRole, myId);
-            closeOverlay();
-            updateUI();
-            setupTargetListener();
-            console.log('Split Tab: Switched to Target role');
-        } else if (myRole === 'target' && myId) {
-            // We're the target, become source and signal the other tab
-            const swapKey = `split_tab_swap_${myId}`;
-            GM_setValue(swapKey, {
-                action: 'become_target',
-                timestamp: Date.now()
-            });
-
-            myRole = 'source';
-            saveState(myRole, myId);
-            closeOverlay();
-            updateUI();
-            recordClick();
-            console.log('Split Tab: Switched to Source role');
-        } else {
-            // If idle, just set as source
-            setAsSource();
+        if (myRole !== 'idle') {
+            ui.menu.innerHTML = `<div class="stm-menu-item" data-action="disconnect">Disconnect</div>`;
         }
     }
 
-    function resetGlobalState() {
-        if (confirm("Reset all Split Tab connections for this tab?")) {
-            saveState('idle', null);
-            window.location.reload();
+    function toggleMenu() { if(ui && ui.menu) ui.menu.style.display = ui.menu.style.display === 'block' ? 'none' : 'block'; }
+    function pulseDot() { if(ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
+
+    const generateId = () => Math.random().toString(36).substr(2, 9);
+    function setRole(role, id = null) {
+        if (role === 'source') {
+            const newId = id || generateId();
+            saveState('source', newId);
+            GM_setValue(KEY_LATEST_SOURCE, { sourceId: newId, timestamp: Date.now() });
+        } else if (role === 'target') {
+            if (!id) { GM_notification({ text: 'Cannot become Target without a Source ID.'}); return; }
+            saveState('target', id);
         }
     }
+    function broadcastDisconnect() { if (myId) { GM_setValue(getDisconnectKey(myId), Date.now()); saveState('idle', null); } }
 
-    function cleanupOnClose() {
-        // Save state for both SOURCE and TARGET before navigation
-        // This allows restoration after cross-origin navigation
-        if (myId && myRole === 'source') {
-            // SOURCE: Save state to dedicated key for reliable restoration
-            GM_setValue(KEY_SOURCE_STATE, {
-                sourceId: myId,
-                timestamp: Date.now()
-            });
-            console.log('Split Tab: SOURCE saved state before navigation');
-        } else if (myId && myRole === 'target' && !isIntentionalNavigation) {
-            // TARGET: Only save if not already handled by setupTargetListener
-            GM_setValue(KEY_TARGET_STATE, {
-                sourceId: myId,
-                timestamp: Date.now()
-            });
-            console.log('Split Tab: TARGET saved state before navigation');
+    let dragState = {};
+    function handleDragStart(e) {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        dragState = { isClick: true, startX: e.clientX, startY: e.clientY };
+        window.addEventListener('mousemove', handleDragMove);
+        window.addEventListener('mouseup', handleDragEnd, { once: true });
+    }
+    function handleDragMove(e) {
+        if (dragState.isClick && (Math.abs(e.clientX - dragState.startX) > 5 || Math.abs(e.clientY - dragState.startY) > 5)) {
+            dragState.isClick = false;
         }
-        // Never send close signals on beforeunload - can't distinguish navigation from actual close
-        // Connection persists until user manually resets
+        if (myRole === 'source') { ui.dot.style.cursor = 'grabbing'; }
     }
-
-    // --- Auto-Promote & Click Handling ---
-
-    function recordClick() {
-        if (myRole !== 'source' || !myId) return;
-        GM_setValue(KEY_LATEST_CLICK, {
-            sourceId: myId,
-            timestamp: Date.now()
-        });
-        if (DEBUG_MODE) updateDebugDashboard();
-    }
-
-    function autoPromoteOnSplitView() {
-        if (myRole === 'idle') {
-            console.log('Split Tab: Auto-promoting to Source (split view detected)');
-            setAsSource();
+    function handleDragEnd(e) {
+        window.removeEventListener('mousemove', handleDragMove);
+        if (dragState.isClick) {
+            toggleMenu();
+        } else if (myRole === 'source') {
+            GM_setValue(KEY_DRAG_PAIR_REQUEST, { sourceId: myId, timestamp: Date.now() });
         }
-        recordClick();
+        ui.dot.style.cursor = 'grab';
+        dragState = {};
     }
-
-    // Intercept Link Clicks (Left Click only for SOURCE tabs)
+    function handleMenuClick(e) { const action = e.target.dataset.action; if (!action) return; if (action === 'disconnect') broadcastDisconnect(); toggleMenu(); }
     function handleLinkClick(e) {
-        if (myRole !== 'source' || e.button !== 0) return;
-        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-
-        const link = e.target.closest('a');
-        if (!link || !link.href) return;
-        if (link.href.startsWith('javascript:') || link.href.includes('#')) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        recordClick();
-
+        if (myRole !== 'source') return;
+        const link = e.target.closest('a[href]');
+        if (!link || link.href.startsWith('javascript:') || link.href.startsWith('#')) return;
+        e.preventDefault(); e.stopPropagation();
         GM_setValue(getTargetUrlKey(myId), link.href);
         GM_setValue(getTimestampKey(myId), Date.now());
+        pulseDot();
+    }
 
-        if (statusIndicator) {
-            const originalText = statusIndicator.innerHTML;
-            statusIndicator.innerHTML = 'Sent! 🚀';
-            setTimeout(() => {
-                if (myRole === 'source' && statusIndicator) {
-                    statusIndicator.innerHTML = originalText;
-                }
-            }, 1000);
+    function matchesKeyConfig(event, keyConfig) {
+        return event.button === keyConfig.button && event.ctrlKey === keyConfig.ctrl && event.altKey === keyConfig.alt && event.shiftKey === keyConfig.shift;
+    }
+
+    function attachRoleSpecificListeners() {
+        activeListeners.forEach(listenerId => GM_removeValueChangeListener(listenerId));
+        activeListeners = [];
+        if (myRole === 'idle' || !myId) return;
+        const disconnectListener = GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null); });
+        activeListeners.push(disconnectListener);
+        if (myRole === 'target') {
+            const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n, r) => { if (r) { pulseDot(); window.location.href = GM_getValue(getTargetUrlKey(myId)); } });
+            activeListeners.push(urlListener);
         }
     }
 
-    // Context menu handler - auto-promote on right-click on links (Chrome split view)
-    function handleContextMenu(e) {
-        const link = e.target.closest('a');
-        if (link && link.href && !link.href.startsWith('javascript:')) {
-            autoPromoteOnSplitView();
-        }
-    }
+    function initialize() {
+        loadConfig();
 
-    // New Tab / Navigation: Restore state (SOURCE or TARGET) after cross-origin navigation
-    if (myRole === 'idle') {
-        // 1. Check if we're a SOURCE tab that just navigated
-        const savedSourceState = GM_getValue(KEY_SOURCE_STATE);
-        if (savedSourceState && savedSourceState.sourceId && (Date.now() - savedSourceState.timestamp) < 30000) {
-            // Restore SOURCE state after cross-origin navigation
-            myRole = 'source';
-            myId = savedSourceState.sourceId;
-            saveState(myRole, myId);
-            // Clear SOURCE state to prevent future mis-restoration
-            GM_setValue(KEY_SOURCE_STATE, null);
-            console.log(`Split Tab: Restored SOURCE state after navigation (ID: ${myId})`);
-            setTimeout(() => {
-                updateUI();
-                setupSwapListener();
-                setupCloseListener();
-            }, 100);
-        }
-        // 2. Check if we're a TARGET tab that just navigated
-        else {
-            const savedTargetState = GM_getValue(KEY_TARGET_STATE);
-            if (savedTargetState && savedTargetState.sourceId && (Date.now() - savedTargetState.timestamp) < 30000) {
-                // Restore TARGET state after cross-origin navigation
-                myRole = 'target';
-                myId = savedTargetState.sourceId;
-                saveState(myRole, myId);
-                // Clear TARGET state to prevent future mis-restoration
-                GM_setValue(KEY_TARGET_STATE, null);
-                console.log(`Split Tab: Restored TARGET state after navigation (ID: ${myId})`);
-                setTimeout(() => {
-                    updateUI();
-                    setupTargetListener();
-                    setupSwapListener();
-                    setupCloseListener();
-                }, 100);
-            }
-            // 3. Check for new tab auto-binding (only if no saved state)
-            else {
-                const latestClick = GM_getValue(KEY_LATEST_CLICK);
-                if (latestClick && latestClick.sourceId && (Date.now() - latestClick.timestamp) < 3000) {
-                    myRole = 'target';
-                    myId = latestClick.sourceId;
-                    saveState(myRole, myId);
-                    console.log(`Split Tab: Auto-bound to Source ${myId}`);
-                    setTimeout(() => {
-                        updateUI();
-                        setupTargetListener();
-                        setupSwapListener();
-                        setupCloseListener();
-                    }, 100);
-                }
-            }
-        }
-    }
-
-    // --- Core Functionality ---
-
-    function setupSwapListener() {
-        if (!myId) return;
-
-        const swapKey = `split_tab_swap_${myId}`;
-        GM_addValueChangeListener(swapKey, function (key, oldVal, newVal, remote) {
-            if (!remote) return;
-
-            if (newVal && newVal.action === 'swap') {
-                // The source tab initiated swap, we (target) become source
-                if (myRole === 'target') {
-                    myRole = 'source';
-                    saveState(myRole, myId);
-                    updateUI();
-                    recordClick(); // Register as new SOURCE
-                    console.log('Split Tab: Received swap signal, became Source');
-                }
-            } else if (newVal && newVal.action === 'become_target') {
-                // The target tab became source, we (source) become target
-                if (myRole === 'source') {
-                    myRole = 'target';
-                    saveState(myRole, myId);
-                    updateUI();
-                    setupTargetListener();
-                    console.log('Split Tab: Received become_target signal, became Target');
-                }
+        // *** v0.21 FIX ***
+        // The listener now checks if the tab is visible (`!document.hidden`).
+        // This ensures that only the active tab the user drops on becomes a target,
+        // preventing background tabs from being paired accidentally.
+        GM_addValueChangeListener(KEY_DRAG_PAIR_REQUEST, (key, oldVal, newVal, remote) => {
+            if (remote && myRole === 'idle' && !document.hidden) {
+                setRole('target', newVal.sourceId);
             }
         });
-    }
 
-    function setupCloseListener() {
-        if (!myId) return;
-
-        const closeKey = getCloseSignalKey(myId);
-        GM_addValueChangeListener(closeKey, function (key, oldVal, newVal, remote) {
-            if (!remote) return;
-
-            if (newVal && newVal.action === 'tab_closed') {
-                // The paired tab was closed, reset our state
-                console.log('Split Tab: Paired tab closed, resetting state');
-                myRole = 'idle';
-                myId = null;
-                saveState('idle', null);
-                updateUI();
+        const s = loadState();
+        injectStyles();
+        saveState(s.role, s.id);
+        window.addEventListener('click', handleLinkClick, true);
+        GM_registerMenuCommand("STM (Dev): Disconnect", broadcastDisconnect);
+        GM_registerMenuCommand("STM (Dev): Configure Keys", showConfigPanel);
+        window.addEventListener('mousedown', (e) => {
+            if (matchesKeyConfig(e, config.sourceKey)) {
+                e.preventDefault(); e.stopPropagation();
+                setRole('source');
+            } else if (matchesKeyConfig(e, config.targetKey)) {
+                e.preventDefault(); e.stopPropagation();
+                const l = GM_getValue(KEY_LATEST_SOURCE, null);
+                if (l) setRole('target', l.sourceId);
+                else GM_notification({text: 'No Source tab found.'});
             }
-        });
+        }, true);
     }
 
-    function setupTargetListener() {
-        if (myRole !== 'target' || !myId) return;
-
-        GM_addValueChangeListener(getTimestampKey(myId), function (key, oldVal, newVal, remote) {
-            if (!remote) return;
-            const url = GM_getValue(getTargetUrlKey(myId));
-            if (url) {
-                // Mark as intentional navigation to prevent false close signal
-                isIntentionalNavigation = true;
-
-                // Save TARGET state to GM storage before navigation
-                GM_setValue(KEY_TARGET_STATE, {
-                    sourceId: myId,
-                    timestamp: Date.now()
-                });
-                console.log('Split Tab: Navigating to:', url);
-                window.location.href = url;
-            }
-        });
-    }
-
-    // Initialization
-    window.addEventListener('click', handleLinkClick, true);
-    window.addEventListener('contextmenu', handleContextMenu, true);
-
-    // Cleanup on tab close
-    window.addEventListener('beforeunload', cleanupOnClose);
-    window.addEventListener('unload', cleanupOnClose);
-
-    GM_registerMenuCommand("Configure Split Tab", showConfigOverlay);
-    GM_registerMenuCommand("⚠️ Reset / Clear Role", resetGlobalState);
-
-    if (myRole === 'target') {
-        console.log('Split Tab: Setting up target listener for ID:', myId);
-        setupTargetListener();
-    }
-
-    // Setup swap listener for both source and target
-    if (myId) {
-        setupSwapListener();
-        setupCloseListener();
-    }
-
-    updateUI();
+    initialize();
 
 })();
