@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Split Tab Manager (Dev)
+// @name         Split Tab Manager
 // @namespace    http://tampermonkey.net/
-// @version      0.21
-// @description  FIX: Drag-to-pair now only sets the currently visible tab as Target, preventing background tabs from being accidentally paired.
+// @version      0.34
+// @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
 // @author       You
 // @match        *://*/*
 // @run-at       document-start
@@ -10,9 +10,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
-// @grant        GM_removeValueChangeListener
 // @grant        GM_addStyle
-// @grant        GM_notification
 // ==/UserScript==
 
 (function () {
