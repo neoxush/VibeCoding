@@ -7,9 +7,11 @@ This scripts adds extra control over Chrome's native split view function, which 
 3. Hotky customization: assign dedicated shortcut combo in script configuration panel
 
 ## How it Works
+![chrome_split_view_preview](https://github.com/user-attachments/assets/03eb7aa7-02e3-474d-a60d-c2fd756ded71)
 
 ## Installation
-Make sure your Chrome support "Split View" already
+* Make sure your Chrome support "Split View" already
+  <br><img width="283" height="142" alt="image" src="https://github.com/user-attachments/assets/13fc0fae-485d-4934-aead-7fced7c3bbed" /></br>
 * Install a userscript manager such as Install Tampermonkey (https://www.tampermonkey.net) or Violentmonkey.
 * Create a new script and copy/paste the code from this repository.
 * Open a new tab, hold CTRL and middle-button click to create a SOURCE tab, there'll be a S icon.
