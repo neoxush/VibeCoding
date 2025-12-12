@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Split Tab Manager
+// @name         Enhanced Spit View for Chrome
 // @namespace    http://tampermonkey.net/
 // @version      0.34
-// @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
-// @author       You
+// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
+// @author       https://github.com/neoxush/VibeCoding/tree/main/browser-extensions/chrome-tab-splitter
 // @match        *://*/*
 // @run-at       document-start
 // @grant        GM_registerMenuCommand
