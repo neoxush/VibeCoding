@@ -72,6 +72,20 @@
         const sessionRole = sessionStorage.getItem(SESSION_KEY_ROLE);
         const sessionId = sessionStorage.getItem(SESSION_KEY_ID);
 
+        // Try window.name first (persists across page reloads)
+        if (window.name.startsWith(STATE_PREFIX)) {
+            try {
+                const state = JSON.parse(window.name.substring(STATE_PREFIX.length));
+                // Restore to sessionStorage for current session
+                sessionStorage.setItem(SESSION_KEY_ROLE, state.role);
+                sessionStorage.setItem(SESSION_KEY_ID, state.id);
+                return state;
+            } catch (e) {
+                console.error('Failed to parse window.name:', e);
+            }
+        }
+
+        // Fallback to sessionStorage
         if (sessionRole && sessionId) {
             return { role: sessionRole, id: sessionId };
         }
