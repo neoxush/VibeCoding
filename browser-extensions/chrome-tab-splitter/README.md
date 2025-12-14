@@ -1,20 +1,42 @@
 # Enhanced Split View for Chrome
-This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
+
+This userscript syncs navigation between two Chrome tabs: a **Source** and a **Target**. 
+
+While originally designed to supercharge Chrome's native Side-by-Side "Split View", it functions perfectly with **any two individual Chrome tabs or windows** (e.g., dual monitors, separate windows side-by-side), allowing you to click links in one and view them in the other.
 
 ## Features
-1. Shortcut: Hold CTRL (by default) and click middle button to create a SOURCE tab on the current tab
-2. Drag and Drop: Once there's a source, hold to drag over the middle seam and there'll be a paired TARGET tab
-3. Hotky customization: assign dedicated shortcut combo in script configuration panel
+1. **Source Creation**: Hold `CTRL` (by default) and **Middle-click** anywhere on a page to mark it as the **SOURCE** (S).
+2. **Easy Pairing (Drag & Drop)**: Once you have a Source, click and hold the "S" icon, drag it, and release. The script will automatically pair with the other currently visible tab (the **TARGET**).
+3. **Link Syncing**: Any link clicked in the Source tab automatically opens in the Target tab.
+4. **Hotkey Customization**: Assign dedicated shortcut combos via the script configuration panel.
+5. **Flexible Layouts**: Works with Chrome's native Split View, two separate windows, or dual monitors.
 
 ## How it Works
 ![chrome_split_view_preview](https://github.com/user-attachments/assets/03eb7aa7-02e3-474d-a60d-c2fd756ded71)
 
 ## Installation
-* Make sure your Chrome support "Split View" already
-  <br><img width="283" height="142" alt="image" src="https://github.com/user-attachments/assets/13fc0fae-485d-4934-aead-7fced7c3bbed" /></br>
-* Install a userscript manager such as Install Tampermonkey (https://www.tampermonkey.net) or Violentmonkey.
-* Create a new script and copy/paste the code from this repository.
-* Open a new tab, hold CTRL and middle-button click to create a SOURCE tab, there'll be a S icon.
-* Right-click to split view another tab, this is from native Chrome function so make sure your Chrome is ready.
-* Hold S icon and drag over the middle seam to create a paired TARGET tab, there'll be a T icon.
-* Try browse content side on the SOURCE tab, any new click is synced and opened on the TARGET tab.
+1. Install a userscript manager like [Tampermonkey](https://www.tampermonkey.net) or Violentmonkey.
+2. Create a new script and copy/paste the code from `enhanced-split-view-for-chrome.user.js` in this repository.
+3. Save the script.
+
+## Usage Guide
+### 1. Set Up Your View
+Open the two pages you want to use.
+*   **Split View**: Use Chrome's native tiling if supported.
+*   **Separate Windows**: Simply put two browser windows side-by-side.
+    <br><img width="283" height="142" alt="image" src="https://github.com/user-attachments/assets/13fc0fae-485d-4934-aead-7fced7c3bbed" /></br>
+
+### 2. Activate Source
+In your main window, hold `CTRL` and click the **Middle Mouse Button**. A floating **S** icon will appear on the right side.
+*   *Note: You can configure this shortcut in the menu.*
+
+### 3. Activate Target
+Ensure your desired Target tab/window is visible (not minimized).
+*   **Drag Method**: Click and hold the **S** icon on the Source page, drag it slightly (mimicking a drag to the other side), and release. The other visible tab will detect the signal and become the **TARGET** (marked with a **T** icon).
+*   **Manual Method**: If drag-pairing doesn't trigger, you can use the Tampermonkey menu command "STM: Create Source" in one tab and assign the other manually if needed (though the script is designed to auto-discover the target via the storage signal).
+
+### 4. Browse
+Click any link in the **Source** tab. It will automatically load in the **Target** tab.
+
+## Configuration
+You can customize the creation shortcuts by selecting **STM: Configure Keys** from the Tampermonkey menu.
