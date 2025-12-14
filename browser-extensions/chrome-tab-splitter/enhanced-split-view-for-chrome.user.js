@@ -1,9 +1,11 @@
 // ==UserScript==
-// @name         Split Tab Manager
+// @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      0.34
-// @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
-// @author       You
+// @version      1.0.0
+// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
+// @author       https://github.com/neoxush/VibeCoding/tree/main/browser-extensions/chrome-tab-splitter
+// @note         You can reorder the right-click menu items by editing the 'menuCommands' array in the initialize function.
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
 // @run-at       document-start
 // @grant        GM_registerMenuCommand
@@ -66,14 +68,16 @@
     }
 
     function loadState() {
-        const sessionRole = sessionStorage.getItem(SESSION_KEY_ROLE);
-        const sessionId = sessionStorage.getItem(SESSION_KEY_ID);
-
-        if (sessionRole && sessionId) {
-            return { role: sessionRole, id: sessionId };
-        }
-
-        return { role: 'idle', id: null };
+        // Direct retrieval from the Tab Object
+        return new Promise((resolve) => {
+            GM_getTab((tab) => {
+                if (tab && tab.role && tab.id) {
+                    resolve({ role: tab.role, id: tab.id, lastTs: tab.lastTs || 0 });
+                } else {
+                    resolve({ role: 'idle', id: null, lastTs: 0 });
+                }
+            });
+        });
     }
 
 
@@ -371,5 +375,7 @@
     }
 
     initialize();
+
+    console.log('Split Tab (Dev): Script initialized (v1.0.0)');
 
 })();
