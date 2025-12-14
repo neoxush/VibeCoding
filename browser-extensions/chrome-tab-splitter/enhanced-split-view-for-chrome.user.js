@@ -1,9 +1,10 @@
 // ==UserScript==
-// @name         Split Tab Manager
+// @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      0.34
-// @description  Link two tabs: Smart auto-promotion. Cross-origin persistence. Auto-Target. Auto-Reset on Close.
-// @author       You
+// @version      1.0.0
+// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
+// @author       https://github.com/neoxush/VibeCoding/tree/main/browser-extensions/chrome-tab-splitter
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=chrome.google.com
 // @match        *://*/*
 // @run-at       document-start
 // @grant        GM_registerMenuCommand
@@ -11,18 +12,14 @@
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        GM_addStyle
+// @grant        GM_getTab
+// @grant        GM_saveTab
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    console.log('Split Tab (Dev): Script initialized (v0.21)');
-
     // --- Configuration & Keys ---
-    const STATE_PREFIX = 'STM_STATE_V18=';
-    const SESSION_KEY_ROLE = 'stm_role_v18';
-    const SESSION_KEY_ID = 'stm_id_v18';
-
     const GM_PREFIX = 'stm_gm_v18_';
     const KEY_LATEST_SOURCE = `${GM_PREFIX}latest_source`;
     const KEY_DRAG_PAIR_REQUEST = `${GM_PREFIX}drag_pair_request`;
@@ -40,6 +37,7 @@
     // --- State Management ---
     let myRole = 'idle';
     let myId = null;
+    let myLastTs = 0;
     let ui = null;
     let configPanel = null;
     let activeListeners = [];
@@ -54,29 +52,31 @@
         GM_setValue(KEY_CONFIG, config);
     }
 
-    function saveState(role, id) {
-        myRole = role; myId = id;
-        if (role === 'idle') {
-            [SESSION_KEY_ROLE, SESSION_KEY_ID].forEach(k => sessionStorage.removeItem(k));
-            if (window.name.startsWith(STATE_PREFIX)) window.name = '';
-        } else {
-            sessionStorage.setItem(SESSION_KEY_ROLE, role);
-            sessionStorage.setItem(SESSION_KEY_ID, id);
-            window.name = STATE_PREFIX + JSON.stringify({ role, id });
-        }
+    function saveState(role, id, lastTs = 0) {
+        myRole = role; myId = id; myLastTs = lastTs;
+        // Simplified Logic: Save directly to the Tab Object
+        // GM_saveTab persists even across domain changes in the same tab.
+        GM_saveTab({
+            role: role,
+            id: id,
+            lastTs: lastTs
+        });
+
         updateUI();
         attachRoleSpecificListeners();
     }
 
     function loadState() {
-        const sessionRole = sessionStorage.getItem(SESSION_KEY_ROLE);
-        const sessionId = sessionStorage.getItem(SESSION_KEY_ID);
-
-        if (sessionRole && sessionId) {
-            return { role: sessionRole, id: sessionId };
-        }
-
-        return { role: 'idle', id: null };
+        // Direct retrieval from the Tab Object
+        return new Promise((resolve) => {
+            GM_getTab((tab) => {
+                if (tab && tab.role && tab.id) {
+                    resolve({ role: tab.role, id: tab.id, lastTs: tab.lastTs || 0 });
+                } else {
+                    resolve({ role: 'idle', id: null, lastTs: 0 });
+                }
+            });
+        });
     }
 
 
@@ -249,8 +249,8 @@
         }
     }
 
-    function toggleMenu() { if(ui && ui.menu) ui.menu.style.display = ui.menu.style.display === 'block' ? 'none' : 'block'; }
-    function pulseDot() { if(ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
+    function toggleMenu() { if (ui && ui.menu) ui.menu.style.display = ui.menu.style.display === 'block' ? 'none' : 'block'; }
+    function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
 
     const generateId = () => Math.random().toString(36).substr(2, 9);
     function setRole(role, id = null) {
@@ -259,7 +259,7 @@
             saveState('source', newId);
             GM_setValue(KEY_LATEST_SOURCE, { sourceId: newId, timestamp: Date.now() });
         } else if (role === 'target') {
-            if (!id) { GM_notification({ text: 'Cannot become Target without a Source ID.'}); return; }
+            if (!id) { GM_notification({ text: 'Cannot become Target without a Source ID.' }); return; }
             saveState('target', id);
         }
     }
@@ -311,8 +311,23 @@
         const disconnectListener = GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null); });
         activeListeners.push(disconnectListener);
         if (myRole === 'target') {
-            const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n, r) => { if (r) { pulseDot(); window.location.href = GM_getValue(getTargetUrlKey(myId)); } });
+            const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n, r) => {
+                if (r && n > myLastTs) {
+                    // Pulse and save state before navigating
+                    pulseDot();
+                    saveState('target', myId, n);
+                    window.location.href = GM_getValue(getTargetUrlKey(myId));
+                }
+            });
             activeListeners.push(urlListener);
+
+            // Initial Check for missed updates (Latency/Race condition fix)
+            const serverTs = GM_getValue(getTimestampKey(myId), 0);
+            if (serverTs > myLastTs) {
+                pulseDot();
+                saveState('target', myId, serverTs);
+                window.location.href = GM_getValue(getTargetUrlKey(myId));
+            }
         }
     }
 
@@ -329,12 +344,22 @@
             }
         });
 
-        const s = loadState();
-        injectStyles();
-        saveState(s.role, s.id);
+        // GM_getTab is Async, so we handle the promise
+        loadState().then(s => {
+            injectStyles();
+            saveState(s.role, s.id, s.lastTs);
+        });
+
         window.addEventListener('click', handleLinkClick, true);
-        GM_registerMenuCommand("STM (Dev): Disconnect", broadcastDisconnect);
-        GM_registerMenuCommand("STM (Dev): Configure Keys", showConfigPanel);
+        // --- Menu Configuration ---
+        // Define menu items here to manually control their order in the right-click menu.
+        const menuCommands = [
+            { name: "STM: Create Source", func: () => setRole('source') },
+            { name: "STM: Disconnect", func: broadcastDisconnect },
+            { name: "STM: Configure Keys", func: showConfigPanel }
+        ];
+
+        menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
         window.addEventListener('mousedown', (e) => {
             if (matchesKeyConfig(e, config.sourceKey)) {
                 e.preventDefault(); e.stopPropagation();
@@ -343,7 +368,7 @@
                 e.preventDefault(); e.stopPropagation();
                 const l = GM_getValue(KEY_LATEST_SOURCE, null);
                 if (l) setRole('target', l.sourceId);
-                else GM_notification({text: 'No Source tab found.'});
+                else GM_notification({ text: 'No Source tab found.' });
             }
         }, true);
     }
