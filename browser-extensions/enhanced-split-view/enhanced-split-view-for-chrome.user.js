@@ -26,11 +26,13 @@
     const GM_PREFIX = 'stm_gm_v18_';
     const KEY_LATEST_SOURCE = `${GM_PREFIX}latest_source`;
     const KEY_DRAG_PAIR_REQUEST = `${GM_PREFIX}drag_pair_request`;
+    const KEY_DRAG_SOURCE_REQUEST = `${GM_PREFIX}drag_source_request`;
     const KEY_CONFIG = `${GM_PREFIX}config`;
     const PAIR_MAX_AGE_MS = 5000;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
+    const getSourceListKey = (id) => `${GM_PREFIX}sources_${id}`;
 
     // Default configuration
     const DEFAULT_CONFIG = {
@@ -42,6 +44,7 @@
     let myRole = 'idle';
     let myId = null;
     let myLastTs = 0;
+    let mySourceTabId = null; // Unique ID for this source tab instance
     let stateLoaded = false;
     let ui = null;
     let configPanel = null;
@@ -56,6 +59,7 @@
                 myRole = parsed.stmRole;
                 myId = parsed.stmId;
                 myLastTs = parsed.stmLastTs || 0;
+                mySourceTabId = parsed.stmSourceTabId;
                 updateUI();
                 attachRoleSpecificListeners();
             }
@@ -71,19 +75,20 @@
         GM_setValue(KEY_CONFIG, config);
     }
 
-    function saveState(role, id, lastTs = 0) {
-        myRole = role; myId = id; myLastTs = lastTs;
+    function saveState(role, id, lastTs = 0, sourceTabId = null) {
+        myRole = role; myId = id; myLastTs = lastTs; mySourceTabId = sourceTabId;
         // Simplified Logic: Save directly to the Tab Object
         // GM_saveTab persists even across domain changes in the same tab.
         GM_saveTab({
             role: role,
             id: id,
-            lastTs: lastTs
+            lastTs: lastTs,
+            sourceTabId: sourceTabId
         });
 
         // Secondary fallback persistence using window.name to survive edge cases.
         try {
-            const payload = { stmRole: role, stmId: id, stmLastTs: lastTs };
+            const payload = { stmRole: role, stmId: id, stmLastTs: lastTs, stmSourceTabId: sourceTabId };
             window.name = JSON.stringify(payload);
             sessionStorage.setItem('stm_state', JSON.stringify(payload));
         } catch (err) { /* ignore */ }
@@ -97,14 +102,14 @@
         return new Promise((resolve) => {
             GM_getTab((tab) => {
                 if (tab && tab.role && tab.id) {
-                    resolve({ role: tab.role, id: tab.id, lastTs: tab.lastTs || 0 });
+                    resolve({ role: tab.role, id: tab.id, lastTs: tab.lastTs || 0, sourceTabId: tab.sourceTabId });
                     return;
                 }
                 // Fallback: attempt to parse window.name if it holds our state
                 try {
                     const parsed = JSON.parse(window.name || '{}');
                     if (parsed.stmRole && parsed.stmId) {
-                        resolve({ role: parsed.stmRole, id: parsed.stmId, lastTs: parsed.stmLastTs || 0 });
+                        resolve({ role: parsed.stmRole, id: parsed.stmId, lastTs: parsed.stmLastTs || 0, sourceTabId: parsed.stmSourceTabId });
                         return;
                     }
                 } catch (err) { /* ignore */ }
@@ -112,11 +117,11 @@
                 try {
                     const parsed = JSON.parse(sessionStorage.getItem('stm_state') || '{}');
                     if (parsed.stmRole && parsed.stmId) {
-                        resolve({ role: parsed.stmRole, id: parsed.stmId, lastTs: parsed.stmLastTs || 0 });
+                        resolve({ role: parsed.stmRole, id: parsed.stmId, lastTs: parsed.stmLastTs || 0, sourceTabId: parsed.stmSourceTabId });
                         return;
                     }
                 } catch (err) { /* ignore */ }
-                resolve({ role: 'idle', id: null, lastTs: 0 });
+                resolve({ role: 'idle', id: null, lastTs: 0, sourceTabId: null });
             });
         });
     }
@@ -284,7 +289,13 @@
             if (k === KEY_CONFIG) return;
             GM_deleteValue(k);
         });
-        saveState('idle', null);
+        // Clear tab-specific state and session storage
+        GM_saveTab({});
+        try {
+            window.name = '';
+            sessionStorage.removeItem('stm_state');
+        } catch (err) { /* ignore */ }
+        saveState('idle', null, 0, null);
         GM_notification({ text: 'All roles have been reset.' });
     }
 
@@ -319,7 +330,15 @@
             { text: "Disconnect", action: "disconnect" }
         ];
 
-        if (myRole !== 'idle') {
+        // Add "Join Group" option for idle tabs when sources exist
+        if (myRole === 'idle') {
+            const latestSource = GM_getValue(KEY_LATEST_SOURCE, null);
+            if (latestSource) {
+                contextMenuItems.unshift({ text: "Join as Source", action: "join-source" });
+            }
+        }
+
+        if (myRole !== 'idle' || (myRole === 'idle' && GM_getValue(KEY_LATEST_SOURCE, null))) {
             ui.menu.innerHTML = contextMenuItems.map(item =>
                 `<div class="stm-menu-item" data-action="${item.action}">${item.text}</div>`
             ).join('');
@@ -331,7 +350,7 @@
     function handleContainerMouseLeave(e) { if (!ui || !ui.container) return; const toEl = e.relatedTarget; if (!toEl || !ui.container.contains(toEl)) hideMenu(); }
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
 
-    const generateId = () => Math.random().toString(36).substr(2, 9);
+    const generateId = () => Math.random().toString(36).substring(2, 11);
     function publishNavigation(url) {
         // Ensure monotonic timestamp to guarantee listener fires even on rapid/same-URL clicks.
         const current = GM_getValue(getTimestampKey(myId), 0);
@@ -340,11 +359,39 @@
         GM_setValue(getTargetUrlKey(myId), url);
         GM_setValue(getTimestampKey(myId), ts);
     }
-    function setRole(role, id = null) {
+
+    function addSourceToGroup(groupId, sourceTabId) {
+        const sources = GM_getValue(getSourceListKey(groupId), []);
+        if (!sources.includes(sourceTabId)) {
+            sources.push(sourceTabId);
+            GM_setValue(getSourceListKey(groupId), sources);
+        }
+    }
+
+    function removeSourceFromGroup(groupId, sourceTabId) {
+        const sources = GM_getValue(getSourceListKey(groupId), []);
+        const filtered = sources.filter(id => id !== sourceTabId);
+        if (filtered.length > 0) {
+            GM_setValue(getSourceListKey(groupId), filtered);
+        } else {
+            GM_deleteValue(getSourceListKey(groupId));
+        }
+    }
+    function setRole(role, id = null, joinExisting = false) {
         if (role === 'source') {
-            const newId = id || generateId();
-            saveState('source', newId);
-            GM_setValue(KEY_LATEST_SOURCE, { sourceId: newId, timestamp: Date.now() });
+            let groupId;
+            if (joinExisting && id) {
+                // Join existing group
+                groupId = id;
+            } else {
+                // Create new group or use provided ID
+                groupId = id || generateId();
+            }
+
+            const sourceTabId = generateId(); // Unique ID for this source tab
+            saveState('source', groupId, 0, sourceTabId);
+            addSourceToGroup(groupId, sourceTabId);
+            GM_setValue(KEY_LATEST_SOURCE, { sourceId: groupId, timestamp: Date.now() });
         } else if (role === 'target') {
             if (!id) { GM_notification({ text: 'Cannot become Target without a Source ID.' }); return; }
             saveState('target', id);
@@ -352,11 +399,22 @@
     }
     // Disconnects just this tab, leaving the other tab in its role.
     function revokeRole() {
-        saveState('idle', null);
+        if (myRole === 'source' && myId && mySourceTabId) {
+            removeSourceFromGroup(myId, mySourceTabId);
+        }
+        saveState('idle', null, 0, null);
     }
 
     // Disconnects both tabs.
-    function broadcastDisconnect() { if (myId) { GM_setValue(getDisconnectKey(myId), Date.now()); saveState('idle', null); } }
+    function broadcastDisconnect() {
+        if (myRole === 'source' && myId && mySourceTabId) {
+            removeSourceFromGroup(myId, mySourceTabId);
+        }
+        if (myId) {
+            GM_setValue(getDisconnectKey(myId), Date.now());
+            saveState('idle', null, 0, null);
+        }
+    }
 
     let dragState = {};
     function handleDragStart(e) {
@@ -370,7 +428,7 @@
         if (dragState.isClick && (Math.abs(e.clientX - dragState.startX) > 5 || Math.abs(e.clientY - dragState.startY) > 5)) {
             dragState.isClick = false;
         }
-        if (myRole === 'source') { ui.dot.style.cursor = 'grabbing'; }
+        if (myRole === 'source' || myRole === 'target') { ui.dot.style.cursor = 'grabbing'; }
     }
     function handleDragEnd(e) {
         window.removeEventListener('mousemove', handleDragMove);
@@ -379,6 +437,13 @@
         } else if (myRole === 'source') {
             GM_setValue(KEY_DRAG_PAIR_REQUEST, {
                 sourceId: myId,
+                timestamp: Date.now(),
+                dropX: e.screenX,
+                dropY: e.screenY
+            });
+        } else if (myRole === 'target') {
+            GM_setValue(KEY_DRAG_SOURCE_REQUEST, {
+                targetId: myId,
                 timestamp: Date.now(),
                 dropX: e.screenX,
                 dropY: e.screenY
@@ -395,6 +460,11 @@
             broadcastDisconnect();
         } else if (action === 'revoke') {
             revokeRole();
+        } else if (action === 'join-source') {
+            const latestSource = GM_getValue(KEY_LATEST_SOURCE, null);
+            if (latestSource) {
+                setRole('source', latestSource.sourceId, true);
+            }
         }
         toggleMenu();
     }
@@ -429,7 +499,7 @@
         activeListeners.forEach(listenerId => GM_removeValueChangeListener(listenerId));
         activeListeners = [];
         if (myRole === 'idle' || !myId) return;
-        const disconnectListener = GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null); });
+        const disconnectListener = GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null, 0, null); });
         activeListeners.push(disconnectListener);
         if (myRole === 'target') {
             // Some managers may not flag `remote` reliably; rely on timestamp monotonicity instead.
@@ -442,6 +512,17 @@
                 }
             });
             activeListeners.push(urlListener);
+
+            // Listen for retargeting requests (when dragged to create new source)
+            const retargetListener = GM_addValueChangeListener(`${GM_PREFIX}retarget_${myId}`, (k, o, n) => {
+                if (n && n.newSourceId) {
+                    // Switch to the new source
+                    saveState('target', n.newSourceId);
+                    // Clean up the retarget request
+                    GM_deleteValue(`${GM_PREFIX}retarget_${myId}`);
+                }
+            });
+            activeListeners.push(retargetListener);
 
             // Initial Check for missed updates (Latency/Race condition fix)
             const serverTs = GM_getValue(getTimestampKey(myId), 0);
@@ -466,7 +547,8 @@
             const mergedRole = (myRole && myRole !== 'idle') ? myRole : s.role;
             const mergedId = myId || s.id;
             const mergedTs = myLastTs || s.lastTs;
-            saveState(mergedRole, mergedId, mergedTs);
+            const mergedSourceTabId = mySourceTabId || s.sourceTabId;
+            saveState(mergedRole, mergedId, mergedTs, mergedSourceTabId);
             stateLoaded = true;
 
             // Drag-pair listener: only pair the window under the drop point (ignore stale/coordless).
@@ -476,7 +558,24 @@
                 const hasCoords = typeof dropX === 'number' && typeof dropY === 'number';
                 if (!hasCoords) return;
                 if (typeof timestamp === 'number' && Date.now() - timestamp > PAIR_MAX_AGE_MS) return;
-                if (isDropInsideThisWindow(dropX, dropY)) setRole('target', sourceId);
+
+                if (isDropInsideThisWindow(dropX, dropY)) {
+                    setRole('target', sourceId);
+                }
+            });
+
+            // Drag-source listener: create source when target is dragged to idle window
+            GM_addValueChangeListener(KEY_DRAG_SOURCE_REQUEST, (key, oldVal, newVal, remote) => {
+                if (!remote || !stateLoaded || myRole !== 'idle' || !newVal || document.hidden) return;
+                const { dropX, dropY, targetId, timestamp } = newVal;
+                const hasCoords = typeof dropX === 'number' && typeof dropY === 'number';
+                if (!hasCoords) return;
+                if (typeof timestamp === 'number' && Date.now() - timestamp > PAIR_MAX_AGE_MS) return;
+
+                if (isDropInsideThisWindow(dropX, dropY)) {
+                    // Join the existing group instead of creating a new one
+                    setRole('source', targetId, true);
+                }
             });
 
             // --- Menu Configuration ---
