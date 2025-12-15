@@ -12,7 +12,7 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 5. **Flexible Layouts**: Works with Chrome's native Split View, two separate windows, or dual monitors.
 
 ## How it Works
-![chrome_split_view_preview](https://github.com/user-attachments/assets/03eb7aa7-02e3-474d-a60d-c2fd756ded71)
+![chrome_split_view_preview](https://github.com/user-attachments/assets/cb101a97-e580-412f-9844-1cb3befa3e3b)
 
 ## Installation
 1. Install a userscript manager like [Tampermonkey](https://www.tampermonkey.net) or Violentmonkey.
