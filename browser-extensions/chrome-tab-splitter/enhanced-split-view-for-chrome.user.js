@@ -25,6 +25,7 @@
     const KEY_LATEST_SOURCE = `${GM_PREFIX}latest_source`;
     const KEY_DRAG_PAIR_REQUEST = `${GM_PREFIX}drag_pair_request`;
     const KEY_CONFIG = `${GM_PREFIX}config`;
+    const PAIR_MAX_AGE_MS = 5000;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
@@ -39,10 +40,25 @@
     let myRole = 'idle';
     let myId = null;
     let myLastTs = 0;
+    let stateLoaded = false;
     let ui = null;
     let configPanel = null;
     let activeListeners = [];
     let config = null;
+
+    // Lightweight, synchronous prime from window.name so navigation retains role/id even before async loadState finishes.
+    function primeStateFromWindowName() {
+        try {
+            const parsed = JSON.parse(window.name || '{}');
+            if (parsed.stmRole && parsed.stmId) {
+                myRole = parsed.stmRole;
+                myId = parsed.stmId;
+                myLastTs = parsed.stmLastTs || 0;
+                updateUI();
+                attachRoleSpecificListeners();
+            }
+        } catch (err) { /* ignore */ }
+    }
 
     function loadConfig() {
         config = GM_getValue(KEY_CONFIG, DEFAULT_CONFIG);
@@ -63,6 +79,13 @@
             lastTs: lastTs
         });
 
+        // Secondary fallback persistence using window.name to survive edge cases.
+        try {
+            const payload = { stmRole: role, stmId: id, stmLastTs: lastTs };
+            window.name = JSON.stringify(payload);
+            sessionStorage.setItem('stm_state', JSON.stringify(payload));
+        } catch (err) { /* ignore */ }
+
         updateUI();
         attachRoleSpecificListeners();
     }
@@ -73,9 +96,25 @@
             GM_getTab((tab) => {
                 if (tab && tab.role && tab.id) {
                     resolve({ role: tab.role, id: tab.id, lastTs: tab.lastTs || 0 });
-                } else {
-                    resolve({ role: 'idle', id: null, lastTs: 0 });
+                    return;
                 }
+                // Fallback: attempt to parse window.name if it holds our state
+                try {
+                    const parsed = JSON.parse(window.name || '{}');
+                    if (parsed.stmRole && parsed.stmId) {
+                        resolve({ role: parsed.stmRole, id: parsed.stmId, lastTs: parsed.stmLastTs || 0 });
+                        return;
+                    }
+                } catch (err) { /* ignore */ }
+                // Fallback: sessionStorage (survives same-tab navigations)
+                try {
+                    const parsed = JSON.parse(sessionStorage.getItem('stm_state') || '{}');
+                    if (parsed.stmRole && parsed.stmId) {
+                        resolve({ role: parsed.stmRole, id: parsed.stmId, lastTs: parsed.stmLastTs || 0 });
+                        return;
+                    }
+                } catch (err) { /* ignore */ }
+                resolve({ role: 'idle', id: null, lastTs: 0 });
             });
         });
     }
@@ -254,6 +293,14 @@
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
 
     const generateId = () => Math.random().toString(36).substr(2, 9);
+    function publishNavigation(url) {
+        // Ensure monotonic timestamp to guarantee listener fires even on rapid/same-URL clicks.
+        const current = GM_getValue(getTimestampKey(myId), 0);
+        const now = Date.now();
+        const ts = now > current ? now : current + 1;
+        GM_setValue(getTargetUrlKey(myId), url);
+        GM_setValue(getTimestampKey(myId), ts);
+    }
     function setRole(role, id = null) {
         if (role === 'source') {
             const newId = id || generateId();
@@ -285,24 +332,42 @@
         if (dragState.isClick) {
             toggleMenu();
         } else if (myRole === 'source') {
-            GM_setValue(KEY_DRAG_PAIR_REQUEST, { sourceId: myId, timestamp: Date.now() });
+            GM_setValue(KEY_DRAG_PAIR_REQUEST, {
+                sourceId: myId,
+                timestamp: Date.now(),
+                dropX: e.screenX,
+                dropY: e.screenY
+            });
         }
         ui.dot.style.cursor = 'grab';
         dragState = {};
     }
     function handleMenuClick(e) { const action = e.target.dataset.action; if (!action) return; if (action === 'disconnect') broadcastDisconnect(); toggleMenu(); }
     function handleLinkClick(e) {
-        if (myRole !== 'source') return;
+        if (myRole !== 'source' || !myId) return;
         const link = e.target.closest('a[href]');
         if (!link || link.href.startsWith('javascript:') || link.href.startsWith('#')) return;
-        e.preventDefault(); e.stopPropagation();
-        GM_setValue(getTargetUrlKey(myId), link.href);
-        GM_setValue(getTimestampKey(myId), Date.now());
-        pulseDot();
+        // Only intercept if we can publish; otherwise let the navigation proceed normally.
+        try {
+            publishNavigation(link.href);
+            e.preventDefault(); e.stopPropagation();
+            pulseDot();
+        } catch (err) {
+            // If publishing fails for any reason, fall back to normal navigation.
+        }
     }
 
     function matchesKeyConfig(event, keyConfig) {
         return event.button === keyConfig.button && event.ctrlKey === keyConfig.ctrl && event.altKey === keyConfig.alt && event.shiftKey === keyConfig.shift;
+    }
+
+    function isDropInsideThisWindow(dropX, dropY) {
+        // Use window position and size to decide whether the drop point is inside this window.
+        const left = window.screenX;
+        const top = window.screenY;
+        const right = left + window.outerWidth;
+        const bottom = top + window.outerHeight;
+        return dropX >= left && dropX <= right && dropY >= top && dropY <= bottom;
     }
 
     function attachRoleSpecificListeners() {
@@ -312,8 +377,9 @@
         const disconnectListener = GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null); });
         activeListeners.push(disconnectListener);
         if (myRole === 'target') {
-            const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n, r) => {
-                if (r && n > myLastTs) {
+            // Some managers may not flag `remote` reliably; rely on timestamp monotonicity instead.
+            const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n) => {
+                if (n > myLastTs) {
                     // Pulse and save state before navigating
                     pulseDot();
                     saveState('target', myId, n);
@@ -334,44 +400,50 @@
 
     function initialize() {
         loadConfig();
-
-        // *** v0.21 FIX ***
-        // The listener now checks if the tab is visible (`!document.hidden`).
-        // This ensures that only the active tab the user drops on becomes a target,
-        // preventing background tabs from being paired accidentally.
-        GM_addValueChangeListener(KEY_DRAG_PAIR_REQUEST, (key, oldVal, newVal, remote) => {
-            if (remote && myRole === 'idle' && !document.hidden) {
-                setRole('target', newVal.sourceId);
-            }
-        });
-
-        // GM_getTab is Async, so we handle the promise
-        loadState().then(s => {
-            injectStyles();
-            saveState(s.role, s.id, s.lastTs);
-        });
-
+        injectStyles();
+        primeStateFromWindowName();
+        // Attach link interception immediately so early clicks are captured even before state restore completes.
         window.addEventListener('click', handleLinkClick, true);
-        // --- Menu Configuration ---
-        // Define menu items here to manually control their order in the right-click menu.
-        const menuCommands = [
-            { name: "STM: Create Source", func: () => setRole('source') },
-            { name: "STM: Disconnect", func: broadcastDisconnect },
-            { name: "STM: Configure Keys", func: showConfigPanel }
-        ];
 
-        menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
-        window.addEventListener('mousedown', (e) => {
-            if (matchesKeyConfig(e, config.sourceKey)) {
-                e.preventDefault(); e.stopPropagation();
-                setRole('source');
-            } else if (matchesKeyConfig(e, config.targetKey)) {
-                e.preventDefault(); e.stopPropagation();
-                const l = GM_getValue(KEY_LATEST_SOURCE, null);
-                if (l) setRole('target', l.sourceId);
-                else GM_notification({ text: 'No Source tab found.' });
-            }
-        }, true);
+        // Restore state, then arm listeners to avoid transient "idle" pairing.
+        loadState().then(s => {
+            // Merge with any primed state to avoid overwriting an existing Source/Target.
+            const mergedRole = (myRole && myRole !== 'idle') ? myRole : s.role;
+            const mergedId = myId || s.id;
+            const mergedTs = myLastTs || s.lastTs;
+            saveState(mergedRole, mergedId, mergedTs);
+            stateLoaded = true;
+
+            // Drag-pair listener: only pair the window under the drop point (ignore stale/coordless).
+            GM_addValueChangeListener(KEY_DRAG_PAIR_REQUEST, (key, oldVal, newVal, remote) => {
+                if (!remote || !stateLoaded || myRole !== 'idle' || !newVal) return;
+                const { dropX, dropY, sourceId, timestamp } = newVal;
+                const hasCoords = typeof dropX === 'number' && typeof dropY === 'number';
+                if (!hasCoords) return;
+                if (typeof timestamp === 'number' && Date.now() - timestamp > PAIR_MAX_AGE_MS) return;
+                if (isDropInsideThisWindow(dropX, dropY)) setRole('target', sourceId);
+            });
+
+            // --- Menu Configuration ---
+            const menuCommands = [
+                { name: "STM: Create Source", func: () => setRole('source') },
+                { name: "STM: Disconnect", func: broadcastDisconnect },
+                { name: "STM: Configure Keys", func: showConfigPanel }
+            ];
+            menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
+
+            window.addEventListener('mousedown', (e) => {
+                if (matchesKeyConfig(e, config.sourceKey)) {
+                    e.preventDefault(); e.stopPropagation();
+                    setRole('source');
+                } else if (matchesKeyConfig(e, config.targetKey)) {
+                    e.preventDefault(); e.stopPropagation();
+                    const l = GM_getValue(KEY_LATEST_SOURCE, null);
+                    if (l) setRole('target', l.sourceId);
+                    else GM_notification({ text: 'No Source tab found.' });
+                }
+            }, true);
+        });
     }
 
     initialize();
