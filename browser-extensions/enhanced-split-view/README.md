@@ -4,6 +4,17 @@ This userscript syncs navigation between two Chrome tabs: a **Source** and a **T
 
 While originally designed to supercharge Chrome's native Side-by-Side "Split View", it functions perfectly with **any two individual Chrome tabs or windows** (e.g., dual monitors, separate windows side-by-side), allowing you to click links in one and view them in the other.
 
+## Changelogs
+
+### v1.0.2
+- Added a Tampermonkey menu entry for **Reset Roles** (with confirmation) to clear all Source/Target roles across tabs.
+- Removed the **Disconnect** item from the Tampermonkey menu to reduce misclick risk; the badge menu remains for per-tab actions.
+- Auto-collapse the S/T contextual menu when the mouse leaves the UI area.
+
+### v1.0.1
+- Added a context menu to the 'S' and 'T' icons for better control.
+- **Revoke**: Disconnects a single tab (either Source or Target) from the pair, allowing for more flexible control when managing multiple tab pairs.
+
 ## Features
 1. **Source Creation**: Hold `CTRL` (by default) and **Middle-click** anywhere on a page to mark it as the **SOURCE** (S).
 2. **Easy Pairing (Drag & Drop)**: Once you have a Source, click and hold the "S" icon, drag it, and release. The script will automatically pair with the other currently visible tab (the **TARGET**).

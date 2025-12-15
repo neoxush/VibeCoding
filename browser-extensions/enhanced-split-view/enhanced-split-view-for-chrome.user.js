@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.0.2
 // @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
 // @author       https://github.com/neoxush/VibeCoding/tree/main/browser-extensions/chrome-tab-splitter
-// @note         You can reorder the right-click menu items by editing the 'menuCommands' array in the initialize function.
+// @note         You can reorder the right-click menu items by editing the 'contextMenuItems' array in the updateUI function.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
 // @run-at       document-start
@@ -15,6 +15,8 @@
 // @grant        GM_addStyle
 // @grant        GM_getTab
 // @grant        GM_saveTab
+// @grant        GM_listValues
+// @grant        GM_deleteValue
 // ==/UserScript==
 
 (function () {
@@ -262,6 +264,30 @@
         GM_notification({ text: 'Configuration reset to defaults!' });
     }
 
+    function resetAllRoles() {
+        const confirmed = window.confirm('Reset all Split Tab roles across tabs? This will clear Source/Target links. Continue?');
+        if (!confirmed) return;
+        const keys = GM_listValues().filter(k => k.startsWith(GM_PREFIX));
+        const ids = new Set();
+        const urlPrefix = `${GM_PREFIX}url_`;
+        const tsPrefix = `${GM_PREFIX}ts_`;
+        const disconnectPrefix = `${GM_PREFIX}disconnect_`;
+        keys.forEach(k => {
+            if (k.startsWith(urlPrefix)) ids.add(k.slice(urlPrefix.length));
+            else if (k.startsWith(tsPrefix)) ids.add(k.slice(tsPrefix.length));
+            else if (k.startsWith(disconnectPrefix)) ids.add(k.slice(disconnectPrefix.length));
+        });
+        // Notify other tabs to drop their roles.
+        ids.forEach(id => GM_setValue(getDisconnectKey(id), Date.now()));
+        // Remove all role-related stored values while preserving configuration.
+        keys.forEach(k => {
+            if (k === KEY_CONFIG) return;
+            GM_deleteValue(k);
+        });
+        saveState('idle', null);
+        GM_notification({ text: 'All roles have been reset.' });
+    }
+
     function updateUI() {
         if (!document.body) { window.addEventListener('DOMContentLoaded', updateUI, { once: true }); return; }
         if (!ui) {
@@ -273,6 +299,7 @@
             document.body.appendChild(ui.container);
             ui.dot.addEventListener('mousedown', handleDragStart);
             ui.menu.addEventListener('click', handleMenuClick);
+            ui.container.addEventListener('mouseleave', handleContainerMouseLeave);
             window.addEventListener('click', (e) => { if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) toggleMenu(); }, true);
         }
         ui.container.style.display = (myRole === 'idle') ? 'none' : 'flex';
@@ -284,12 +311,24 @@
             ui.container.classList.add('stm-side-left');
             ui.dot.textContent = 'T';
         }
+
+        // --- CONTEXT MENU ---
+        // You can reorder these items to change the order in the menu.
+        const contextMenuItems = [
+            { text: "Revoke", action: "revoke" },
+            { text: "Disconnect", action: "disconnect" }
+        ];
+
         if (myRole !== 'idle') {
-            ui.menu.innerHTML = `<div class="stm-menu-item" data-action="disconnect">Disconnect</div>`;
+            ui.menu.innerHTML = contextMenuItems.map(item =>
+                `<div class="stm-menu-item" data-action="${item.action}">${item.text}</div>`
+            ).join('');
         }
     }
 
     function toggleMenu() { if (ui && ui.menu) ui.menu.style.display = ui.menu.style.display === 'block' ? 'none' : 'block'; }
+    function hideMenu() { if (ui && ui.menu) ui.menu.style.display = 'none'; }
+    function handleContainerMouseLeave(e) { if (!ui || !ui.container) return; const toEl = e.relatedTarget; if (!toEl || !ui.container.contains(toEl)) hideMenu(); }
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
 
     const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -311,6 +350,12 @@
             saveState('target', id);
         }
     }
+    // Disconnects just this tab, leaving the other tab in its role.
+    function revokeRole() {
+        saveState('idle', null);
+    }
+
+    // Disconnects both tabs.
     function broadcastDisconnect() { if (myId) { GM_setValue(getDisconnectKey(myId), Date.now()); saveState('idle', null); } }
 
     let dragState = {};
@@ -342,7 +387,17 @@
         ui.dot.style.cursor = 'grab';
         dragState = {};
     }
-    function handleMenuClick(e) { const action = e.target.dataset.action; if (!action) return; if (action === 'disconnect') broadcastDisconnect(); toggleMenu(); }
+    function handleMenuClick(e) {
+        const action = e.target.dataset.action;
+        if (!action) return;
+
+        if (action === 'disconnect') {
+            broadcastDisconnect();
+        } else if (action === 'revoke') {
+            revokeRole();
+        }
+        toggleMenu();
+    }
     function handleLinkClick(e) {
         if (myRole !== 'source' || !myId) return;
         const link = e.target.closest('a[href]');
@@ -416,7 +471,7 @@
 
             // Drag-pair listener: only pair the window under the drop point (ignore stale/coordless).
             GM_addValueChangeListener(KEY_DRAG_PAIR_REQUEST, (key, oldVal, newVal, remote) => {
-                if (!remote || !stateLoaded || myRole !== 'idle' || !newVal) return;
+                if (!remote || !stateLoaded || myRole !== 'idle' || !newVal || document.hidden) return;
                 const { dropX, dropY, sourceId, timestamp } = newVal;
                 const hasCoords = typeof dropX === 'number' && typeof dropY === 'number';
                 if (!hasCoords) return;
@@ -426,9 +481,9 @@
 
             // --- Menu Configuration ---
             const menuCommands = [
-                { name: "STM: Create Source", func: () => setRole('source') },
-                { name: "STM: Disconnect", func: broadcastDisconnect },
-                { name: "STM: Configure Keys", func: showConfigPanel }
+                { name: "Create Source", func: () => setRole('source') },
+                { name: "Configure Keys", func: showConfigPanel },
+                { name: "Reset Roles", func: resetAllRoles }
             ];
             menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
 
@@ -448,6 +503,6 @@
 
     initialize();
 
-    console.log('Split Tab (Dev): Script initialized (v1.0.0)');
+    console.log('Split Tab (Dev): Script initialized (v1.0.2)');
 
 })();
