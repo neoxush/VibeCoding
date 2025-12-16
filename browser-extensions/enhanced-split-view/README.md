@@ -6,6 +6,21 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 
 ## Changelogs
 
+### v1.0.3
+- **Reliable Pairing**: The drag-and-drop pairing mechanism has been completely overhauled. It now uses a more direct communication channel between tabs instead of relying on window screen coordinates, which could be unreliable. This results in a much more robust and instant connection.
+- **Both-Way Sync**: Navigation is no longer a one-way street. Both Source and Target tabs can now initiate link navigation. Clicking a link in either tab will update the other, creating true both-way synchronization.
+And here are the specific code changes that implement the both-way sync functionality:
+1. **Unified Click Handling**: The handleLinkClick function now allows both source and target tabs to publish navigation events.
+// enhanced-split-view/enhanced-split-view-for-chrome.user.js
+
+// ... (previous code)
+
+function handleLinkClick(e) {
+    // Allow clicks from either source or target
+    if ((myRole !== 'source' && myRole !== 'target') || !myId) return;
+    const link = e.target.closest('
+
+
 ### v1.0.2
 - Added a Tampermonkey menu entry for **Reset Roles** (with confirmation) to clear all Source/Target roles across tabs.
 - Removed the **Disconnect** item from the Tampermonkey menu to reduce misclick risk; the badge menu remains for per-tab actions.
