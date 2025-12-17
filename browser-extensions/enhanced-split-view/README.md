@@ -6,25 +6,6 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 
 ## Changelogs
 
-<<<<<<< HEAD
-=======
-### v1.0.3
-- **Reliable Pairing**: The drag-and-drop pairing mechanism has been completely overhauled. It now uses a more direct communication channel between tabs instead of relying on window screen coordinates, which could be unreliable. This results in a much more robust and instant connection.
-- **Both-Way Sync**: Navigation is no longer a one-way street. Both Source and Target tabs can now initiate link navigation. Clicking a link in either tab will update the other, creating true both-way synchronization.
-And here are the specific code changes that implement the both-way sync functionality:
-- **Unified Click Handling**: The handleLinkClick function now allows both source and target tabs to publish navigation events.
-```javascript
-// enhanced-split-view/enhanced-split-view-for-chrome.user.js
-
-// ... (previous code)
-
-function handleLinkClick(e) {
-    // Allow clicks from either source or target
-    if ((myRole !== 'source' && myRole !== 'target') || !myId) return;
-    const link = e.target.closest('
-```
-
->>>>>>> bffedccc1c05e4e132cbd995d6da06d36b60a78f
 ### v1.0.2
 - Added a Tampermonkey menu entry for **Reset Roles** (with confirmation) to clear all Source/Target roles across tabs.
 - Removed the **Disconnect** item from the Tampermonkey menu to reduce misclick risk; the badge menu remains for per-tab actions.
@@ -83,7 +64,6 @@ Click any link in the **Source** tab. It will automatically load in the **Target
 - **Reset All**: Use "Reset Roles" from the Tampermonkey menu to clear all connections across all tabs.
 
 ## Configuration
-<<<<<<< HEAD
 You can customize the mouse shortcuts by selecting **Configure Keys** from the Tampermonkey menu:
 - **Source Key**: Default is `CTRL` + `Middle Mouse Button`
 - **Target Key**: Default is `ALT` + `Middle Mouse Button`
@@ -93,6 +73,3 @@ You can customize the mouse shortcuts by selecting **Configure Keys** from the T
 - **Create Source**: Manually set current tab as a Source
 - **Configure Keys**: Open the visual configuration panel
 - **Reset Roles**: Clear all Source/Target connections across all tabs
-=======
-You can customize the creation shortcuts by selecting **STM: Configure Keys** from the Tampermonkey menu.
->>>>>>> bffedccc1c05e4e132cbd995d6da06d36b60a78f
