@@ -6,36 +6,29 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 
 ## Changelogs
 
-### v1.0.3
-- **Reliable Pairing**: The drag-and-drop pairing mechanism has been completely overhauled. It now uses a more direct communication channel between tabs instead of relying on window screen coordinates, which could be unreliable. This results in a much more robust and instant connection.
-- **Both-Way Sync**: Navigation is no longer a one-way street. Both Source and Target tabs can now initiate link navigation. Clicking a link in either tab will update the other, creating true both-way synchronization.
-And here are the specific code changes that implement the both-way sync functionality:
-1. **Unified Click Handling**: The handleLinkClick function now allows both source and target tabs to publish navigation events.
-// enhanced-split-view/enhanced-split-view-for-chrome.user.js
-
-// ... (previous code)
-
-function handleLinkClick(e) {
-    // Allow clicks from either source or target
-    if ((myRole !== 'source' && myRole !== 'target') || !myId) return;
-    const link = e.target.closest('
-
-
 ### v1.0.2
 - Added a Tampermonkey menu entry for **Reset Roles** (with confirmation) to clear all Source/Target roles across tabs.
 - Removed the **Disconnect** item from the Tampermonkey menu to reduce misclick risk; the badge menu remains for per-tab actions.
 - Auto-collapse the S/T contextual menu when the mouse leaves the UI area.
+- Improved state persistence using GM_saveTab API for more reliable tab state management.
+- Enhanced drag-and-drop pairing with screen coordinate detection for more accurate tab pairing.
+- Added configurable mouse shortcuts with visual configuration panel.
 
 ### v1.0.1
 - Added a context menu to the 'S' and 'T' icons for better control.
 - **Revoke**: Disconnects a single tab (either Source or Target) from the pair, allowing for more flexible control when managing multiple tab pairs.
 
 ## Features
-1. **Source Creation**: Hold `CTRL` (by default) and **Middle-click** anywhere on a page to mark it as the **SOURCE** (S).
-2. **Easy Pairing (Drag & Drop)**: Once you have a Source, click and hold the "S" icon, drag it, and release. The script will automatically pair with the other currently visible tab (the **TARGET**).
-3. **Link Syncing**: Any link clicked in the Source tab automatically opens in the Target tab.
-4. **Hotkey Customization**: Assign dedicated shortcut combos via the script configuration panel.
-5. **Flexible Layouts**: Works with Chrome's native Split View, two separate windows, or dual monitors.
+1. **Source Creation**: Hold `CTRL` + **Middle-click** (default) anywhere on a page to mark it as the **SOURCE** (S).
+2. **Target Creation**: Hold `ALT` + **Middle-click** (default) to mark current tab as **TARGET** (T) and connect to the most recent Source.
+3. **Easy Pairing (Drag & Drop)**: Once you have a Source, click and hold the "S" icon, drag it, and release. The script will automatically pair with the other currently visible tab (the **TARGET**).
+4. **Link Syncing**: Any link clicked in the Source tab automatically opens in the Target tab.
+5. **Visual Interface**: Floating "S" (Source) and "T" (Target) indicators with context menus for control.
+6. **Hotkey Customization**: Fully configurable mouse shortcuts via the visual configuration panel.
+7. **Flexible Layouts**: Works with Chrome's native Split View, two separate windows, or dual monitors.
+8. **Group Management**: Multiple Source tabs can be grouped together, with Targets joining existing groups.
+9. **State Persistence**: Tab roles and connections survive page refreshes and navigation changes.
+10. **Context Menu Controls**: Right-click on S/T indicators for options like Revoke, Disconnect, and Join as Source.
 
 ## How it Works
 ![chrome_split_view_preview](https://github.com/user-attachments/assets/cb101a97-e580-412f-9844-1cb3befa3e3b)
@@ -53,16 +46,30 @@ Open the two pages you want to use.
     <br><img width="283" height="142" alt="image" src="https://github.com/user-attachments/assets/13fc0fae-485d-4934-aead-7fced7c3bbed" /></br>
 
 ### 2. Activate Source
-In your main window, hold `CTRL` and click the **Middle Mouse Button**. A floating **S** icon will appear on the right side.
-*   *Note: You can configure this shortcut in the menu.*
+In your main window, hold `CTRL` + **Middle Mouse Button** (default). A floating **S** icon will appear on the right side.
+*   *Note: You can configure this shortcut by selecting "Configure Keys" from the Tampermonkey menu.*
 
 ### 3. Activate Target
 Ensure your desired Target tab/window is visible (not minimized).
-*   **Drag Method**: Click and hold the **S** icon on the Source page, drag it slightly (mimicking a drag to the other side), and release. The other visible tab will detect the signal and become the **TARGET** (marked with a **T** icon).
-*   **Manual Method**: If drag-pairing doesn't trigger, you can use the Tampermonkey menu command "STM: Create Source" in one tab and assign the other manually if needed (though the script is designed to auto-discover the target via the storage signal).
+*   **Drag Method**: Click and hold the **S** icon on the Source page, drag it slightly, and release. The other visible tab will detect the signal and become the **TARGET** (marked with a **T** icon on the left side).
+*   **Manual Method**: Hold `ALT` + **Middle Mouse Button** (default) in any tab to make it a Target connected to the most recent Source.
+*   **Join Existing Group**: Use the "Join as Source" option from the S/T context menu to add additional Source tabs to an existing group.
 
 ### 4. Browse
 Click any link in the **Source** tab. It will automatically load in the **Target** tab.
 
+### 5. Manage Connections
+- **Revoke**: Right-click the S/T indicator and select "Revoke" to disconnect just this tab.
+- **Disconnect**: Right-click the S/T indicator and select "Disconnect" to break the connection between both tabs.
+- **Reset All**: Use "Reset Roles" from the Tampermonkey menu to clear all connections across all tabs.
+
 ## Configuration
-You can customize the creation shortcuts by selecting **STM: Configure Keys** from the Tampermonkey menu.
+You can customize the mouse shortcuts by selecting **Configure Keys** from the Tampermonkey menu:
+- **Source Key**: Default is `CTRL` + `Middle Mouse Button`
+- **Target Key**: Default is `ALT` + `Middle Mouse Button`
+- Both support Left (0), Middle (1), and Right (2) mouse buttons with Ctrl/Alt/Shift modifiers.
+
+## Tampermonkey Menu Commands
+- **Create Source**: Manually set current tab as a Source
+- **Configure Keys**: Open the visual configuration panel
+- **Reset Roles**: Clear all Source/Target connections across all tabs

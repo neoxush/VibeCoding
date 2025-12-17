@@ -4,7 +4,6 @@
 // @version      1.0.2
 // @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
-// @note         You can reorder the right-click menu items by editing the 'contextMenuItems' array in the updateUI function.
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
 // @run-at       document-start
@@ -21,6 +20,8 @@
 
 (function () {
     'use strict';
+
+    // Note: You can reorder the right-click menu items by editing the 'contextMenuItems' array in the updateUI function.
 
     // --- Configuration & Keys ---
     const GM_PREFIX = 'stm_gm_v18_';
