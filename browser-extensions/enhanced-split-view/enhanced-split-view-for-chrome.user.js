@@ -309,6 +309,7 @@
     }
 
     function updateUI() {
+        if (window !== window.top) return; // Only show UI in the top-level window
         if (!document.body) { window.addEventListener('DOMContentLoaded', updateUI, { once: true }); return; }
         if (!ui) {
             ui = { container: document.createElement('div'), dot: document.createElement('div'), menu: document.createElement('div') };
