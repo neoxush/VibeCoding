@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -42,6 +42,14 @@
     };
 
     // --- State Management ---
+    const generateId = () => Math.random().toString(36).substring(2, 11);
+    const myInstanceId = generateId();
+    let lastFocusTime = 0; // Initialize to 0 so fresh tabs don't tie with Date.now()
+    const updateFocus = () => { lastFocusTime = Date.now(); };
+    window.addEventListener('focus', updateFocus);
+    window.addEventListener('mousedown', updateFocus, true);
+    window.addEventListener('pointerdown', updateFocus, true);
+
     let myRole = 'idle';
     let myId = null;
     let myLastTs = 0;
@@ -351,7 +359,52 @@
     function handleContainerMouseLeave(e) { if (!ui || !ui.container) return; const toEl = e.relatedTarget; if (!toEl || !ui.container.contains(toEl)) hideMenu(); }
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
 
-    const generateId = () => Math.random().toString(36).substring(2, 11);
+    // --- Helpers ---
+    function bidForDrop(requestId, onWin) {
+        const myInterestKey = `${GM_PREFIX}interest_${requestId}_${myInstanceId}`;
+        // Score is primarily focus time, with a huge bonus if we currently have focus
+        const score = lastFocusTime + (document.hasFocus() ? 1e12 : 0);
+
+        GM_setValue(myInterestKey, {
+            score: score,
+            id: myInstanceId,
+            url: window.location.hostname,
+            ts: Date.now()
+        });
+
+        // Wait for other tabs to also post their interest (increased delay for sync)
+        setTimeout(() => {
+            const allKeys = GM_listValues();
+            const interestKeys = allKeys.filter(k => k.startsWith(`${GM_PREFIX}interest_${requestId}_`));
+            const interests = interestKeys.map(k => GM_getValue(k)).filter(Boolean);
+
+            // Sort by score (descending), then by ID as tie-breaker
+            interests.sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                return b.id < a.id ? -1 : 1;
+            });
+
+            const winner = interests[0];
+            const iWon = winner && winner.id === myInstanceId;
+
+            if (interests.length > 1) {
+                console.log(`[SplitView] Bidding for ${requestId}:`, {
+                    iWon,
+                    myScore: score,
+                    winner: winner,
+                    allBids: interests
+                });
+            }
+
+            if (iWon) {
+                onWin();
+            }
+
+            // Cleanup our interest key after a short grace period
+            setTimeout(() => GM_deleteValue(myInterestKey), 1000);
+        }, 200);
+    }
+
     function publishNavigation(url) {
         // Ensure monotonic timestamp to guarantee listener fires even on rapid/same-URL clicks.
         const current = GM_getValue(getTimestampKey(myId), 0);
@@ -437,6 +490,7 @@
             toggleMenu();
         } else if (myRole === 'source') {
             GM_setValue(KEY_DRAG_PAIR_REQUEST, {
+                requestId: generateId(),
                 sourceId: myId,
                 timestamp: Date.now(),
                 dropX: e.screenX,
@@ -444,6 +498,7 @@
             });
         } else if (myRole === 'target') {
             GM_setValue(KEY_DRAG_SOURCE_REQUEST, {
+                requestId: generateId(),
                 targetId: myId,
                 timestamp: Date.now(),
                 dropX: e.screenX,
@@ -555,29 +610,37 @@
             // Drag-pair listener: only pair the window under the drop point (ignore stale/coordless).
             GM_addValueChangeListener(KEY_DRAG_PAIR_REQUEST, (key, oldVal, newVal, remote) => {
                 if (!remote || !stateLoaded || myRole !== 'idle' || !newVal || document.hidden) return;
-                const { dropX, dropY, sourceId, timestamp } = newVal;
+                const { dropX, dropY, sourceId, timestamp, requestId } = newVal;
                 const hasCoords = typeof dropX === 'number' && typeof dropY === 'number';
                 if (!hasCoords) return;
                 if (typeof timestamp === 'number' && Date.now() - timestamp > PAIR_MAX_AGE_MS) return;
 
                 if (isDropInsideThisWindow(dropX, dropY)) {
-                    setRole('target', sourceId);
+                    bidForDrop(requestId || 'legacy', () => {
+                        setRole('target', sourceId);
+                    });
                 }
             });
 
             // Drag-source listener: create source when target is dragged to idle window
             GM_addValueChangeListener(KEY_DRAG_SOURCE_REQUEST, (key, oldVal, newVal, remote) => {
                 if (!remote || !stateLoaded || myRole !== 'idle' || !newVal || document.hidden) return;
-                const { dropX, dropY, targetId, timestamp } = newVal;
+                const { dropX, dropY, targetId, timestamp, requestId } = newVal;
                 const hasCoords = typeof dropX === 'number' && typeof dropY === 'number';
                 if (!hasCoords) return;
                 if (typeof timestamp === 'number' && Date.now() - timestamp > PAIR_MAX_AGE_MS) return;
 
                 if (isDropInsideThisWindow(dropX, dropY)) {
-                    // Join the existing group instead of creating a new one
-                    setRole('source', targetId, true);
+                    bidForDrop(requestId || 'legacy', () => {
+                        // Join the existing group instead of creating a new one
+                        setRole('source', targetId, true);
+                    });
                 }
             });
+
+            // Cleanup any stale interest keys from previous sessions
+            const staleInterests = GM_listValues().filter(k => k.startsWith(`${GM_PREFIX}interest_`));
+            staleInterests.forEach(k => GM_deleteValue(k));
 
             // --- Menu Configuration ---
             const menuCommands = [
@@ -603,6 +666,6 @@
 
     initialize();
 
-    console.log('Split Tab (Dev): Script initialized (v1.0.2)');
+    console.log('Split Tab (Dev): Script initialized (v1.0.3)');
 
 })();

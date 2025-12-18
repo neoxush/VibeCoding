@@ -6,6 +6,11 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 
 ## Changelogs
 
+### v1.0.3
+- **Improved Drag-and-Drop Accuracy**: Implemented a cross-tab bidding system to prevent overlapping windows from both claiming a role.
+- **Focus-Aware Bidding**: Tabs now track interaction (clicks/focus) to ensure the "top-most" window wins the role assignment.
+- **Debug Logging**: Added console logging for bidding conflicts to help troubleshoot complex window layouts.
+
 ### v1.0.2
 - Added a Tampermonkey menu entry for **Reset Roles** (with confirmation) to clear all Source/Target roles across tabs.
 - Removed the **Disconnect** item from the Tampermonkey menu to reduce misclick risk; the badge menu remains for per-tab actions.
