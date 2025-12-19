@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.0.4
+// @version      1.0.5
 // @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -11,6 +11,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
+// @grant        GM_removeValueChangeListener
 // @grant        GM_addStyle
 // @grant        GM_getTab
 // @grant        GM_saveTab
@@ -20,13 +21,10 @@
 // ==/UserScript==
 
 (function () {
-    // Note: You can reorder the right-click menu items by editing the 'contextMenuItems' array in the updateUI function.
+    'use strict';
 
     // --- Sound Guard (Early Mute Enforcement) ---
-    // We monkey-patch the media prototypes immediately at document-start.
-    // This prevents "noise leaks" during navigation before the rest of the script loads.
     (function applySoundGuard() {
-        // 1. Intercept HTMLMediaElement (Video/Audio tags)
         const origPlay = HTMLMediaElement.prototype.play;
         HTMLMediaElement.prototype.play = function () {
             if (window.stmIsMuted) this.muted = true;
@@ -38,7 +36,6 @@
             Object.defineProperty(HTMLMediaElement.prototype, 'muted', {
                 get() { return desc.get.call(this); },
                 set(v) {
-                    // If the script has enforced a mute, block any attempts by the site to unmute.
                     if (window.stmIsMuted && v === false) return desc.set.call(this, true);
                     return desc.set.call(this, v);
                 },
@@ -46,7 +43,6 @@
             });
         }
 
-        // 2. Intercept AudioContext (Web Audio API)
         const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
         if (OriginalAudioContext) {
             const WrappedContext = function () {
@@ -55,7 +51,6 @@
                 return ctx;
             };
             WrappedContext.prototype = OriginalAudioContext.prototype;
-            // Copy static methods if any
             for (let prop in OriginalAudioContext) {
                 if (OriginalAudioContext.hasOwnProperty(prop)) WrappedContext[prop] = OriginalAudioContext[prop];
             }
@@ -63,159 +58,106 @@
         }
     })();
 
-    // --- Configuration & Keys ---
+    // --- Constants & Config ---
     const GM_PREFIX = 'stm_gm_v18_';
     const KEY_LATEST_SOURCE = `${GM_PREFIX}latest_source`;
-    const KEY_DRAG_PAIR_REQUEST = `${GM_PREFIX}drag_pair_request`;
-    const KEY_DRAG_SOURCE_REQUEST = `${GM_PREFIX}drag_source_request`;
     const KEY_CONFIG = `${GM_PREFIX}config`;
     const KEY_GLOBAL_RESET = `${GM_PREFIX}global_reset`;
-    const PAIR_MAX_AGE_MS = 5000;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
     const getSourceListKey = (id) => `${GM_PREFIX}sources_${id}`;
+    const getTabStateKey = (tid) => `${GM_PREFIX}tab_state_${tid}`;
+    const getHeartbeatKey = (id, inst) => `${GM_PREFIX}hb_${id}_${inst}`;
 
-    // Default configuration
     const DEFAULT_CONFIG = {
         sourceKey: { button: 1, ctrl: true, alt: false, shift: false },
         targetKey: { button: 1, ctrl: false, alt: true, shift: false }
     };
 
-    // --- State Management ---
+    // --- State ---
     const generateId = () => Math.random().toString(36).substring(2, 11);
     const myInstanceId = generateId();
     let myRole = 'idle';
     let myId = null;
     let myLastTs = 0;
-    let mySourceTabId = null; // Unique ID for this source tab instance
+    let mySourceTabId = null;
     let myIsMuted = false;
     let stateLoaded = false;
     let ui = null;
-    let configPanel = null;
     let activeListeners = [];
     let config = null;
+    let lastUrl = window.location.href;
+    let isDraggingLink = false;
 
-    // We use a property on window so the Sound Guard (which runs in the same context) can see it immediately.
+    let myTabId = sessionStorage.getItem('stm_tab_id');
+    if (!myTabId) {
+        myTabId = generateId();
+        sessionStorage.setItem('stm_tab_id', myTabId);
+    }
+
     window.stmIsMuted = false;
 
-    // Lightweight, synchronous prime from window.name so navigation retains role/id even before async loadState finishes.
+    // --- Persistence ---
     function primeStateFromWindowName() {
         try {
-            const parsed = JSON.parse(window.name || '{}');
+            let payload = null;
+            if (window.name && window.name.startsWith('{"stmRole"')) payload = window.name;
+            if (!payload) payload = sessionStorage.getItem('stm_state');
+            const parsed = JSON.parse(payload || '{}');
             if (parsed.stmRole && parsed.stmId) {
-                myRole = parsed.stmRole;
-                myId = parsed.stmId;
-                myLastTs = parsed.stmLastTs || 0;
-                mySourceTabId = parsed.stmSourceTabId;
-                myIsMuted = parsed.stmIsMuted || false;
+                myRole = parsed.stmRole; myId = parsed.stmId; myLastTs = parsed.stmLastTs || 0;
+                mySourceTabId = parsed.stmSourceTabId; myIsMuted = parsed.stmIsMuted || false;
                 window.stmIsMuted = myIsMuted;
-                // Note: updateUI and listeners are called later in initialize to ensure DOM/GM are ready.
             }
         } catch (err) { /* ignore */ }
     }
-
-    // Prime immediately so Sound Guard has the correct state
     primeStateFromWindowName();
 
-    function loadConfig() {
-        config = GM_getValue(KEY_CONFIG, DEFAULT_CONFIG);
-    }
-
-    function saveConfig(newConfig) {
-        config = newConfig;
-        GM_setValue(KEY_CONFIG, config);
-    }
-
     function saveState(role, id, lastTs = 0, sourceTabId = null, isMuted = null) {
-        myRole = role; myId = id; myLastTs = lastTs; mySourceTabId = sourceTabId;
+        const roleChanged = myRole !== role;
+        const muteChanged = isMuted !== null && myIsMuted !== isMuted;
 
-        // If we are becoming idle, we must unmute. 
-        // Otherwise, we only update mute state if explicitly provided.
-        if (myRole === 'idle') {
-            myIsMuted = false;
-        } else if (isMuted !== null) {
-            myIsMuted = isMuted;
-        }
+        myRole = role; myId = id; myLastTs = lastTs; mySourceTabId = sourceTabId;
+        if (myRole === 'idle') myIsMuted = false;
+        else if (isMuted !== null) myIsMuted = isMuted;
         window.stmIsMuted = myIsMuted;
 
-        // Apply mute state to all tracked media elements
         if (mediaManager && mediaManager.elements) {
-            mediaManager.elements.forEach(el => {
-                el.muted = myIsMuted;
-            });
+            mediaManager.elements.forEach(el => { if (el.muted !== myIsMuted) el.muted = myIsMuted; });
         }
 
-        // Simplified Logic: Save directly to the Tab Object
-        // GM_saveTab persists even across domain changes in the same tab.
-        GM_saveTab({
-            role: myRole,
-            id: myId,
-            lastTs: myLastTs,
-            sourceTabId: mySourceTabId,
-            isMuted: myIsMuted
-        });
+        const state = { role: myRole, id: myId, lastTs: myLastTs, sourceTabId: mySourceTabId, isMuted: myIsMuted };
+        GM_saveTab(state);
+        GM_setValue(getTabStateKey(myTabId), state);
 
-        // Secondary fallback persistence using window.name to survive edge cases.
         try {
             const payload = { stmRole: myRole, stmId: myId, stmLastTs: myLastTs, stmSourceTabId: mySourceTabId, stmIsMuted: myIsMuted };
-            window.name = JSON.stringify(payload);
-            sessionStorage.setItem('stm_state', JSON.stringify(payload));
+            const json = JSON.stringify(payload);
+            if (!window.name || window.name.startsWith('{"stmRole"')) window.name = json;
+            sessionStorage.setItem('stm_state', json);
         } catch (err) { /* ignore */ }
 
         updateUI();
         attachRoleSpecificListeners();
+
+        if (roleChanged && role !== 'idle') showToast(`Tab is now ${role.toUpperCase()}`);
+        if (muteChanged) showToast(myIsMuted ? "Sound Guard Active" : "Audio Restored");
     }
 
     function loadState() {
-        // Direct retrieval from the Tab Object
         return new Promise((resolve) => {
             GM_getTab((tab) => {
-                if (tab && tab.role) {
-                    resolve({
-                        role: tab.role,
-                        id: tab.id,
-                        lastTs: tab.lastTs || 0,
-                        sourceTabId: tab.sourceTabId,
-                        isMuted: tab.isMuted || false
-                    });
-                    return;
+                if (tab && tab.role) resolve(tab);
+                else {
+                    const backup = GM_getValue(getTabStateKey(myTabId), null);
+                    resolve(backup || { role: 'idle', id: null, lastTs: 0, sourceTabId: null, isMuted: false });
                 }
-                // Fallback: attempt to parse window.name if it holds our state
-                try {
-                    const parsed = JSON.parse(window.name || '{}');
-                    if (parsed.stmRole) {
-                        resolve({
-                            role: parsed.stmRole,
-                            id: parsed.stmId,
-                            lastTs: parsed.stmLastTs || 0,
-                            sourceTabId: parsed.stmSourceTabId,
-                            isMuted: parsed.stmIsMuted || false
-                        });
-                        return;
-                    }
-                } catch (err) { /* ignore */ }
-                // Fallback: sessionStorage (survives same-tab navigations)
-                try {
-                    const parsed = JSON.parse(sessionStorage.getItem('stm_state') || '{}');
-                    if (parsed.stmRole) {
-                        resolve({
-                            role: parsed.stmRole,
-                            id: parsed.stmId,
-                            lastTs: parsed.stmLastTs || 0,
-                            sourceTabId: parsed.stmSourceTabId,
-                            isMuted: parsed.stmIsMuted || false
-                        });
-                        return;
-                    }
-                } catch (err) { /* ignore */ }
-                resolve({ role: 'idle', id: null, lastTs: 0, sourceTabId: null, isMuted: false });
             });
         });
     }
 
-
-    // --- UI Logic ---
+    // --- UI ---
     function injectStyles() {
         GM_addStyle(`
             @keyframes stm-pulse { 0% {transform: scale(1);} 50% {transform: scale(1.2);} 100% {transform: scale(1);} }
@@ -224,634 +166,405 @@
             #stm-ui-container.stm-side-right { right: 0; flex-direction: row; }
             #stm-ui-container.stm-side-left { left: 0; flex-direction: row-reverse; }
             #stm-status-dot { width: 30px; height: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; font-family: sans-serif; font-size: 14px; font-weight: bold; color: white; cursor: grab; transition: transform 0.2s, background-color 0.3s; border: 1px solid rgba(255,255,255,0.5); }
-            #stm-status-dot:active { cursor: grabbing; }
             #stm-ui-container.stm-side-right #stm-status-dot { background-color: #28a745; border-radius: 8px 0 0 8px; border-right: none; }
             #stm-ui-container.stm-side-left #stm-status-dot { background-color: #007bff; border-radius: 0 8px 8px 0; border-left: none; }
-            #stm-ui-container.stm-side-right:hover #stm-status-dot { transform: translateX(-3px); }
-            #stm-ui-container.stm-side-left:hover #stm-status-dot { transform: translateX(3px); }
-            #stm-status-dot.stm-drag-over { background-color: #ffc107 !important; transform: scale(1.2) !important; border-color: #fff; box-shadow: 0 0 15px #ffc107; }
+            #stm-status-dot.stm-drag-over { background-color: #ffc107 !important; transform: scale(1.2) !important; box-shadow: 0 0 15px #ffc107; }
             #stm-status-dot.stm-global-drag-over { background-color: #17a2b8 !important; transform: scale(1.1); box-shadow: 0 0 10px #17a2b8; }
-            #stm-volume-btn { width: 28px; height: 28px; background: rgba(51, 51, 51, 0.9); border-radius: 50%; display: none; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s, background-color 0.2s; }
-            #stm-volume-btn:hover { transform: scale(1.1); background: #444; }
-            #stm-volume-btn svg { width: 16px; height: 16px; fill: #fff; }
+            #stm-volume-btn { width: 28px; height: 28px; background: rgba(51, 51, 51, 0.9); border-radius: 50%; display: none; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); transition: transform 0.2s; }
+            #stm-volume-btn svg { width: 16px !important; height: 16px !important; fill: #fff !important; display: block !important; pointer-events: none !important; }
+            #stm-volume-btn .stm-icon-mute, #stm-volume-btn .stm-icon-unmute { display: none !important; }
+            #stm-volume-btn.stm-is-muted .stm-icon-mute { display: block !important; }
+            #stm-volume-btn:not(.stm-is-muted) .stm-icon-unmute { display: block !important; }
             #stm-menu { display: none; position: absolute; top: 100%; background-color: #333; border-radius: 4px; width: 120px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); font-family: sans-serif; font-size: 12px; }
-            #stm-ui-container.stm-side-right #stm-menu { right: 0; border-top-right-radius: 0; }
-            #stm-ui-container.stm-side-left #stm-menu { left: 0; border-top-left-radius: 0; }
-            .stm-menu-item { padding: 8px 12px; color: #fff; cursor: pointer; transition: background-color 0.2s; }
+            #stm-ui-container.stm-side-right #stm-menu { right: 0; }
+            #stm-ui-container.stm-side-left #stm-menu { left: 0; }
+            .stm-menu-item { padding: 8px 12px; color: #fff; cursor: pointer; }
             .stm-menu-item:hover { background-color: #555; }
-            #stm-config-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2c2c2c; border-radius: 8px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); z-index: 2147483648; font-family: sans-serif; color: #fff; min-width: 400px; }
-            #stm-config-panel h3 { margin: 0 0 15px 0; font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 10px; }
-            .stm-config-section { margin-bottom: 20px; padding: 15px; background: #333; border-radius: 4px; }
-            .stm-config-section h4 { margin: 0 0 10px 0; font-size: 14px; color: #4CAF50; }
-            .stm-config-row { display: flex; gap: 10px; margin-bottom: 8px; }
-            .stm-config-label { flex: 1; font-size: 13px; display: flex; align-items: center; }
-            .stm-config-input { display: flex; gap: 5px; align-items: center; }
-            .stm-config-input label { font-size: 12px; cursor: pointer; }
-            .stm-config-input input[type="checkbox"] { cursor: pointer; }
-            .stm-config-input select { background: #444; color: #fff; border: 1px solid #555; border-radius: 3px; padding: 3px 5px; cursor: pointer; }
-            .stm-config-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; }
-            .stm-config-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: background-color 0.2s; }
-            .stm-config-btn-save { background-color: #4CAF50; color: white; }
-            .stm-config-btn-save:hover { background-color: #45a049; }
-            .stm-config-btn-cancel { background-color: #666; color: white; }
-            .stm-config-btn-cancel:hover { background-color: #555; }
-            .stm-config-btn-reset { background-color: #f44336; color: white; }
-            .stm-config-btn-reset:hover { background-color: #da190b; }
-            #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2147483647; }
+            .stm-toast { position: absolute; bottom: 110%; right: 0; background: rgba(0,0,0,0.85); color: #fff; padding: 6px 12px; border-radius: 6px; font-family: sans-serif; font-size: 12px; white-space: nowrap; opacity: 0; transform: translateY(10px); transition: opacity 0.3s, transform 0.3s; pointer-events: none; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 2147483647; }
+            #stm-ui-container.stm-side-left .stm-toast { right: auto; left: 0; }
+            .stm-toast.stm-show { opacity: 1; transform: translateY(0); }
         `);
     }
 
-    function createConfigPanel() {
-        const overlay = document.createElement('div');
-        overlay.id = 'stm-config-overlay';
-        const panel = document.createElement('div');
-        panel.id = 'stm-config-panel';
-        panel.innerHTML = `
-            <h3>Split Tab Manager - Key Configuration</h3>
-            <div class="stm-config-section">
-                <h4>Create Source Tab</h4>
-                <div class="stm-config-row">
-                    <div class="stm-config-label">Mouse Button:</div>
-                    <div class="stm-config-input">
-                        <select id="stm-source-button">
-                            <option value="0">Left (0)</option>
-                            <option value="1">Middle (1)</option>
-                            <option value="2">Right (2)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="stm-config-row">
-                    <div class="stm-config-label">Modifiers:</div>
-                    <div class="stm-config-input">
-                        <label><input type="checkbox" id="stm-source-ctrl"> Ctrl</label>
-                        <label><input type="checkbox" id="stm-source-alt"> Alt</label>
-                        <label><input type="checkbox" id="stm-source-shift"> Shift</label>
-                    </div>
-                </div>
-            </div>
-            <div class="stm-config-section">
-                <h4>Create Target Tab</h4>
-                <div class="stm-config-row">
-                    <div class="stm-config-label">Mouse Button:</div>
-                    <div class="stm-config-input">
-                        <select id="stm-target-button">
-                            <option value="0">Left (0)</option>
-                            <option value="1">Middle (1)</option>
-                            <option value="2">Right (2)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="stm-config-row">
-                    <div class="stm-config-label">Modifiers:</div>
-                    <div class="stm-config-input">
-                        <label><input type="checkbox" id="stm-target-ctrl"> Ctrl</label>
-                        <label><input type="checkbox" id="stm-target-alt"> Alt</label>
-                        <label><input type="checkbox" id="stm-target-shift"> Shift</label>
-                    </div>
-                </div>
-            </div>
-            <div class="stm-config-buttons">
-                <button class="stm-config-btn stm-config-btn-reset" id="stm-config-reset">Reset to Default</button>
-                <button class="stm-config-btn stm-config-btn-cancel" id="stm-config-cancel">Cancel</button>
-                <button class="stm-config-btn stm-config-btn-save" id="stm-config-save">Save</button>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-        document.body.appendChild(panel);
-        overlay.addEventListener('click', hideConfigPanel);
-        panel.querySelector('#stm-config-cancel').addEventListener('click', hideConfigPanel);
-        panel.querySelector('#stm-config-save').addEventListener('click', saveConfigFromPanel);
-        panel.querySelector('#stm-config-reset').addEventListener('click', resetConfigToDefault);
-        return { overlay, panel };
+    function showToast(message, duration = 3000) {
+        if (!ui || !ui.container) return;
+        let toast = ui.container.querySelector('.stm-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.className = 'stm-toast';
+            ui.container.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.classList.add('stm-show');
+        clearTimeout(toast.timeout);
+        toast.timeout = setTimeout(() => toast.classList.remove('stm-show'), duration);
     }
 
     function showConfigPanel() {
-        if (!configPanel) { configPanel = createConfigPanel(); }
-        document.getElementById('stm-source-button').value = config.sourceKey.button;
-        document.getElementById('stm-source-ctrl').checked = config.sourceKey.ctrl;
-        document.getElementById('stm-source-alt').checked = config.sourceKey.alt;
-        document.getElementById('stm-source-shift').checked = config.sourceKey.shift;
-        document.getElementById('stm-target-button').value = config.targetKey.button;
-        document.getElementById('stm-target-ctrl').checked = config.targetKey.ctrl;
-        document.getElementById('stm-target-alt').checked = config.targetKey.alt;
-        document.getElementById('stm-target-shift').checked = config.targetKey.shift;
-        configPanel.overlay.style.display = 'block';
-        configPanel.panel.style.display = 'block';
-    }
+        const overlay = document.createElement('div');
+        overlay.style = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 2147483647;
+            display: flex; align-items: center; justify-content: center;
+            font-family: sans-serif; color: white;
+        `;
 
-    function hideConfigPanel() {
-        if (configPanel) {
-            configPanel.overlay.style.display = 'none';
-            configPanel.panel.style.display = 'none';
-        }
-    }
+        const panel = document.createElement('div');
+        panel.style = `
+            background: #222; padding: 25px; border-radius: 12px;
+            border: 1px solid #444; width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        `;
 
-    function saveConfigFromPanel() {
-        const newConfig = {
-            sourceKey: { button: parseInt(document.getElementById('stm-source-button').value), ctrl: document.getElementById('stm-source-ctrl').checked, alt: document.getElementById('stm-source-alt').checked, shift: document.getElementById('stm-source-shift').checked },
-            targetKey: { button: parseInt(document.getElementById('stm-target-button').value), ctrl: document.getElementById('stm-target-ctrl').checked, alt: document.getElementById('stm-target-alt').checked, shift: document.getElementById('stm-target-shift').checked }
+        panel.innerHTML = `
+            <h3 style="margin-top:0; color: #28a745;">Configure Shortcuts</h3>
+            <div style="margin-bottom: 20px;">
+                <p style="font-size: 14px; margin-bottom: 8px; color: #aaa;">Source Tab Key (Ctrl + Middle Click default)</p>
+                <div id="stm-config-source" style="display: flex; gap: 5px; align-items: center;">
+                    <label><input type="checkbox" data-key="ctrl"> Ctrl</label>
+                    <label><input type="checkbox" data-key="alt"> Alt</label>
+                    <label><input type="checkbox" data-key="shift"> Shift</label>
+                    <select data-key="button" style="background:#333; color:white; border:1px solid #555; border-radius:3px;">
+                        <option value="0">Left Click</option>
+                        <option value="1">Middle Click</option>
+                        <option value="2">Right Click</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-bottom: 25px;">
+                <p style="font-size: 14px; margin-bottom: 8px; color: #aaa;">Target Tab Key (Alt + Middle Click default)</p>
+                <div id="stm-config-target" style="display: flex; gap: 5px; align-items: center;">
+                    <label><input type="checkbox" data-key="ctrl"> Ctrl</label>
+                    <label><input type="checkbox" data-key="alt"> Alt</label>
+                    <label><input type="checkbox" data-key="shift"> Shift</label>
+                    <select data-key="button" style="background:#333; color:white; border:1px solid #555; border-radius:3px;">
+                        <option value="0">Left Click</option>
+                        <option value="1">Middle Click</option>
+                        <option value="2">Right Click</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="stm-config-cancel" style="background: transparent; border: 1px solid #555; color: #ccc; padding: 6px 15px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                <button id="stm-config-save" style="background: #28a745; border: none; color: white; padding: 6px 20px; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Settings</button>
+            </div>
+        `;
+
+        overlay.appendChild(panel);
+        document.body.appendChild(overlay);
+
+        const load = (id, cfg) => {
+            const div = panel.querySelector(`#${id}`);
+            div.querySelector('[data-key="ctrl"]').checked = cfg.ctrl;
+            div.querySelector('[data-key="alt"]').checked = cfg.alt;
+            div.querySelector('[data-key="shift"]').checked = cfg.shift;
+            div.querySelector('[data-key="button"]').value = cfg.button;
         };
-        saveConfig(newConfig);
-        hideConfigPanel();
-        GM_notification({ text: 'Configuration saved!' });
-    }
 
-    function resetConfigToDefault() {
-        saveConfig(DEFAULT_CONFIG);
-        showConfigPanel();
-        GM_notification({ text: 'Configuration reset to defaults!' });
-    }
-
-    function resetAllRoles() {
-        const keys = GM_listValues().filter(k => k.startsWith(GM_PREFIX));
-        const ids = new Set();
-        const urlPrefix = `${GM_PREFIX}url_`;
-        const tsPrefix = `${GM_PREFIX}ts_`;
-        const disconnectPrefix = `${GM_PREFIX}disconnect_`;
-        const sourcesPrefix = `${GM_PREFIX}sources_`;
-        keys.forEach(k => {
-            if (k.startsWith(urlPrefix)) ids.add(k.slice(urlPrefix.length));
-            else if (k.startsWith(tsPrefix)) ids.add(k.slice(tsPrefix.length));
-            else if (k.startsWith(disconnectPrefix)) ids.add(k.slice(disconnectPrefix.length));
-            else if (k.startsWith(sourcesPrefix)) ids.add(k.slice(sourcesPrefix.length));
+        const get = (id) => ({
+            ctrl: panel.querySelector(`#${id} [data-key="ctrl"]`).checked,
+            alt: panel.querySelector(`#${id} [data-key="alt"]`).checked,
+            shift: panel.querySelector(`#${id} [data-key="shift"]`).checked,
+            button: parseInt(panel.querySelector(`#${id} [data-key="button"]`).value)
         });
 
-        // Also check the latest source key
-        const latestSource = GM_getValue(KEY_LATEST_SOURCE, null);
-        if (latestSource && latestSource.sourceId) ids.add(latestSource.sourceId);
+        load('stm-config-source', config.sourceKey);
+        load('stm-config-target', config.targetKey);
 
-        // Notify other tabs to drop their roles via specific IDs.
-        ids.forEach(id => GM_setValue(getDisconnectKey(id), Date.now()));
-
-        // Broadcast a global reset signal as a fallback for tabs without discovered IDs.
-        GM_setValue(KEY_GLOBAL_RESET, Date.now());
-        // Remove all role-related stored values while preserving configuration.
-        keys.forEach(k => {
-            if (k === KEY_CONFIG) return;
-            GM_deleteValue(k);
-        });
-        // Clear tab-specific state and session storage
-        GM_saveTab({});
-        try {
-            window.name = '';
-            sessionStorage.removeItem('stm_state');
-        } catch (err) { /* ignore */ }
-        saveState('idle', null, 0, null);
+        panel.querySelector('#stm-config-cancel').onclick = () => overlay.remove();
+        panel.querySelector('#stm-config-save').onclick = () => {
+            config.sourceKey = get('stm-config-source');
+            config.targetKey = get('stm-config-target');
+            GM_setValue(KEY_CONFIG, config);
+            overlay.remove();
+            showToast("Settings Saved!");
+        };
     }
 
     function updateUI() {
-        if (window !== window.top) return; // Only show UI in the top-level window
+        if (window !== window.top) return;
         if (!document.body) { window.addEventListener('DOMContentLoaded', updateUI, { once: true }); return; }
-
-        // Hide UI in fullscreen mode
         const isFullscreen = !!document.fullscreenElement;
 
-        if (!ui) {
-            ui = {
-                container: document.createElement('div'),
-                dot: document.createElement('div'),
-                menu: document.createElement('div'),
-                volume: document.createElement('div')
-            };
-            ui.container.id = 'stm-ui-container';
-            ui.dot.id = 'stm-status-dot';
-            ui.menu.id = 'stm-menu';
-            ui.volume.id = 'stm-volume-btn';
-            ui.container.append(ui.menu, ui.volume, ui.dot);
+        if (!ui || !document.body.contains(ui.container)) {
+            if (!ui) {
+                ui = { container: document.createElement('div'), dot: document.createElement('div'), menu: document.createElement('div'), volume: document.createElement('div') };
+                ui.container.id = 'stm-ui-container';
+                ui.dot.id = 'stm-status-dot';
+                ui.menu.id = 'stm-menu';
+                ui.volume.id = 'stm-volume-btn';
+                ui.volume.innerHTML = `<svg viewBox="0 0 24 24"><path class="stm-icon-mute" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/><path class="stm-icon-unmute" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+                ui.container.append(ui.menu, ui.volume, ui.dot);
+                ui.dot.setAttribute('draggable', 'true');
+                ui.dot.addEventListener('click', (e) => { if (e.button === 0) toggleMenu(); });
+                ui.dot.addEventListener('dragstart', handleRoleDragStart);
+                ui.dot.addEventListener('dragover', handleLinkDragOver);
+                ui.dot.addEventListener('dragleave', handleLinkDragLeave);
+                ui.dot.addEventListener('drop', handleLinkDrop);
+                ui.menu.addEventListener('click', handleMenuClick);
+                ui.volume.addEventListener('click', () => mediaManager.toggleMute());
+                window.addEventListener('dragover', handleGlobalDragOver);
+                window.addEventListener('dragleave', handleGlobalDragLeave);
+                window.addEventListener('drop', handleGlobalDrop);
+            }
             document.body.appendChild(ui.container);
-
-            // Native Drag & Click
-            ui.dot.setAttribute('draggable', 'true');
-            ui.dot.addEventListener('click', (e) => { if (e.button === 0) toggleMenu(); });
-            ui.dot.addEventListener('dragstart', handleRoleDragStart);
-
-            // Link Drop Support
-            ui.dot.addEventListener('dragover', handleLinkDragOver);
-            ui.dot.addEventListener('dragleave', handleLinkDragLeave);
-            ui.dot.addEventListener('drop', handleLinkDrop);
-
-            ui.menu.addEventListener('click', handleMenuClick);
-            ui.volume.addEventListener('click', () => mediaManager.toggleMute());
-            ui.container.addEventListener('mouseleave', handleContainerMouseLeave);
-            window.addEventListener('click', (e) => { if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) toggleMenu(); }, true);
-
-            // Global Drop Support (for pairing)
-            window.addEventListener('dragover', handleGlobalDragOver);
-            window.addEventListener('dragleave', handleGlobalDragLeave);
-            window.addEventListener('drop', handleGlobalDrop);
         }
+
+        ui.container.style.setProperty('display', (myRole === 'idle' || isFullscreen) ? 'none' : 'flex', 'important');
+        ui.container.classList.remove('stm-side-left', 'stm-side-right');
+        ui.container.classList.add(`stm-side-${myRole === 'target' ? 'left' : 'right'}`);
+        ui.dot.textContent = myRole === 'source' ? 'S' : (myRole === 'target' ? 'T' : '');
 
         const hasMedia = mediaManager && mediaManager.hasMedia;
-        // The UI container is ONLY shown if the tab has an active role (Source or Target) AND not in fullscreen.
-        ui.container.style.display = (myRole === 'idle' || isFullscreen) ? 'none' : 'flex';
-        ui.container.classList.remove('stm-side-left', 'stm-side-right');
+        ui.volume.style.display = (myRole !== 'idle' && (hasMedia || myIsMuted)) ? 'flex' : 'none';
+        ui.volume.classList.toggle('stm-is-muted', myIsMuted);
 
-        // Target is on the left, Source (and others) on the right.
-        const side = (myRole === 'target') ? 'left' : 'right';
-        ui.container.classList.add(`stm-side-${side}`);
-
-        if (myRole === 'source') {
-            ui.dot.textContent = 'S';
-            ui.dot.style.display = 'flex';
-        } else if (myRole === 'target') {
-            ui.dot.textContent = 'T';
-            ui.dot.style.display = 'flex';
-        } else {
-            // This block is mostly for safety if the container display logic changes.
-            ui.dot.style.display = 'none';
-            ui.dot.textContent = '';
-        }
-
-        // Update Volume Button
-        // Only show the volume button if there is active media, but maintain the mute state 
-        // in the background (tab-based mute).
-        if (myRole !== 'idle' && hasMedia) {
-            ui.volume.style.display = 'flex';
-            const volIcon = myIsMuted
-                ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
-                : `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-            ui.volume.innerHTML = volIcon;
-        } else {
-            ui.volume.style.display = 'none';
-        }
-
-        // --- CONTEXT MENU ---
-        // You can reorder these items to change the order in the menu.
-        const contextMenuItems = [
-            { text: "Revoke", action: "revoke" },
-            { text: "Disconnect", action: "disconnect" }
-        ];
-
-        // Add "Join Group" option for idle tabs when sources exist
-        if (myRole === 'idle') {
-            const latestSource = GM_getValue(KEY_LATEST_SOURCE, null);
-            if (latestSource) {
-                contextMenuItems.unshift({ text: "Join as Source", action: "join-source" });
-            }
-        }
-
-        if (myRole !== 'idle' || (myRole === 'idle' && GM_getValue(KEY_LATEST_SOURCE, null))) {
-            ui.menu.innerHTML = contextMenuItems.map(item =>
-                `<div class="stm-menu-item" data-action="${item.action}">${item.text}</div>`
-            ).join('');
-        }
+        const contextMenuItems = [{ text: "Revoke", action: "revoke" }, { text: "Disconnect", action: "disconnect" }];
+        if (myRole === 'idle' && GM_getValue(KEY_LATEST_SOURCE)) contextMenuItems.unshift({ text: "Join as Source", action: "join-source" });
+        ui.menu.innerHTML = contextMenuItems.map(item => `<div class="stm-menu-item" data-action="${item.action}">${item.text}</div>`).join('');
     }
 
     function toggleMenu() { if (ui && ui.menu) ui.menu.style.display = ui.menu.style.display === 'block' ? 'none' : 'block'; }
-    function hideMenu() { if (ui && ui.menu) ui.menu.style.display = 'none'; }
-    function handleContainerMouseLeave(e) { if (!ui || !ui.container) return; const toEl = e.relatedTarget; if (!toEl || !ui.container.contains(toEl)) hideMenu(); }
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
 
-    // --- Helpers ---
-
+    // --- Logic ---
     function publishNavigation(url) {
-        // Ensure monotonic timestamp to guarantee listener fires even on rapid/same-URL clicks.
+        if (!myId) return;
+        // Check if we should ignore this navigation (e.g. from local drag-drop)
+        if (sessionStorage.getItem('stm_ignore_sync') === 'true') {
+            sessionStorage.removeItem('stm_ignore_sync');
+            return;
+        }
         const current = GM_getValue(getTimestampKey(myId), 0);
-        const now = Date.now();
-        const ts = now > current ? now : current + 1;
+        const ts = Math.max(Date.now(), current + 1);
         GM_setValue(getTargetUrlKey(myId), url);
         GM_setValue(getTimestampKey(myId), ts);
     }
 
-    function addSourceToGroup(groupId, sourceTabId) {
-        const sources = GM_getValue(getSourceListKey(groupId), []);
-        if (!sources.includes(sourceTabId)) {
-            sources.push(sourceTabId);
-            GM_setValue(getSourceListKey(groupId), sources);
-        }
-    }
-
-    function removeSourceFromGroup(groupId, sourceTabId) {
-        const sources = GM_getValue(getSourceListKey(groupId), []);
-        const filtered = sources.filter(id => id !== sourceTabId);
-        if (filtered.length > 0) {
-            GM_setValue(getSourceListKey(groupId), filtered);
-        } else {
-            GM_deleteValue(getSourceListKey(groupId));
-        }
-    }
-
-    // --- Media Management (Volume/Mute) ---
     const mediaManager = {
-        hasMedia: false,
-        elements: new Set(),
-        initialized: false,
-
-        init() {
-            if (this.initialized) return;
-            this.initialized = true;
-            this.scan();
-            this.observe();
-            // Periodically check for playing state because 'play' event might be missed or not enough
-            setInterval(() => this.updateState(), 1000);
-        },
-
-        scan() {
-            document.querySelectorAll('video, audio').forEach(el => this.track(el));
-        },
-
+        hasMedia: false, elements: new Set(), initialized: false,
+        init() { if (this.initialized) return; this.initialized = true; this.scan(); this.observe(); setInterval(() => this.updateState(), 1000); },
+        scan() { document.querySelectorAll('video, audio').forEach(el => this.track(el)); },
         track(el) {
             if (this.elements.has(el)) return;
             this.elements.add(el);
-
-            const update = () => this.updateState();
-            el.addEventListener('play', update);
-            el.addEventListener('pause', update);
-            el.addEventListener('volumechange', update);
-
-            // Sync with current mute state
+            const u = () => this.updateState();
+            el.addEventListener('play', u); el.addEventListener('pause', u); el.addEventListener('volumechange', u);
             el.muted = myIsMuted;
         },
-
         observe() {
-            const observer = new MutationObserver(mutations => {
-                for (const m of mutations) {
-                    for (const node of m.addedNodes) {
-                        if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
-                            this.track(node);
-                        } else if (node.querySelectorAll) {
-                            node.querySelectorAll('video, audio').forEach(el => this.track(el));
-                        }
-                    }
+            new MutationObserver(ms => {
+                for (const m of ms) for (const n of m.addedNodes) {
+                    if (n.nodeName === 'VIDEO' || n.nodeName === 'AUDIO') this.track(n);
+                    else if (n.querySelectorAll) n.querySelectorAll('video, audio').forEach(e => this.track(e));
                 }
-            });
-            observer.observe(document.documentElement, { childList: true, subtree: true });
+            }).observe(document.documentElement, { childList: true, subtree: true });
         },
-
         updateState() {
-            // Enforce mute state on all tracked elements if the tab is supposed to be muted.
-            // This prevents websites from programmatically unmuting themselves.
-            if (myIsMuted) {
-                this.elements.forEach(el => {
-                    if (!el.muted) el.muted = true;
-                });
-            }
-
+            if (myIsMuted) this.elements.forEach(el => { if (!el.muted) el.muted = true; });
             let active = false;
-            for (const el of this.elements) {
-                // Consider it a "sound source" if it's playing and has volume
-                if (!el.paused && el.volume > 0 && !el.ended && el.readyState >= 2) {
-                    active = true;
-                    break;
-                }
-            }
-
-            if (active !== this.hasMedia) {
-                this.hasMedia = active;
-                updateUI();
-            }
+            for (const el of this.elements) if (!el.paused && el.volume > 0 && !el.ended && el.readyState >= 1) { active = true; break; }
+            if (active !== this.hasMedia) { this.hasMedia = active; updateUI(); }
         },
-
-        toggleMute() {
-            saveState(myRole, myId, myLastTs, mySourceTabId, !myIsMuted);
-        }
+        toggleMute() { saveState(myRole, myId, myLastTs, mySourceTabId, !myIsMuted); }
     };
-    function setRole(role, id = null, joinExisting = false) {
+
+    function setRole(role, id = null, join = false) {
+        const gid = id || (join ? null : generateId());
         if (role === 'source') {
-            let groupId;
-            if (joinExisting && id) {
-                // Join existing group
-                groupId = id;
-            } else {
-                // Create new group or use provided ID
-                groupId = id || generateId();
-            }
-
-            const sourceTabId = generateId(); // Unique ID for this source tab
-            saveState('source', groupId, 0, sourceTabId);
-            addSourceToGroup(groupId, sourceTabId);
-            GM_setValue(KEY_LATEST_SOURCE, { sourceId: groupId, timestamp: Date.now() });
+            const sid = generateId();
+            saveState('source', gid, 0, sid);
+            const s = GM_getValue(getSourceListKey(gid), []);
+            if (!s.includes(sid)) { s.push(sid); GM_setValue(getSourceListKey(gid), s); }
+            GM_setValue(KEY_LATEST_SOURCE, { sourceId: gid, timestamp: Date.now() });
         } else if (role === 'target') {
-            if (!id) { GM_notification({ text: 'Cannot become Target without a Source ID.' }); return; }
-            saveState('target', id);
-        }
-    }
-    // Disconnects just this tab, leaving the other tab in its role.
-    function revokeRole() {
-        if (myRole === 'source' && myId && mySourceTabId) {
-            removeSourceFromGroup(myId, mySourceTabId);
-        }
-        saveState('idle', null, 0, null);
-    }
-
-    // Disconnects both tabs.
-    function broadcastDisconnect() {
-        if (myRole === 'source' && myId && mySourceTabId) {
-            removeSourceFromGroup(myId, mySourceTabId);
-        }
-        if (myId) {
-            GM_setValue(getDisconnectKey(myId), Date.now());
+            saveState('target', gid);
+        } else if (role === 'idle') {
             saveState('idle', null, 0, null);
         }
     }
 
-    function handleLinkDragOver(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-        if (ui && ui.dot) ui.dot.classList.add('stm-drag-over');
-    }
-
-    function handleLinkDragLeave(e) {
-        if (ui && ui.dot) ui.dot.classList.remove('stm-drag-over');
-    }
-
-    function handleLinkDrop(e) {
-        e.preventDefault();
-        if (ui && ui.dot) ui.dot.classList.remove('stm-drag-over');
-        const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
-        if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-            window.location.href = url;
-        }
-    }
-
-    // --- Role Drag & Drop (Native API) ---
     function handleRoleDragStart(e) {
-        if (myRole === 'idle') {
-            // If idle, we don't initiate a role request, but we might still allow native drag
-            return;
-        }
-        const payload = {
-            sourceId: myId,
-            role: myRole,
-            instanceId: myInstanceId,
-            timestamp: Date.now()
-        };
-        e.dataTransfer.setData('application/stm-role-request', JSON.stringify(payload));
-        // Fallback for cross-browser/process compatibility
-        e.dataTransfer.setData('text/plain', `STM_ROLE:${JSON.stringify(payload)}`);
-        e.dataTransfer.effectAllowed = 'copyMove';
+        if (myRole === 'idle') return;
+        const p = { sourceId: myId, role: myRole, instanceId: myInstanceId, timestamp: Date.now() };
+        const json = JSON.stringify(p);
+        e.dataTransfer.setData('application/stm-role-request', json);
+        e.dataTransfer.setData('text/plain', `STM_ROLE:${json}`);
     }
 
     function handleGlobalDragOver(e) {
         if (e.dataTransfer.types.includes('application/stm-role-request') ||
             (e.dataTransfer.types.includes('text/plain') && e.dataTransfer.getData('text/plain').startsWith('STM_ROLE:'))) {
             e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            if (ui && ui.dot) ui.dot.classList.add('stm-global-drag-over');
+            if (ui && ui.dot) {
+                ui.container.style.display = 'flex';
+                ui.dot.classList.add('stm-global-drag-over');
+                showToast("Drop to Pair Tabs", 500);
+            }
         }
     }
 
-    function handleGlobalDragLeave(e) {
-        if (ui && ui.dot) ui.dot.classList.remove('stm-global-drag-over');
+    function handleGlobalDragLeave() {
+        if (ui && ui.dot) {
+            ui.dot.classList.remove('stm-global-drag-over');
+            if (myRole === 'idle') ui.container.style.display = 'none';
+        }
     }
 
     function handleGlobalDrop(e) {
-        if (ui && ui.dot) ui.dot.classList.remove('stm-global-drag-over');
+        if (ui && ui.dot) {
+            ui.dot.classList.remove('stm-global-drag-over');
+            if (myRole === 'idle') ui.container.style.display = 'none';
+        }
         let dataStr = e.dataTransfer.getData('application/stm-role-request');
         if (!dataStr) {
             const plain = e.dataTransfer.getData('text/plain');
-            if (plain && plain.startsWith('STM_ROLE:')) {
-                dataStr = plain.slice(9);
-            }
+            if (plain && plain.startsWith('STM_ROLE:')) dataStr = plain.slice(9);
         }
-
         if (dataStr) {
             try {
-                const data = JSON.parse(dataStr);
-                if (data.instanceId === myInstanceId) return; // Don't drop on self
-
-                e.preventDefault();
-                if (data.role === 'source') {
-                    setRole('target', data.sourceId);
-                } else if (data.role === 'target') {
-                    setRole('source', data.sourceId, true);
+                const d = JSON.parse(dataStr);
+                if (d.instanceId !== myInstanceId) {
+                    e.preventDefault();
+                    stateLoaded = true;
+                    setRole(d.role === 'source' ? 'target' : 'source', d.sourceId, d.role === 'target');
+                    showToast("Tabs Paired Successfully!");
                 }
             } catch (err) { /* ignore */ }
         }
     }
 
-    function handleMenuClick(e) {
-        const action = e.target.dataset.action;
-        if (!action) return;
-
-        if (action === 'disconnect') {
-            broadcastDisconnect();
-        } else if (action === 'revoke') {
-            revokeRole();
-        } else if (action === 'join-source') {
-            const latestSource = GM_getValue(KEY_LATEST_SOURCE, null);
-            if (latestSource) {
-                setRole('source', latestSource.sourceId, true);
-            }
+    function handleLinkDragOver(e) { e.preventDefault(); ui.dot.classList.add('stm-drag-over'); }
+    function handleLinkDragLeave() { ui.dot.classList.remove('stm-drag-over'); }
+    function handleLinkDrop(e) {
+        e.preventDefault(); ui.dot.classList.remove('stm-drag-over');
+        const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+        if (url && /^https?:\/\//.test(url)) {
+            // CRITICAL: Set ignore flag BEFORE navigating to ensure the new page doesn't sync
+            sessionStorage.setItem('stm_ignore_sync', 'true');
+            lastUrl = url;
+            window.location.href = url;
+            showToast("Opening Link (Local Only)...");
         }
+    }
+
+    function handleMenuClick(e) {
+        const a = e.target.dataset.action;
+        if (a === 'disconnect') { if (myId) GM_setValue(getDisconnectKey(myId), Date.now()); setRole('idle'); showToast("Disconnected Group"); }
+        else if (a === 'revoke') { setRole('idle'); showToast("Role Revoked"); }
+        else if (a === 'join-source') { setRole('source', GM_getValue(KEY_LATEST_SOURCE).sourceId, true); showToast("Joined Group as Source"); }
         toggleMenu();
     }
-    function handleLinkClick(e) {
-        if (myRole !== 'source' || !myId) return;
-        const link = e.target.closest('a[href]');
-        if (!link || link.href.startsWith('javascript:') || link.href.startsWith('#')) return;
-        // Only intercept if we can publish; otherwise let the navigation proceed normally.
-        try {
-            publishNavigation(link.href);
-            e.preventDefault(); e.stopPropagation();
-            pulseDot();
-        } catch (err) {
-            // If publishing fails for any reason, fall back to normal navigation.
-        }
-    }
 
-    function matchesKeyConfig(event, keyConfig) {
-        return event.button === keyConfig.button && event.ctrlKey === keyConfig.ctrl && event.altKey === keyConfig.alt && event.shiftKey === keyConfig.shift;
+    function handleLinkClick(e) {
+        if (myRole !== 'source' || !myId || isDraggingLink) return;
+        if (e.button === 2) return; // Right click
+
+        const link = e.target.closest('a[href]');
+        if (!link) return;
+
+        const url = link.href;
+        if (url.startsWith(window.location.href.split('#')[0] + '#') || url.startsWith('#')) return;
+
+        if (/^https?:\/\//.test(url)) {
+            // Check for active targets
+            const now = Date.now();
+            const keys = GM_listValues();
+            const activeTargets = keys.filter(k => k.startsWith(`${GM_PREFIX}hb_${myId}_`))
+                .some(k => (now - GM_getValue(k, 0)) < 5000);
+
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            if (!activeTargets) {
+                showToast("No active Target! Drag 'S' to another tab to pair.", 5000);
+            } else {
+                publishNavigation(url);
+                pulseDot();
+                showToast("Syncing to Target...");
+            }
+        }
     }
 
     function attachRoleSpecificListeners() {
-        activeListeners.forEach(listenerId => GM_removeValueChangeListener(listenerId));
+        activeListeners.forEach(l => {
+            if (typeof l === 'number') GM_removeValueChangeListener(l);
+            else if (l.stop) l.stop();
+        });
         activeListeners = [];
         if (myRole === 'idle' || !myId) return;
-        const disconnectListener = GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null, 0, null); });
-        activeListeners.push(disconnectListener);
 
-        const globalResetListener = GM_addValueChangeListener(KEY_GLOBAL_RESET, (k, o, n, r) => { if (r) saveState('idle', null, 0, null); });
-        activeListeners.push(globalResetListener);
+        activeListeners.push(GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null, 0, null); }));
+        activeListeners.push(GM_addValueChangeListener(KEY_GLOBAL_RESET, (k, o, n, r) => { if (r) saveState('idle', null, 0, null); }));
+
         if (myRole === 'target') {
-            // Some managers may not flag `remote` reliably; rely on timestamp monotonicity instead.
-            const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n) => {
-                if (n > myLastTs) {
-                    // Pulse and save state before navigating
-                    pulseDot();
-                    saveState('target', myId, n);
-                    window.location.href = GM_getValue(getTargetUrlKey(myId));
-                }
-            });
-            activeListeners.push(urlListener);
+            // Heartbeat
+            const hbKey = getHeartbeatKey(myId, myInstanceId);
+            const hbInterval = setInterval(() => GM_setValue(hbKey, Date.now()), 2000);
+            activeListeners.push({ stop: () => { clearInterval(hbInterval); GM_deleteValue(hbKey); } });
+            window.addEventListener('unload', () => GM_deleteValue(hbKey));
 
-            // Listen for retargeting requests (when dragged to create new source)
-            const retargetListener = GM_addValueChangeListener(`${GM_PREFIX}retarget_${myId}`, (k, o, n) => {
-                if (n && n.newSourceId) {
-                    // Switch to the new source
-                    saveState('target', n.newSourceId);
-                    // Clean up the retarget request
-                    GM_deleteValue(`${GM_PREFIX}retarget_${myId}`);
-                }
-            });
-            activeListeners.push(retargetListener);
-
-            // Initial Check for missed updates (Latency/Race condition fix)
-            const serverTs = GM_getValue(getTimestampKey(myId), 0);
-            if (serverTs > myLastTs) {
-                pulseDot();
-                saveState('target', myId, serverTs);
-                window.location.href = GM_getValue(getTargetUrlKey(myId));
-            }
+            activeListeners.push(GM_addValueChangeListener(getTimestampKey(myId), (k, o, n) => {
+                if (n > myLastTs) { pulseDot(); saveState('target', myId, n); window.location.href = GM_getValue(getTargetUrlKey(myId)); }
+            }));
+            const s = GM_getValue(getTimestampKey(myId), 0);
+            if (s > myLastTs) { saveState('target', myId, s); window.location.href = GM_getValue(getTargetUrlKey(myId)); }
         }
     }
 
     function initialize() {
-        loadConfig();
+        config = GM_getValue(KEY_CONFIG, DEFAULT_CONFIG);
         injectStyles();
-        // Attach link interception immediately so early clicks are captured even before state restore completes.
+
         window.addEventListener('click', handleLinkClick, true);
+        window.addEventListener('auxclick', handleLinkClick, true);
+        window.addEventListener('dragstart', () => { isDraggingLink = true; }, true);
+        window.addEventListener('dragend', () => { isDraggingLink = false; }, true);
 
-        // Restore state, then arm listeners to avoid transient "idle" pairing.
-        loadState().then(s => {
-            // Merge with any primed state to avoid overwriting an existing Source/Target.
-            const mergedRole = (myRole && myRole !== 'idle') ? myRole : s.role;
-            const mergedId = myId || s.id;
-            const mergedTs = myLastTs || s.lastTs;
-            const mergedSourceTabId = mySourceTabId || s.sourceTabId;
-            const mergedIsMuted = (myIsMuted !== undefined && myRole !== 'idle') ? myIsMuted : s.isMuted;
+        setInterval(() => {
+            if (myRole === 'source' && window.location.href !== lastUrl) {
+                const currentUrl = window.location.href;
+                lastUrl = currentUrl;
+                publishNavigation(currentUrl);
+            }
+        }, 500);
 
-            saveState(mergedRole, mergedId, mergedTs, mergedSourceTabId, mergedIsMuted);
-            stateLoaded = true;
-
-            // Trigger UI and listeners now that state is fully merged
+        window.addEventListener('yt-navigate-finish', () => {
+            if (myRole === 'source' && window.location.href !== lastUrl) {
+                lastUrl = window.location.href;
+                publishNavigation(lastUrl);
+            }
             updateUI();
-            attachRoleSpecificListeners();
+        });
 
-            // Initialize media manager after state is loaded
+        window.addEventListener('popstate', () => {
+            if (myRole === 'source' && window.location.href !== lastUrl) {
+                lastUrl = window.location.href;
+                publishNavigation(lastUrl);
+            }
+        });
+
+        loadState().then(s => {
+            if (stateLoaded) return;
+            if (myRole === 'idle' && s.role !== 'idle') { myRole = s.role; myId = s.id; myLastTs = s.lastTs; mySourceTabId = s.sourceTabId; myIsMuted = s.isMuted; }
+            else if (myRole !== 'idle') { myId = myId || s.id; myLastTs = myLastTs || s.lastTs; mySourceTabId = mySourceTabId || s.sourceTabId; if (!myIsMuted) myIsMuted = s.isMuted; }
+            saveState(myRole, myId, myLastTs, mySourceTabId, myIsMuted);
+            stateLoaded = true;
             mediaManager.init();
 
-            // Cleanup any stale interest keys from previous sessions
-            const staleInterests = GM_listValues().filter(k => k.startsWith(`${GM_PREFIX}interest_`));
-            staleInterests.forEach(k => GM_deleteValue(k));
-
-            // --- Menu Configuration ---
-            const menuCommands = [
-                { name: "Create Source", func: () => setRole('source') },
-                { name: "Configure Keys", func: showConfigPanel },
-                { name: "Reset Roles", func: resetAllRoles }
-            ];
-            menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
+            GM_registerMenuCommand("Configure Keys", showConfigPanel);
+            GM_registerMenuCommand("Create Source", () => setRole('source'));
+            GM_registerMenuCommand("Reset Roles", () => { GM_listValues().forEach(k => { if (k.startsWith(GM_PREFIX) && k !== KEY_CONFIG) GM_deleteValue(k); }); GM_setValue(KEY_GLOBAL_RESET, Date.now()); saveState('idle', null, 0, null); showToast("System Reset"); });
 
             window.addEventListener('mousedown', (e) => {
-                if (matchesKeyConfig(e, config.sourceKey)) {
-                    e.preventDefault(); e.stopPropagation();
-                    setRole('source');
-                } else if (matchesKeyConfig(e, config.targetKey)) {
-                    e.preventDefault(); e.stopPropagation();
-                    const l = GM_getValue(KEY_LATEST_SOURCE, null);
-                    if (l) setRole('target', l.sourceId);
-                    else GM_notification({ text: 'No Source tab found.' });
+                if (e.button === config.sourceKey.button && e.ctrlKey === config.sourceKey.ctrl && e.altKey === config.sourceKey.alt && e.shiftKey === config.sourceKey.shift) { e.preventDefault(); setRole('source'); }
+                else if (e.button === config.targetKey.button && e.ctrlKey === config.targetKey.ctrl && e.altKey === config.targetKey.alt && e.shiftKey === config.targetKey.shift) {
+                    const l = GM_getValue(KEY_LATEST_SOURCE); if (l) setRole('target', l.sourceId); else showToast("No Source found. Ctrl+Middle Click a link first!");
                 }
             }, true);
-
-            // Listen for fullscreen changes to hide/show UI
             document.addEventListener('fullscreenchange', () => updateUI());
         });
     }
 
     initialize();
-
-    console.log('Split Tab (Dev): Script initialized (v1.0.4)');
-
 })();

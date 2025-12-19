@@ -6,11 +6,17 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 
 ## Changelogs
 
+### v1.0.5
+- **Integrated Toast System**: Added a lightweight notification system for real-time feedback on role changes, pairing success, and sync status.
+- **Target Heartbeat & Smart Guidance**: Implemented a heartbeat system to detect active Targets. If no Target is found, the script now provides proactive guidance on how to pair.
+- **Independent Link Dragging**: You can now drag a link onto the 'S' or 'T' icon to open it in the current tab without syncing it to the paired tab, allowing for more flexible local navigation. This is hardened to prevent "sync leaks" on complex sites like YouTube.
+- **Shortcut Configuration**: Restored the visual configuration panel and "Configure Keys" menu command.
+
 ### v1.0.4
-- **Volume Control & Mute Persistence**: Added a dynamic volume icon that appears when sound is detected. Mute state is now persisted across navigations and for idle tabs.
-- **Link Drag-and-Drop Navigation**: You can now drag any link onto the floating 'S' or 'T' icon to navigate the current tab to that URL.
-- **Native Drag-and-Drop Pairing**: Replaced coordinate-based pairing with the Native HTML5 Drag and Drop API, fixing z-order issues where background tabs could be accidentally paired.
-- **Visual Feedback**: Added color-coded glows (Yellow for link drops, Teal for role pairing) and improved UI responsiveness.
+- **Sound Guard (Early Mute)**: Implemented high-performance prototype monkey-patching to ensure zero sound leakage during navigation.
+- **Volume Control & Mute Persistence**: Added a dynamic volume icon that appears when sound is detected. Mute state is now persisted across navigations.
+- **Native Drag-and-Drop Pairing**: Replaced coordinate-based pairing with the Native HTML5 Drag and Drop API for robust cross-tab role assignment.
+- **Visual Feedback**: Added color-coded glows and improved UI responsiveness during drag operations.
 
 ### v1.0.3
 - **Improved Drag-and-Drop Accuracy**: Implemented a cross-tab bidding system to prevent overlapping windows from both claiming a role.
@@ -41,7 +47,7 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 9. **State Persistence**: Tab roles and connections survive page refreshes and navigation changes.
 10. **Context Menu Controls**: Right-click on S/T indicators for options like Revoke, Disconnect, and Join as Source.
 11. **Volume Control**: Instant mute/unmute toggle appears automatically when audio/video is playing.
-12. **Drag-to-Navigate**: Drag any link onto the role icon to navigate the current page to that URL.
+12. **Independent Drag-to-Navigate**: Drag any link onto the 'S' or 'T' icon to navigate the current page locally without affecting the paired tab.
 
 ## How it Works
 ![chrome_split_view_preview](https://github.com/user-attachments/assets/cb101a97-e580-412f-9844-1cb3befa3e3b)
