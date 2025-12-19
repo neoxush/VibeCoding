@@ -6,6 +6,12 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 
 ## Changelogs
 
+### v1.0.4
+- **Volume Control & Mute Persistence**: Added a dynamic volume icon that appears when sound is detected. Mute state is now persisted across navigations and for idle tabs.
+- **Link Drag-and-Drop Navigation**: You can now drag any link onto the floating 'S' or 'T' icon to navigate the current tab to that URL.
+- **Native Drag-and-Drop Pairing**: Replaced coordinate-based pairing with the Native HTML5 Drag and Drop API, fixing z-order issues where background tabs could be accidentally paired.
+- **Visual Feedback**: Added color-coded glows (Yellow for link drops, Teal for role pairing) and improved UI responsiveness.
+
 ### v1.0.3
 - **Improved Drag-and-Drop Accuracy**: Implemented a cross-tab bidding system to prevent overlapping windows from both claiming a role.
 - **Focus-Aware Bidding**: Tabs now track interaction (clicks/focus) to ensure the "top-most" window wins the role assignment.
@@ -34,6 +40,8 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 8. **Group Management**: Multiple Source tabs can be grouped together, with Targets joining existing groups.
 9. **State Persistence**: Tab roles and connections survive page refreshes and navigation changes.
 10. **Context Menu Controls**: Right-click on S/T indicators for options like Revoke, Disconnect, and Join as Source.
+11. **Volume Control**: Instant mute/unmute toggle appears automatically when audio/video is playing.
+12. **Drag-to-Navigate**: Drag any link onto the role icon to navigate the current page to that URL.
 
 ## How it Works
 ![chrome_split_view_preview](https://github.com/user-attachments/assets/cb101a97-e580-412f-9844-1cb3befa3e3b)
