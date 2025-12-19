@@ -20,9 +20,48 @@
 // ==/UserScript==
 
 (function () {
-    'use strict';
-
     // Note: You can reorder the right-click menu items by editing the 'contextMenuItems' array in the updateUI function.
+
+    // --- Sound Guard (Early Mute Enforcement) ---
+    // We monkey-patch the media prototypes immediately at document-start.
+    // This prevents "noise leaks" during navigation before the rest of the script loads.
+    (function applySoundGuard() {
+        // 1. Intercept HTMLMediaElement (Video/Audio tags)
+        const origPlay = HTMLMediaElement.prototype.play;
+        HTMLMediaElement.prototype.play = function () {
+            if (window.stmIsMuted) this.muted = true;
+            return origPlay.apply(this, arguments);
+        };
+
+        const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'muted');
+        if (desc) {
+            Object.defineProperty(HTMLMediaElement.prototype, 'muted', {
+                get() { return desc.get.call(this); },
+                set(v) {
+                    // If the script has enforced a mute, block any attempts by the site to unmute.
+                    if (window.stmIsMuted && v === false) return desc.set.call(this, true);
+                    return desc.set.call(this, v);
+                },
+                configurable: true
+            });
+        }
+
+        // 2. Intercept AudioContext (Web Audio API)
+        const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+        if (OriginalAudioContext) {
+            const WrappedContext = function () {
+                const ctx = new OriginalAudioContext(...arguments);
+                if (window.stmIsMuted && ctx.suspend) ctx.suspend();
+                return ctx;
+            };
+            WrappedContext.prototype = OriginalAudioContext.prototype;
+            // Copy static methods if any
+            for (let prop in OriginalAudioContext) {
+                if (OriginalAudioContext.hasOwnProperty(prop)) WrappedContext[prop] = OriginalAudioContext[prop];
+            }
+            window.AudioContext = window.webkitAudioContext = WrappedContext;
+        }
+    })();
 
     // --- Configuration & Keys ---
     const GM_PREFIX = 'stm_gm_v18_';
@@ -57,6 +96,9 @@
     let activeListeners = [];
     let config = null;
 
+    // We use a property on window so the Sound Guard (which runs in the same context) can see it immediately.
+    window.stmIsMuted = false;
+
     // Lightweight, synchronous prime from window.name so navigation retains role/id even before async loadState finishes.
     function primeStateFromWindowName() {
         try {
@@ -67,11 +109,14 @@
                 myLastTs = parsed.stmLastTs || 0;
                 mySourceTabId = parsed.stmSourceTabId;
                 myIsMuted = parsed.stmIsMuted || false;
-                updateUI();
-                attachRoleSpecificListeners();
+                window.stmIsMuted = myIsMuted;
+                // Note: updateUI and listeners are called later in initialize to ensure DOM/GM are ready.
             }
         } catch (err) { /* ignore */ }
     }
+
+    // Prime immediately so Sound Guard has the correct state
+    primeStateFromWindowName();
 
     function loadConfig() {
         config = GM_getValue(KEY_CONFIG, DEFAULT_CONFIG);
@@ -92,6 +137,7 @@
         } else if (isMuted !== null) {
             myIsMuted = isMuted;
         }
+        window.stmIsMuted = myIsMuted;
 
         // Apply mute state to all tracked media elements
         if (mediaManager && mediaManager.elements) {
@@ -753,7 +799,6 @@
     function initialize() {
         loadConfig();
         injectStyles();
-        primeStateFromWindowName();
         // Attach link interception immediately so early clicks are captured even before state restore completes.
         window.addEventListener('click', handleLinkClick, true);
 
@@ -764,9 +809,14 @@
             const mergedId = myId || s.id;
             const mergedTs = myLastTs || s.lastTs;
             const mergedSourceTabId = mySourceTabId || s.sourceTabId;
-            const mergedIsMuted = myIsMuted || s.isMuted;
+            const mergedIsMuted = (myIsMuted !== undefined && myRole !== 'idle') ? myIsMuted : s.isMuted;
+
             saveState(mergedRole, mergedId, mergedTs, mergedSourceTabId, mergedIsMuted);
             stateLoaded = true;
+
+            // Trigger UI and listeners now that state is fully merged
+            updateUI();
+            attachRoleSpecificListeners();
 
             // Initialize media manager after state is loaded
             mediaManager.init();
