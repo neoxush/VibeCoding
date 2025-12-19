@@ -16,6 +16,7 @@
 // @grant        GM_saveTab
 // @grant        GM_listValues
 // @grant        GM_deleteValue
+// @grant        GM_notification
 // ==/UserScript==
 
 (function () {
@@ -29,6 +30,7 @@
     const KEY_DRAG_PAIR_REQUEST = `${GM_PREFIX}drag_pair_request`;
     const KEY_DRAG_SOURCE_REQUEST = `${GM_PREFIX}drag_source_request`;
     const KEY_CONFIG = `${GM_PREFIX}config`;
+    const KEY_GLOBAL_RESET = `${GM_PREFIX}global_reset`;
     const PAIR_MAX_AGE_MS = 5000;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
@@ -44,12 +46,6 @@
     // --- State Management ---
     const generateId = () => Math.random().toString(36).substring(2, 11);
     const myInstanceId = generateId();
-    let lastFocusTime = 0; // Initialize to 0 so fresh tabs don't tie with Date.now()
-    const updateFocus = () => { lastFocusTime = Date.now(); };
-    window.addEventListener('focus', updateFocus);
-    window.addEventListener('mousedown', updateFocus, true);
-    window.addEventListener('pointerdown', updateFocus, true);
-
     let myRole = 'idle';
     let myId = null;
     let myLastTs = 0;
@@ -88,7 +84,21 @@
 
     function saveState(role, id, lastTs = 0, sourceTabId = null, isMuted = null) {
         myRole = role; myId = id; myLastTs = lastTs; mySourceTabId = sourceTabId;
-        if (isMuted !== null) myIsMuted = isMuted;
+
+        // If we are becoming idle, we must unmute. 
+        // Otherwise, we only update mute state if explicitly provided.
+        if (myRole === 'idle') {
+            myIsMuted = false;
+        } else if (isMuted !== null) {
+            myIsMuted = isMuted;
+        }
+
+        // Apply mute state to all tracked media elements
+        if (mediaManager && mediaManager.elements) {
+            mediaManager.elements.forEach(el => {
+                el.muted = myIsMuted;
+            });
+        }
 
         // Simplified Logic: Save directly to the Tab Object
         // GM_saveTab persists even across domain changes in the same tab.
@@ -307,20 +317,28 @@
     }
 
     function resetAllRoles() {
-        const confirmed = window.confirm('Reset all Split Tab roles across tabs? This will clear Source/Target links. Continue?');
-        if (!confirmed) return;
         const keys = GM_listValues().filter(k => k.startsWith(GM_PREFIX));
         const ids = new Set();
         const urlPrefix = `${GM_PREFIX}url_`;
         const tsPrefix = `${GM_PREFIX}ts_`;
         const disconnectPrefix = `${GM_PREFIX}disconnect_`;
+        const sourcesPrefix = `${GM_PREFIX}sources_`;
         keys.forEach(k => {
             if (k.startsWith(urlPrefix)) ids.add(k.slice(urlPrefix.length));
             else if (k.startsWith(tsPrefix)) ids.add(k.slice(tsPrefix.length));
             else if (k.startsWith(disconnectPrefix)) ids.add(k.slice(disconnectPrefix.length));
+            else if (k.startsWith(sourcesPrefix)) ids.add(k.slice(sourcesPrefix.length));
         });
-        // Notify other tabs to drop their roles.
+
+        // Also check the latest source key
+        const latestSource = GM_getValue(KEY_LATEST_SOURCE, null);
+        if (latestSource && latestSource.sourceId) ids.add(latestSource.sourceId);
+
+        // Notify other tabs to drop their roles via specific IDs.
         ids.forEach(id => GM_setValue(getDisconnectKey(id), Date.now()));
+
+        // Broadcast a global reset signal as a fallback for tabs without discovered IDs.
+        GM_setValue(KEY_GLOBAL_RESET, Date.now());
         // Remove all role-related stored values while preserving configuration.
         keys.forEach(k => {
             if (k === KEY_CONFIG) return;
@@ -333,12 +351,15 @@
             sessionStorage.removeItem('stm_state');
         } catch (err) { /* ignore */ }
         saveState('idle', null, 0, null);
-        GM_notification({ text: 'All roles have been reset.' });
     }
 
     function updateUI() {
         if (window !== window.top) return; // Only show UI in the top-level window
         if (!document.body) { window.addEventListener('DOMContentLoaded', updateUI, { once: true }); return; }
+
+        // Hide UI in fullscreen mode
+        const isFullscreen = !!document.fullscreenElement;
+
         if (!ui) {
             ui = {
                 container: document.createElement('div'),
@@ -375,10 +396,11 @@
         }
 
         const hasMedia = mediaManager && mediaManager.hasMedia;
-        ui.container.style.display = (myRole === 'idle' && !hasMedia) ? 'none' : 'flex';
+        // The UI container is ONLY shown if the tab has an active role (Source or Target) AND not in fullscreen.
+        ui.container.style.display = (myRole === 'idle' || isFullscreen) ? 'none' : 'flex';
         ui.container.classList.remove('stm-side-left', 'stm-side-right');
 
-        // Default to right side if idle but has media
+        // Target is on the left, Source (and others) on the right.
         const side = (myRole === 'target') ? 'left' : 'right';
         ui.container.classList.add(`stm-side-${side}`);
 
@@ -389,13 +411,15 @@
             ui.dot.textContent = 'T';
             ui.dot.style.display = 'flex';
         } else {
-            ui.dot.style.display = hasMedia ? 'flex' : 'none';
-            ui.dot.textContent = ''; // Or maybe a small icon?
-            ui.dot.innerHTML = `<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:white;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>`;
+            // This block is mostly for safety if the container display logic changes.
+            ui.dot.style.display = 'none';
+            ui.dot.textContent = '';
         }
 
         // Update Volume Button
-        if (hasMedia) {
+        // Only show the volume button if there is active media, but maintain the mute state 
+        // in the background (tab-based mute).
+        if (myRole !== 'idle' && hasMedia) {
             ui.volume.style.display = 'flex';
             const volIcon = myIsMuted
                 ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
@@ -489,8 +513,8 @@
             el.addEventListener('pause', update);
             el.addEventListener('volumechange', update);
 
-            // Apply current mute state
-            if (myIsMuted) el.muted = true;
+            // Sync with current mute state
+            el.muted = myIsMuted;
         },
 
         observe() {
@@ -509,10 +533,17 @@
         },
 
         updateState() {
+            // Enforce mute state on all tracked elements if the tab is supposed to be muted.
+            // This prevents websites from programmatically unmuting themselves.
+            if (myIsMuted) {
+                this.elements.forEach(el => {
+                    if (!el.muted) el.muted = true;
+                });
+            }
+
             let active = false;
             for (const el of this.elements) {
                 // Consider it a "sound source" if it's playing and has volume
-                // Even if it's currently muted by us, we want to know it's a source
                 if (!el.paused && el.volume > 0 && !el.ended && el.readyState >= 2) {
                     active = true;
                     break;
@@ -526,11 +557,7 @@
         },
 
         toggleMute() {
-            const newState = !myIsMuted;
-            this.elements.forEach(el => {
-                el.muted = newState;
-            });
-            saveState(myRole, myId, myLastTs, mySourceTabId, newState);
+            saveState(myRole, myId, myLastTs, mySourceTabId, !myIsMuted);
         }
     };
     function setRole(role, id = null, joinExisting = false) {
@@ -647,20 +674,6 @@
         }
     }
 
-    let dragState = {};
-    function handleDragStart(e) {
-        if (e.button !== 0) return;
-        e.preventDefault(); e.stopPropagation();
-        dragState = { isClick: true, startX: e.clientX, startY: e.clientY };
-        window.addEventListener('mousemove', handleDragMove);
-        window.addEventListener('mouseup', handleDragEnd, { once: true });
-    }
-    function handleDragMove(e) {
-        if (dragState.isClick && (Math.abs(e.clientX - dragState.startX) > 5 || Math.abs(e.clientY - dragState.startY) > 5)) {
-            dragState.isClick = false;
-        }
-        if (myRole === 'source' || myRole === 'target') { ui.dot.style.cursor = 'grabbing'; }
-    }
     function handleMenuClick(e) {
         const action = e.target.dataset.action;
         if (!action) return;
@@ -701,6 +714,9 @@
         if (myRole === 'idle' || !myId) return;
         const disconnectListener = GM_addValueChangeListener(getDisconnectKey(myId), (k, o, n, r) => { if (r) saveState('idle', null, 0, null); });
         activeListeners.push(disconnectListener);
+
+        const globalResetListener = GM_addValueChangeListener(KEY_GLOBAL_RESET, (k, o, n, r) => { if (r) saveState('idle', null, 0, null); });
+        activeListeners.push(globalResetListener);
         if (myRole === 'target') {
             // Some managers may not flag `remote` reliably; rely on timestamp monotonicity instead.
             const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n) => {
@@ -778,6 +794,9 @@
                     else GM_notification({ text: 'No Source tab found.' });
                 }
             }, true);
+
+            // Listen for fullscreen changes to hide/show UI
+            document.addEventListener('fullscreenchange', () => updateUI());
         });
     }
 
