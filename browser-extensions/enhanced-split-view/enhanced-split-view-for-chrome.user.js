@@ -66,7 +66,7 @@
                 myId = parsed.stmId;
                 myLastTs = parsed.stmLastTs || 0;
                 mySourceTabId = parsed.stmSourceTabId;
-                myIsMuted = false; // Always reset on refresh
+                myIsMuted = parsed.stmIsMuted || false;
                 updateUI();
                 attachRoleSpecificListeners();
             }
@@ -83,7 +83,6 @@
     }
 
     function saveState(role, id, lastTs = 0, sourceTabId = null, isMuted = null) {
-        const roleChanged = myRole !== role;
         myRole = role; myId = id; myLastTs = lastTs; mySourceTabId = sourceTabId;
 
         // If we are becoming idle, we must unmute. 
@@ -103,41 +102,36 @@
 
         // Simplified Logic: Save directly to the Tab Object
         // GM_saveTab persists even across domain changes in the same tab.
-        // We NO LONGER persist isMuted here as per user request (reset on refresh).
         GM_saveTab({
             role: myRole,
             id: myId,
             lastTs: myLastTs,
-            sourceTabId: mySourceTabId
+            sourceTabId: mySourceTabId,
+            isMuted: myIsMuted
         });
 
         // Secondary fallback persistence using window.name to survive edge cases.
         try {
-            const payload = { stmRole: myRole, stmId: myId, stmLastTs: myLastTs, stmSourceTabId: mySourceTabId };
+            const payload = { stmRole: myRole, stmId: myId, stmLastTs: myLastTs, stmSourceTabId: mySourceTabId, stmIsMuted: myIsMuted };
             window.name = JSON.stringify(payload);
             sessionStorage.setItem('stm_state', JSON.stringify(payload));
         } catch (err) { /* ignore */ }
 
         updateUI();
         attachRoleSpecificListeners();
-
-        if (roleChanged && role !== 'idle') {
-            showToast(`Tab is now ${role.toUpperCase()}`);
-        }
     }
 
     function loadState() {
         // Direct retrieval from the Tab Object
         return new Promise((resolve) => {
             GM_getTab((tab) => {
-                // We always start with myIsMuted = false on refresh
                 if (tab && tab.role) {
                     resolve({
                         role: tab.role,
                         id: tab.id,
                         lastTs: tab.lastTs || 0,
                         sourceTabId: tab.sourceTabId,
-                        isMuted: false
+                        isMuted: tab.isMuted || false
                     });
                     return;
                 }
@@ -150,7 +144,7 @@
                             id: parsed.stmId,
                             lastTs: parsed.stmLastTs || 0,
                             sourceTabId: parsed.stmSourceTabId,
-                            isMuted: false
+                            isMuted: parsed.stmIsMuted || false
                         });
                         return;
                     }
@@ -164,7 +158,7 @@
                             id: parsed.stmId,
                             lastTs: parsed.stmLastTs || 0,
                             sourceTabId: parsed.stmSourceTabId,
-                            isMuted: false
+                            isMuted: parsed.stmIsMuted || false
                         });
                         return;
                     }
@@ -218,27 +212,7 @@
             .stm-config-btn-reset { background-color: #f44336; color: white; }
             .stm-config-btn-reset:hover { background-color: #da190b; }
             #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2147483647; }
-            #stm-mute-label { display: none; background: rgba(244, 67, 54, 0.9); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-            #stm-ui-container.stm-side-right #stm-mute-label { margin-right: 2px; }
-            #stm-ui-container.stm-side-left #stm-mute-label { margin-left: 2px; }
-            .stm-toast { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.85); color: #fff; padding: 8px 16px; border-radius: 8px; font-family: sans-serif; font-size: 13px; white-space: nowrap; opacity: 0; transform: translateY(-20px); transition: opacity 0.3s, transform 0.3s; pointer-events: none; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 2147483647; }
-            .stm-toast.stm-show { opacity: 1; transform: translateY(0); }
         `);
-    }
-
-    function showToast(message, duration = 3000) {
-        if (!document.body) return;
-        let toast = document.getElementById('stm-global-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'stm-global-toast';
-            toast.className = 'stm-toast';
-            document.body.appendChild(toast);
-        }
-        toast.textContent = message;
-        toast.classList.add('stm-show');
-        clearTimeout(toast.timeout);
-        toast.timeout = setTimeout(() => toast.classList.remove('stm-show'), duration);
     }
 
     function createConfigPanel() {
@@ -333,13 +307,13 @@
         };
         saveConfig(newConfig);
         hideConfigPanel();
-        showToast('Configuration saved!');
+        GM_notification({ text: 'Configuration saved!' });
     }
 
     function resetConfigToDefault() {
         saveConfig(DEFAULT_CONFIG);
         showConfigPanel();
-        showToast('Configuration reset to defaults!');
+        GM_notification({ text: 'Configuration reset to defaults!' });
     }
 
     function resetAllRoles() {
@@ -391,15 +365,13 @@
                 container: document.createElement('div'),
                 dot: document.createElement('div'),
                 menu: document.createElement('div'),
-                volume: document.createElement('div'),
-                muteLabel: document.createElement('div')
+                volume: document.createElement('div')
             };
             ui.container.id = 'stm-ui-container';
             ui.dot.id = 'stm-status-dot';
             ui.menu.id = 'stm-menu';
             ui.volume.id = 'stm-volume-btn';
-            ui.muteLabel.id = 'stm-mute-label';
-            ui.container.append(ui.menu, ui.volume, ui.muteLabel, ui.dot);
+            ui.container.append(ui.menu, ui.volume, ui.dot);
             document.body.appendChild(ui.container);
 
             // Native Drag & Click
@@ -445,8 +417,9 @@
         }
 
         // Update Volume Button
-        // Show the volume button if there is active media OR if the tab is currently muted.
-        if (myRole !== 'idle' && (hasMedia || myIsMuted)) {
+        // Only show the volume button if there is active media, but maintain the mute state 
+        // in the background (tab-based mute).
+        if (myRole !== 'idle' && hasMedia) {
             ui.volume.style.display = 'flex';
             const volIcon = myIsMuted
                 ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
@@ -454,14 +427,6 @@
             ui.volume.innerHTML = volIcon;
         } else {
             ui.volume.style.display = 'none';
-        }
-
-        // Update Mute Label (Persistent indicator)
-        if (myIsMuted) {
-            ui.muteLabel.style.display = 'block';
-            ui.muteLabel.textContent = 'Muted';
-        } else {
-            ui.muteLabel.style.display = 'none';
         }
 
         // --- CONTEXT MENU ---
@@ -592,13 +557,7 @@
         },
 
         toggleMute() {
-            const newState = !myIsMuted;
-            saveState(myRole, myId, myLastTs, mySourceTabId, newState);
-            if (newState) {
-                showToast("Tab Muted (until refresh)");
-            } else {
-                showToast("Audio Restored");
-            }
+            saveState(myRole, myId, myLastTs, mySourceTabId, !myIsMuted);
         }
     };
     function setRole(role, id = null, joinExisting = false) {
@@ -617,7 +576,7 @@
             addSourceToGroup(groupId, sourceTabId);
             GM_setValue(KEY_LATEST_SOURCE, { sourceId: groupId, timestamp: Date.now() });
         } else if (role === 'target') {
-            if (!id) { showToast('Error: Cannot become Target without a Source ID.'); return; }
+            if (!id) { GM_notification({ text: 'Cannot become Target without a Source ID.' }); return; }
             saveState('target', id);
         }
     }
@@ -812,12 +771,6 @@
             // Initialize media manager after state is loaded
             mediaManager.init();
 
-            // One-time welcome notification (reference style)
-            if (!localStorage.getItem('stm_welcome_v1')) {
-                showToast('Enhanced Split View Active :)');
-                localStorage.setItem('stm_welcome_v1', 'true');
-            }
-
             // Cleanup any stale interest keys from previous sessions
             const staleInterests = GM_listValues().filter(k => k.startsWith(`${GM_PREFIX}interest_`));
             staleInterests.forEach(k => GM_deleteValue(k));
@@ -844,14 +797,6 @@
 
             // Listen for fullscreen changes to hide/show UI
             document.addEventListener('fullscreenchange', () => updateUI());
-
-            // Self-healing UI and YouTube SPA support
-            setInterval(() => {
-                if (myRole !== 'idle' && ui && ui.container && !document.body.contains(ui.container)) {
-                    document.body.appendChild(ui.container);
-                }
-            }, 1000);
-            window.addEventListener('yt-navigate-finish', () => updateUI());
         });
     }
 
