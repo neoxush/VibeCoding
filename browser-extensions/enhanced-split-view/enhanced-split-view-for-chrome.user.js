@@ -456,6 +456,61 @@
     function handleContainerMouseLeave(e) { if (!ui || !ui.container) return; const toEl = e.relatedTarget; if (!toEl || !ui.container.contains(toEl)) hideMenu(); }
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
 
+    /**
+     * Extracts a valid URL from DataTransfer object with priority and filtering.
+     * This ensures links from images, sidebars, and various browsers are captured.
+     */
+    function extractUrlFromDataTransfer(dt) {
+        // 1. Ignore if it's an internal role-request drag
+        if (dt.types.includes('application/stm-role-request')) return null;
+        const plainText = dt.getData('text/plain');
+        if (plainText && plainText.trim().startsWith('STM_ROLE:')) return null;
+
+        // 2. Try text/uri-list (Standard for links)
+        const uriList = dt.getData('text/uri-list');
+        if (uriList) {
+            const lines = uriList.split(/[\r\n]+/);
+            for (let line of lines) {
+                line = line.trim();
+                if (line && !line.startsWith('#')) return line;
+            }
+        }
+
+        // 3. Try "URL" (IE/Legacy)
+        const urlProp = dt.getData('URL');
+        if (urlProp) return urlProp.trim();
+
+        // 4. Try application/x-moz-url (Firefox)
+        const mozUrl = dt.getData('text/x-moz-url');
+        if (mozUrl) {
+            const url = mozUrl.split(/[\r\n]+/)[0].trim();
+            if (url) return url;
+        }
+
+        // 5. Try text/html (Extract <a> href or <img> src)
+        const html = dt.getData('text/html');
+        if (html) {
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const link = doc.querySelector('a[href]');
+                if (link && link.href) return link.href;
+                const img = doc.querySelector('img[src]');
+                if (img && img.src) return img.src;
+            } catch (ignore) { }
+        }
+
+        // 6. Fallback to text/plain regex match
+        if (plainText) {
+            const match = plainText.match(/https?:\/\/[^\s"']+/);
+            if (match) return match[0];
+            const trimmed = plainText.trim();
+            if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+        }
+
+        return null;
+    }
+
     // --- Helpers ---
 
     function publishNavigation(url) {
@@ -600,9 +655,19 @@
     }
 
     function handleLinkDragOver(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-        if (ui && ui.dot) ui.dot.classList.add('stm-drag-over');
+        // Allow drop if there's any format that might contain a URL
+        const types = e.dataTransfer.types;
+        const hasUrlCandidate = types.includes('text/uri-list') ||
+            types.includes('text/plain') ||
+            types.includes('text/html') ||
+            types.includes('URL') ||
+            types.includes('text/x-moz-url');
+
+        if (hasUrlCandidate && !types.includes('application/stm-role-request')) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            if (ui && ui.dot) ui.dot.classList.add('stm-drag-over');
+        }
     }
 
     function handleLinkDragLeave(e) {
@@ -610,10 +675,14 @@
     }
 
     function handleLinkDrop(e) {
-        e.preventDefault();
         if (ui && ui.dot) ui.dot.classList.remove('stm-drag-over');
-        const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+
+        const url = extractUrlFromDataTransfer(e.dataTransfer);
         if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+            // ALWAYS navigate the current tab, regardless of role (S or T).
+            // This maintains the existing user expectation of local navigation.
+            e.preventDefault();
+            e.stopPropagation();
             window.location.href = url;
         }
     }

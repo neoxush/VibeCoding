@@ -6,12 +6,6 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 
 ## Changelogs
 
-### v1.0.5
-- **Integrated Toast System**: Added a lightweight notification system for real-time feedback on role changes, pairing success, and sync status.
-- **Target Heartbeat & Smart Guidance**: Implemented a heartbeat system to detect active Targets. If no Target is found, the script now provides proactive guidance on how to pair.
-- **Independent Link Dragging**: You can now drag a link onto the 'S' or 'T' icon to open it in the current tab without syncing it to the paired tab, allowing for more flexible local navigation. This is hardened to prevent "sync leaks" on complex sites like YouTube.
-- **Shortcut Configuration**: Restored the visual configuration panel and "Configure Keys" menu command.
-
 ### v1.0.4
 - **Sound Guard (Early Mute)**: Implemented high-performance prototype monkey-patching to ensure zero sound leakage during navigation.
 - **Volume Control & Mute Persistence**: Added a dynamic volume icon that appears when sound is detected. Mute state is now persisted across navigations.
