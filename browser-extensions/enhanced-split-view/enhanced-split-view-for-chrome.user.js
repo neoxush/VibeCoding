@@ -111,10 +111,30 @@
         });
 
         // Secondary fallback persistence using window.name to survive edge cases.
+        // Secondary fallback persistence using window.name to survive edge cases.
         try {
             const payload = { stmRole: myRole, stmId: myId, stmLastTs: myLastTs, stmSourceTabId: mySourceTabId, stmIsMuted: myIsMuted };
-            window.name = JSON.stringify(payload);
-            sessionStorage.setItem('stm_state', JSON.stringify(payload));
+            const payloadStr = JSON.stringify(payload);
+            const currentName = window.name;
+            let canWrite = false;
+
+            if (!currentName) {
+                canWrite = true;
+            } else {
+                try {
+                    const parsed = JSON.parse(currentName);
+                    if (parsed && parsed.stmRole) {
+                        canWrite = true;
+                    }
+                } catch (e) {
+                    // window.name is not JSON or not ours - preserve it
+                }
+            }
+
+            if (canWrite) {
+                window.name = payloadStr;
+            }
+            sessionStorage.setItem('stm_state', payloadStr);
         } catch (err) { /* ignore */ }
 
         updateUI();
@@ -347,7 +367,16 @@
         // Clear tab-specific state and session storage
         GM_saveTab({});
         try {
-            window.name = '';
+            // Only clear window.name if it belongs to us
+            const currentName = window.name;
+            if (currentName) {
+                try {
+                    const parsed = JSON.parse(currentName);
+                    if (parsed && parsed.stmRole) {
+                        window.name = '';
+                    }
+                } catch (e) { /* not ours */ }
+            }
             sessionStorage.removeItem('stm_state');
         } catch (err) { /* ignore */ }
         saveState('idle', null, 0, null);
@@ -390,9 +419,9 @@
             window.addEventListener('click', (e) => { if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) toggleMenu(); }, true);
 
             // Global Drop Support (for pairing)
-            window.addEventListener('dragover', handleGlobalDragOver);
-            window.addEventListener('dragleave', handleGlobalDragLeave);
-            window.addEventListener('drop', handleGlobalDrop);
+            window.addEventListener('dragover', handleGlobalDragOver, true);
+            window.addEventListener('dragleave', handleGlobalDragLeave, true);
+            window.addEventListener('drop', handleGlobalDrop, true);
         }
 
         const hasMedia = mediaManager && mediaManager.hasMedia;
