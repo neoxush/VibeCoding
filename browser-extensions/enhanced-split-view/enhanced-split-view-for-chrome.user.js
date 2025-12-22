@@ -31,6 +31,7 @@
     const KEY_DRAG_SOURCE_REQUEST = `${GM_PREFIX}drag_source_request`;
     const KEY_CONFIG = `${GM_PREFIX}config`;
     const KEY_GLOBAL_RESET = `${GM_PREFIX}global_reset`;
+    const KEY_UI_POS = `${GM_PREFIX}ui_pos`;
     const PAIR_MAX_AGE_MS = 5000;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
@@ -194,44 +195,136 @@
         GM_addStyle(`
             @keyframes stm-pulse { 0% {transform: scale(1);} 50% {transform: scale(1.2);} 100% {transform: scale(1);} }
             .stm-pulse-animate { animation: stm-pulse 0.5s ease-out; }
-            #stm-ui-container { position: fixed; top: 85px; z-index: 2147483647; user-select: none; display: flex; align-items: center; justify-content: center; gap: 5px; }
-            #stm-ui-container.stm-side-right { right: 0; flex-direction: row; }
-            #stm-ui-container.stm-side-left { left: 0; flex-direction: row-reverse; }
-            #stm-status-dot { width: 30px; height: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; font-family: sans-serif; font-size: 14px; font-weight: bold; color: white; cursor: grab; transition: transform 0.2s, background-color 0.3s; border: 1px solid rgba(255,255,255,0.5); }
-            #stm-status-dot:active { cursor: grabbing; }
-            #stm-ui-container.stm-side-right #stm-status-dot { background-color: #28a745; border-radius: 8px 0 0 8px; border-right: none; }
-            #stm-ui-container.stm-side-left #stm-status-dot { background-color: #007bff; border-radius: 0 8px 8px 0; border-left: none; }
-            #stm-ui-container.stm-side-right:hover #stm-status-dot { transform: translateX(-3px); }
-            #stm-ui-container.stm-side-left:hover #stm-status-dot { transform: translateX(3px); }
-            #stm-status-dot.stm-drag-over { background-color: #ffc107 !important; transform: scale(1.2) !important; border-color: #fff; box-shadow: 0 0 15px #ffc107; }
-            #stm-status-dot.stm-global-drag-over { background-color: #17a2b8 !important; transform: scale(1.1); box-shadow: 0 0 10px #17a2b8; }
-            #stm-volume-btn { width: 28px; height: 28px; background: rgba(51, 51, 51, 0.9); border-radius: 50%; display: none; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 2px 5px rgba(0,0,0,0.3); transition: transform 0.2s, background-color 0.2s; }
-            #stm-volume-btn:hover { transform: scale(1.1); background: #444; }
+            
+            #stm-ui-container { 
+                position: fixed; 
+                z-index: 2147483647; 
+                user-select: none; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                gap: 0; 
+                background: rgba(20, 20, 20, 0.7);
+                backdrop-filter: blur(12px);
+                -webkit-backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                padding: 4px;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.05);
+                transition: gap 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s, background-color 0.3s, transform 0.2s;
+            }
+            
+            #stm-ui-container.stm-collapsed {
+                background: rgba(20, 20, 20, 0.4);
+                padding: 2px;
+                border-color: rgba(255, 255, 255, 0.05);
+            }
+            
+            #stm-ui-container.stm-side-right { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+            #stm-ui-container.stm-side-left { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; }
+
+            #stm-status-dot { 
+                width: 32px; 
+                height: 32px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+                font-size: 14px; 
+                font-weight: 800; 
+                color: white; 
+                cursor: pointer; 
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+                border-radius: 50%;
+                position: relative;
+                z-index: 2;
+            }
+            
+            .stm-side-right #stm-status-dot { background: linear-gradient(135deg, #28a745, #1e7e34); box-shadow: 0 2px 10px rgba(40, 167, 69, 0.3); }
+            .stm-side-left #stm-status-dot { background: linear-gradient(135deg, #007bff, #0056b3); box-shadow: 0 2px 10px rgba(0, 123, 255, 0.3); }
+            
+            .stm-collapsed #stm-status-dot { transform: scale(0.85); opacity: 0.7; }
+            #stm-ui-container:hover #stm-status-dot { transform: scale(1); opacity: 1; }
+
+            #stm-grip {
+                width: 12px;
+                height: 24px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 3px;
+                cursor: grab;
+                padding: 0 4px;
+                opacity: 0;
+                transition: opacity 0.3s, width 0.3s;
+                width: 0;
+                overflow: hidden;
+            }
+            #stm-grip:active { cursor: grabbing; }
+            #stm-ui-container:not(.stm-collapsed) #stm-grip { opacity: 0.5; width: 20px; }
+            #stm-grip:hover { opacity: 1 !important; }
+            .stm-grip-dot { width: 3px; height: 3px; background: white; border-radius: 50%; }
+
+            #stm-status-dot.stm-drag-over { background: #ffc107 !important; transform: scale(1.1) !important; box-shadow: 0 0 20px rgba(255, 193, 7, 0.6); }
+            #stm-status-dot.stm-global-drag-over { background: #17a2b8 !important; transform: scale(1.05); box-shadow: 0 0 15px rgba(23, 162, 184, 0.5); }
+
+            #stm-volume-btn { 
+                width: 28px; 
+                height: 28px; 
+                background: rgba(255, 255, 255, 0.1); 
+                border-radius: 50%; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                cursor: pointer; 
+                transition: all 0.2s;
+                opacity: 0;
+                width: 0;
+                overflow: hidden;
+            }
+            #stm-ui-container:not(.stm-collapsed) #stm-volume-btn { opacity: 1; width: 28px; margin: 0 4px; }
+            #stm-volume-btn:hover { background: rgba(255, 255, 255, 0.2); transform: scale(1.1); }
             #stm-volume-btn svg { width: 16px; height: 16px; fill: #fff; }
-            #stm-menu { display: none; position: absolute; top: 100%; background-color: #333; border-radius: 4px; width: 120px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5); font-family: sans-serif; font-size: 12px; }
-            #stm-ui-container.stm-side-right #stm-menu { right: 0; border-top-right-radius: 0; }
-            #stm-ui-container.stm-side-left #stm-menu { left: 0; border-top-left-radius: 0; }
-            .stm-menu-item { padding: 8px 12px; color: #fff; cursor: pointer; transition: background-color 0.2s; }
-            .stm-menu-item:hover { background-color: #555; }
-            #stm-config-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2c2c2c; border-radius: 8px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); z-index: 2147483648; font-family: sans-serif; color: #fff; min-width: 400px; }
-            #stm-config-panel h3 { margin: 0 0 15px 0; font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 10px; }
-            .stm-config-section { margin-bottom: 20px; padding: 15px; background: #333; border-radius: 4px; }
-            .stm-config-section h4 { margin: 0 0 10px 0; font-size: 14px; color: #4CAF50; }
-            .stm-config-row { display: flex; gap: 10px; margin-bottom: 8px; }
-            .stm-config-label { flex: 1; font-size: 13px; display: flex; align-items: center; }
-            .stm-config-input { display: flex; gap: 5px; align-items: center; }
-            .stm-config-input label { font-size: 12px; cursor: pointer; }
-            .stm-config-input input[type="checkbox"] { cursor: pointer; }
-            .stm-config-input select { background: #444; color: #fff; border: 1px solid #555; border-radius: 3px; padding: 3px 5px; cursor: pointer; }
-            .stm-config-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; }
-            .stm-config-btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: background-color 0.2s; }
-            .stm-config-btn-save { background-color: #4CAF50; color: white; }
-            .stm-config-btn-save:hover { background-color: #45a049; }
-            .stm-config-btn-cancel { background-color: #666; color: white; }
-            .stm-config-btn-cancel:hover { background-color: #555; }
-            .stm-config-btn-reset { background-color: #f44336; color: white; }
-            .stm-config-btn-reset:hover { background-color: #da190b; }
-            #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2147483647; }
+
+            #stm-menu { 
+                display: none; 
+                position: absolute; 
+                top: calc(100% + 8px); 
+                background: rgba(30, 30, 30, 0.95); 
+                backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 12px; 
+                width: 140px; 
+                overflow: hidden; 
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5); 
+                font-family: 'Inter', system-ui, sans-serif; 
+                font-size: 13px;
+                z-index: 3;
+            }
+            #stm-ui-container.stm-side-right #stm-menu { right: 0; }
+            #stm-ui-container.stm-side-left #stm-menu { left: 0; }
+            .stm-menu-item { padding: 10px 16px; color: #eee; cursor: pointer; transition: all 0.2s; }
+            .stm-menu-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+            .stm-menu-item:not(:last-child) { border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+
+            #stm-config-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; border: 1px solid #333; border-radius: 16px; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); z-index: 2147483648; font-family: 'Inter', system-ui, sans-serif; color: #fff; min-width: 400px; }
+            #stm-config-panel h3 { margin: 0 0 20px 0; font-size: 20px; font-weight: 700; color: #fff; }
+            .stm-config-section { margin-bottom: 24px; padding: 16px; background: #252525; border-radius: 12px; border: 1px solid #333; }
+            .stm-config-section h4 { margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #4CAF50; text-transform: uppercase; letter-spacing: 0.5px; }
+            .stm-config-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+            .stm-config-label { flex: 1; font-size: 14px; color: #bbb; }
+            .stm-config-input select { background: #333; color: #fff; border: 1px solid #444; border-radius: 6px; padding: 6px 10px; cursor: pointer; outline: none; }
+            .stm-config-input select:focus { border-color: #4CAF50; }
+            .stm-config-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+            .stm-config-btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+            .stm-config-btn-save { background: #4CAF50; color: white; }
+            .stm-config-btn-save:hover { background: #45a049; transform: translateY(-1px); }
+            .stm-config-btn-cancel { background: #444; color: white; }
+            .stm-config-btn-cancel:hover { background: #555; }
+            .stm-config-btn-reset { background: #f44336; color: white; }
+            .stm-config-btn-reset:hover { background: #da190b; }
+            #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2147483647; }
         `);
     }
 
@@ -394,19 +487,36 @@
                 container: document.createElement('div'),
                 dot: document.createElement('div'),
                 menu: document.createElement('div'),
-                volume: document.createElement('div')
+                volume: document.createElement('div'),
+                grip: document.createElement('div')
             };
             ui.container.id = 'stm-ui-container';
+            ui.container.classList.add('stm-collapsed');
             ui.dot.id = 'stm-status-dot';
             ui.menu.id = 'stm-menu';
             ui.volume.id = 'stm-volume-btn';
-            ui.container.append(ui.menu, ui.volume, ui.dot);
+            ui.grip.id = 'stm-grip';
+            ui.grip.innerHTML = '<div class="stm-grip-dot"></div><div class="stm-grip-dot"></div><div class="stm-grip-dot"></div>';
+
+            ui.container.append(ui.grip, ui.volume, ui.dot, ui.menu);
             document.body.appendChild(ui.container);
 
-            // Native Drag & Click
+            // Native Drag & Click (Role Assignment)
             ui.dot.setAttribute('draggable', 'true');
             ui.dot.addEventListener('click', (e) => { if (e.button === 0) toggleMenu(); });
             ui.dot.addEventListener('dragstart', handleRoleDragStart);
+
+            // UI Movement (Custom Dragging)
+            ui.grip.addEventListener('mousedown', handleGripMouseDown);
+
+            // Hover Expansion
+            ui.container.addEventListener('mouseenter', () => ui.container.classList.remove('stm-collapsed'));
+            ui.container.addEventListener('mouseleave', (e) => {
+                if (!ui.menu.style.display || ui.menu.style.display === 'none') {
+                    ui.container.classList.add('stm-collapsed');
+                }
+                handleContainerMouseLeave(e);
+            });
 
             // Link Drop Support
             ui.dot.addEventListener('dragover', handleLinkDragOver);
@@ -415,8 +525,12 @@
 
             ui.menu.addEventListener('click', handleMenuClick);
             ui.volume.addEventListener('click', () => mediaManager.toggleMute());
-            ui.container.addEventListener('mouseleave', handleContainerMouseLeave);
-            window.addEventListener('click', (e) => { if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) toggleMenu(); }, true);
+            window.addEventListener('click', (e) => {
+                if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) {
+                    toggleMenu();
+                    ui.container.classList.add('stm-collapsed');
+                }
+            }, true);
 
             // Global Drop Support (for pairing)
             window.addEventListener('dragover', handleGlobalDragOver, true);
@@ -427,11 +541,37 @@
         const hasMedia = mediaManager && mediaManager.hasMedia;
         // The UI container is ONLY shown if the tab has an active role (Source or Target) AND not in fullscreen.
         ui.container.style.display = (myRole === 'idle' || isFullscreen) ? 'none' : 'flex';
-        ui.container.classList.remove('stm-side-left', 'stm-side-right');
 
-        // Target is on the left, Source (and others) on the right.
+        // Apply saved position or defaults
+        const savedPos = GM_getValue(KEY_UI_POS, null);
         const side = (myRole === 'target') ? 'left' : 'right';
+
+        ui.container.classList.remove('stm-side-left', 'stm-side-right');
         ui.container.classList.add(`stm-side-${side}`);
+
+        if (savedPos) {
+            ui.container.style.top = savedPos.top;
+            if (side === 'left') {
+                ui.container.style.left = '0';
+                ui.container.style.right = 'auto';
+                ui.container.style.flexDirection = 'row-reverse';
+            } else {
+                ui.container.style.right = '0';
+                ui.container.style.left = 'auto';
+                ui.container.style.flexDirection = 'row';
+            }
+        } else {
+            ui.container.style.top = '85px';
+            if (side === 'left') {
+                ui.container.style.left = '0';
+                ui.container.style.right = 'auto';
+                ui.container.style.flexDirection = 'row-reverse';
+            } else {
+                ui.container.style.right = '0';
+                ui.container.style.left = 'auto';
+                ui.container.style.flexDirection = 'row';
+            }
+        }
 
         if (myRole === 'source') {
             ui.dot.textContent = 'S';
@@ -480,10 +620,72 @@
         }
     }
 
-    function toggleMenu() { if (ui && ui.menu) ui.menu.style.display = ui.menu.style.display === 'block' ? 'none' : 'block'; }
-    function hideMenu() { if (ui && ui.menu) ui.menu.style.display = 'none'; }
-    function handleContainerMouseLeave(e) { if (!ui || !ui.container) return; const toEl = e.relatedTarget; if (!toEl || !ui.container.contains(toEl)) hideMenu(); }
+    function toggleMenu() {
+        if (ui && ui.menu) {
+            const isVisible = ui.menu.style.display === 'block';
+            ui.menu.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                ui.container.classList.remove('stm-collapsed');
+            }
+        }
+    }
+    function hideMenu() {
+        if (ui && ui.menu) {
+            ui.menu.style.display = 'none';
+            ui.container.classList.add('stm-collapsed');
+        }
+    }
+    function handleContainerMouseLeave(e) {
+        if (!ui || !ui.container) return;
+        const toEl = e.relatedTarget;
+        if (!toEl || !ui.container.contains(toEl)) {
+            if (ui.menu.style.display !== 'block') {
+                hideMenu();
+            }
+        }
+    }
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
+
+    // --- UI Movement Logic ---
+    let isDraggingUI = false;
+    let dragStartY = 0;
+    let initialTop = 0;
+
+    function handleGripMouseDown(e) {
+        if (e.button !== 0) return;
+        isDraggingUI = true;
+        dragStartY = e.clientY;
+        initialTop = ui.container.offsetTop;
+
+        ui.grip.style.cursor = 'grabbing';
+        document.addEventListener('mousemove', handleGripMouseMove);
+        document.addEventListener('mouseup', handleGripMouseUp);
+        e.preventDefault();
+    }
+
+    function handleGripMouseMove(e) {
+        if (!isDraggingUI) return;
+        const deltaY = e.clientY - dragStartY;
+        let newTop = initialTop + deltaY;
+
+        // Boundary checks
+        const containerHeight = ui.container.offsetHeight;
+        const windowHeight = window.innerHeight;
+        newTop = Math.max(10, Math.min(newTop, windowHeight - containerHeight - 10));
+
+        ui.container.style.top = `${newTop}px`;
+    }
+
+    function handleGripMouseUp() {
+        if (!isDraggingUI) return;
+        isDraggingUI = false;
+        ui.grip.style.cursor = 'grab';
+        document.removeEventListener('mousemove', handleGripMouseMove);
+        document.removeEventListener('mouseup', handleGripMouseUp);
+
+        // Save position
+        GM_setValue(KEY_UI_POS, { top: ui.container.style.top });
+    }
 
     /**
      * Extracts a valid URL from DataTransfer object with priority and filtering.

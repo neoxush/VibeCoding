@@ -11,6 +11,9 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 - **Volume Control & Mute Persistence**: Added a dynamic volume icon that appears when sound is detected. Mute state is now persisted across navigations.
 - **Native Drag-and-Drop Pairing**: Replaced coordinate-based pairing with the Native HTML5 Drag and Drop API for robust cross-tab role assignment.
 - **Visual Feedback**: Added color-coded glows and improved UI responsiveness during drag operations.
+- **Movable UI (Persistent Positioning)**: Added a grip handle to the UI container, allowing users to drag it vertically. The position is saved across page reloads.
+- **Auto-Collapsing Buttons**: The UI now automatically collapses into a minimal state when not in focus, expanding smoothly on hover to maintain a clean workspace.
+- **Glassmorphism Design**: Updated the UI with a modern, semi-transparent blurred background and refined typography.
 
 ### v1.0.3
 - **Improved Drag-and-Drop Accuracy**: Implemented a cross-tab bidding system to prevent overlapping windows from both claiming a role.
@@ -42,6 +45,8 @@ While originally designed to supercharge Chrome's native Side-by-Side "Split Vie
 10. **Context Menu Controls**: Right-click on S/T indicators for options like Revoke, Disconnect, and Join as Source.
 11. **Volume Control**: Instant mute/unmute toggle appears automatically when audio/video is playing.
 12. **Independent Drag-to-Navigate**: Drag any link onto the 'S' or 'T' icon to navigate the current page locally without affecting the paired tab.
+13. **Movable Interface**: Drag the grip handle to reposition the UI anywhere vertically on the screen.
+14. **Smart Collapse**: UI shrinks automatically when not in use to reduce visual clutter, expanding only when hovered.
 
 ## How it Works
 ![chrome_split_view_preview](https://github.com/user-attachments/assets/cb101a97-e580-412f-9844-1cb3befa3e3b)
