@@ -1102,6 +1102,6 @@
 
     initialize();
 
-    console.log('Split Tab (Dev): Script initialized (v1.0.4)');
+    console.log('Enhanced Split Tab: Script initialized (dev)');
 
 })();
