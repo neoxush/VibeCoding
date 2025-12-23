@@ -16,11 +16,103 @@
 // @grant        GM_saveTab
 // @grant        GM_listValues
 // @grant        GM_deleteValue
-// @grant        GM_notification
+// Notification system replaces GM_notification
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    // --- Modern Notification System ---
+    const Notify = {
+        show(type, message, title = '') {
+            const notification = document.createElement('div');
+            notification.className = `esv-notification ${type}`;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 6px;
+                color: white;
+                max-width: 320px;
+                z-index: 9999;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                transform: translateX(120%);
+                transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+                opacity: 0;
+                display: flex;
+                align-items: center;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', sans-serif;
+                backdrop-filter: blur(10px);
+                background-color: ${{
+                    success: 'rgba(46, 204, 113, 0.95)',
+                    error: 'rgba(231, 76, 60, 0.95)',
+                    info: 'rgba(52, 152, 219, 0.95)',
+                    warning: 'rgba(241, 196, 15, 0.95)'
+                }[type]};
+            `;
+            
+            const icon = {
+                success: '✓',
+                error: '✕',
+                info: 'ℹ',
+                warning: '⚠'
+            }[type] || 'ℹ';
+
+            notification.innerHTML = `
+                <span style="margin-right: 12px; font-size: 18px; flex-shrink: 0;">${icon}</span>
+                <div style="flex: 1;">
+                    ${title ? `<div style="font-weight: 600; margin: 0 0 4px 0; font-size: 14px;">${title}</div>` : ''}
+                    <div style="margin: 0; font-size: 13px; opacity: 0.9; line-height: 1.4;">${message}</div>
+                </div>
+                <span class="esv-notification-close" style="margin-left: 12px; cursor: pointer; opacity: 0.7; font-size: 16px; line-height: 1; transition: opacity 0.2s;" title="Dismiss">&times;</span>
+            `;
+
+            document.body.appendChild(notification);
+            
+            // Trigger reflow
+            void notification.offsetWidth;
+            
+            // Show notification
+            notification.style.transform = 'translateX(0)';
+            notification.style.opacity = '1';
+            
+            // Auto-remove after 4 seconds
+            const timeout = setTimeout(() => {
+                notification.style.transform = 'translateX(120%)';
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 4000);
+            
+            // Close button
+            const closeBtn = notification.querySelector('.esv-notification-close');
+            closeBtn.onclick = (e) => {
+                e.stopPropagation();
+                clearTimeout(timeout);
+                notification.style.transform = 'translateX(120%)';
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            };
+            
+            return notification;
+        },
+        
+        success(message, title = 'Success') {
+            return this.show('success', message, title);
+        },
+        
+        error(message, title = 'Error') {
+            return this.show('error', message, title);
+        },
+        
+        info(message, title = 'Information') {
+            return this.show('info', message, title);
+        },
+        
+        warning(message, title = 'Warning') {
+            return this.show('warning', message, title);
+        }
+    };
 
     // Note: You can reorder the right-click menu items by editing the 'contextMenuItems' array in the updateUI function.
 
@@ -420,13 +512,13 @@
         };
         saveConfig(newConfig);
         hideConfigPanel();
-        GM_notification({ text: 'Configuration saved!' });
+        Notify.success('Configuration saved!');
     }
 
     function resetConfigToDefault() {
         saveConfig(DEFAULT_CONFIG);
         showConfigPanel();
-        GM_notification({ text: 'Configuration reset to defaults!' });
+        Notify.info('Configuration reset to defaults!');
     }
 
     function resetAllRoles() {
@@ -1050,7 +1142,7 @@
             addSourceToGroup(groupId, sourceTabId);
             GM_setValue(KEY_LATEST_SOURCE, { sourceId: groupId, timestamp: Date.now() });
         } else if (role === 'target') {
-            if (!id) { GM_notification({ text: 'Cannot become Target without a Source ID.' }); return; }
+            if (!id) { Notify.error('Cannot become Target without a Source ID.'); return; }
             saveState('target', id);
         }
     }
@@ -1279,7 +1371,7 @@
                     e.preventDefault(); e.stopPropagation();
                     const l = GM_getValue(KEY_LATEST_SOURCE, null);
                     if (l) setRole('target', l.sourceId);
-                    else GM_notification({ text: 'No Source tab found.' });
+                    else Notify.warning('No Source tab found.');
                 }
             }, true);
 
