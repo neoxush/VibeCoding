@@ -775,19 +775,91 @@
     const mediaManager = {
         hasMedia: false,
         elements: new Set(),
+        iframes: new Set(),
         initialized: false,
+
+        // Known media iframe patterns and their postMessage configurations
+        iframeConfigs: {
+            youtube: {
+                patterns: [/youtube\.com\/embed/, /youtube-nocookie\.com\/embed/],
+                getMuteCommand: (muted) => JSON.stringify({
+                    event: 'command',
+                    func: muted ? 'mute' : 'unMute',
+                    args: []
+                }),
+                // YouTube requires enablejsapi=1 to receive commands
+                requiresApiParam: 'enablejsapi=1',
+                targetOrigin: 'https://www.youtube.com'
+            },
+            vimeo: {
+                patterns: [/player\.vimeo\.com\/video/],
+                getMuteCommand: (muted) => JSON.stringify({
+                    method: 'setVolume',
+                    value: muted ? 0 : 1
+                }),
+                targetOrigin: 'https://player.vimeo.com'
+            },
+            dailymotion: {
+                patterns: [/dailymotion\.com\/embed/],
+                getMuteCommand: (muted) => JSON.stringify({
+                    command: 'muted',
+                    parameters: [muted]
+                }),
+                targetOrigin: 'https://www.dailymotion.com'
+            },
+            twitch: {
+                patterns: [/player\.twitch\.tv/, /clips\.twitch\.tv/],
+                getMuteCommand: (muted) => JSON.stringify({
+                    eventName: 'setMuted',
+                    params: { muted: muted }
+                }),
+                targetOrigin: 'https://player.twitch.tv'
+            },
+            spotify: {
+                patterns: [/open\.spotify\.com\/embed/],
+                // Spotify embed doesn't have a postMessage API for muting
+                useFallback: true,
+                targetOrigin: 'https://open.spotify.com'
+            },
+            soundcloud: {
+                patterns: [/w\.soundcloud\.com\/player/],
+                getMuteCommand: (muted) => JSON.stringify({
+                    method: muted ? 'setVolume' : 'setVolume',
+                    value: muted ? 0 : 100
+                }),
+                targetOrigin: 'https://w.soundcloud.com'
+            },
+            facebook: {
+                patterns: [/facebook\.com\/plugins\/video/],
+                useFallback: true,
+                targetOrigin: 'https://www.facebook.com'
+            },
+            twitter: {
+                patterns: [/platform\.twitter\.com\/embed/, /twitter\.com\/i\/videos/],
+                useFallback: true,
+                targetOrigin: 'https://platform.twitter.com'
+            }
+        },
 
         init() {
             if (this.initialized) return;
             this.initialized = true;
             this.scan();
+            this.scanIframes();
             this.observe();
-            // Periodically check for playing state because 'play' event might be missed or not enough
-            setInterval(() => this.updateState(), 1000);
+            // Periodically check for playing state and new iframes
+            setInterval(() => {
+                this.updateState();
+                this.scanIframes();
+            }, 1000);
         },
 
         scan() {
             document.querySelectorAll('video, audio').forEach(el => this.track(el));
+        },
+
+        scanIframes() {
+            document.querySelectorAll('iframe').forEach(iframe => this.trackIframe(iframe));
         },
 
         track(el) {
@@ -803,14 +875,115 @@
             el.muted = myIsMuted;
         },
 
+        trackIframe(iframe) {
+            if (this.iframes.has(iframe)) return;
+
+            const src = iframe.src || '';
+            if (!src) return;
+
+            // Check if this iframe matches any known media platform
+            let matchedConfig = null;
+            let configName = null;
+
+            for (const [name, config] of Object.entries(this.iframeConfigs)) {
+                for (const pattern of config.patterns) {
+                    if (pattern.test(src)) {
+                        matchedConfig = config;
+                        configName = name;
+                        break;
+                    }
+                }
+                if (matchedConfig) break;
+            }
+
+            if (matchedConfig) {
+                this.iframes.add(iframe);
+                iframe._stmConfig = matchedConfig;
+                iframe._stmConfigName = configName;
+
+                // Ensure YouTube iframes have enablejsapi=1
+                if (configName === 'youtube' && matchedConfig.requiresApiParam) {
+                    this.ensureYouTubeApiEnabled(iframe);
+                }
+
+                // Apply current mute state
+                if (myIsMuted) {
+                    this.muteIframe(iframe, true);
+                }
+
+                // Consider iframe as potential media source
+                this.hasMedia = true;
+                updateUI();
+            }
+        },
+
+        ensureYouTubeApiEnabled(iframe) {
+            const src = iframe.src || '';
+            if (!src.includes('enablejsapi=1')) {
+                const separator = src.includes('?') ? '&' : '?';
+                // Only modify if we can (same-origin or CORS allows)
+                try {
+                    iframe.src = src + separator + 'enablejsapi=1';
+                } catch (e) {
+                    console.log('[STM] Could not enable YouTube JS API:', e);
+                }
+            }
+        },
+
+        muteIframe(iframe, muted) {
+            const config = iframe._stmConfig;
+            if (!config) return;
+
+            if (config.useFallback) {
+                // Fallback: Try to access iframe content if same-origin
+                this.tryDirectIframeMute(iframe, muted);
+                return;
+            }
+
+            if (config.getMuteCommand) {
+                try {
+                    const message = config.getMuteCommand(muted);
+                    iframe.contentWindow?.postMessage(message, config.targetOrigin);
+
+                    // Also try with wildcard for cross-origin cases
+                    iframe.contentWindow?.postMessage(message, '*');
+                } catch (e) {
+                    console.log('[STM] postMessage failed for iframe:', e);
+                }
+            }
+        },
+
+        tryDirectIframeMute(iframe, muted) {
+            try {
+                // This only works for same-origin iframes
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (iframeDoc) {
+                    iframeDoc.querySelectorAll('video, audio').forEach(el => {
+                        el.muted = muted;
+                    });
+                }
+            } catch (e) {
+                // Cross-origin iframe, can't access directly
+            }
+        },
+
+        muteAllIframes(muted) {
+            this.iframes.forEach(iframe => {
+                this.muteIframe(iframe, muted);
+            });
+        },
+
         observe() {
             const observer = new MutationObserver(mutations => {
                 for (const m of mutations) {
                     for (const node of m.addedNodes) {
                         if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO') {
                             this.track(node);
+                        } else if (node.nodeName === 'IFRAME') {
+                            this.trackIframe(node);
                         } else if (node.querySelectorAll) {
                             node.querySelectorAll('video, audio').forEach(el => this.track(el));
+                            node.querySelectorAll('iframe').forEach(iframe => this.trackIframe(iframe));
                         }
                     }
                 }
@@ -825,15 +998,24 @@
                 this.elements.forEach(el => {
                     if (!el.muted) el.muted = true;
                 });
+                // Re-send mute commands to iframes periodically to ensure they stay muted
+                this.muteAllIframes(true);
             }
 
             let active = false;
+
+            // Check native video/audio elements
             for (const el of this.elements) {
                 // Consider it a "sound source" if it's playing and has volume
                 if (!el.paused && el.volume > 0 && !el.ended && el.readyState >= 2) {
                     active = true;
                     break;
                 }
+            }
+
+            // If we have tracked iframes, consider having media
+            if (!active && this.iframes.size > 0) {
+                active = true;
             }
 
             if (active !== this.hasMedia) {
@@ -843,7 +1025,13 @@
         },
 
         toggleMute() {
-            saveState(myRole, myId, myLastTs, mySourceTabId, !myIsMuted);
+            const newMutedState = !myIsMuted;
+
+            // Apply to all iframes immediately
+            this.muteAllIframes(newMutedState);
+
+            // Save state (this will also apply to native elements)
+            saveState(myRole, myId, myLastTs, mySourceTabId, newMutedState);
         }
     };
     function setRole(role, id = null, joinExisting = false) {
