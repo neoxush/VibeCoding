@@ -78,20 +78,18 @@
             notification.style.opacity = '1';
 
             // Auto-remove after 4 seconds
-            const timeout = setTimeout(() => {
+            const removeNotification = () => {
                 notification.style.transform = 'translateX(120%)';
                 notification.style.opacity = '0';
                 setTimeout(() => notification.remove(), 300);
-            }, 4000);
+            };
+            const timeout = setTimeout(removeNotification, 4000);
 
             // Close button
             const closeBtn = notification.querySelector('.esv-notification-close');
-            closeBtn.onclick = (e) => {
-                e.stopPropagation();
+            closeBtn.onclick = () => {
                 clearTimeout(timeout);
-                notification.style.transform = 'translateX(120%)';
-                notification.style.opacity = '0';
-                setTimeout(() => notification.remove(), 300);
+                removeNotification();
             };
 
             return notification;
@@ -396,9 +394,32 @@
             }
             #stm-ui-container.stm-side-right #stm-menu { right: 0; }
             #stm-ui-container.stm-side-left #stm-menu { left: 0; }
-            .stm-menu-item { padding: 10px 16px; color: #eee; cursor: pointer; transition: all 0.2s; }
-            .stm-menu-item:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
-            .stm-menu-item:not(:last-child) { border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+            .stm-menu-item {
+                display: block;
+                width: 100%;
+                padding: 10px 16px;
+                background: none;
+                border: none;
+                text-align: left;
+                color: #eee;
+                cursor: pointer;
+                transition: all 0.2s;
+                font-family: inherit;
+                font-size: 13px;
+                line-height: 1.4;
+            }
+            .stm-menu-item:hover, .stm-menu-item:focus {
+                background: rgba(255, 255, 255, 0.1);
+                color: #fff;
+                outline: none;
+            }
+            .stm-menu-item:focus-visible {
+                outline: 2px solid #4CAF50;
+                outline-offset: -2px;
+            }
+            .stm-menu-item:not(:last-child) {
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
 
             #stm-config-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; border: 1px solid #333; border-radius: 16px; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); z-index: 2147483648; font-family: 'Inter', system-ui, sans-serif; color: #fff; min-width: 400px; }
             #stm-config-panel h3 { margin: 0 0 20px 0; font-size: 20px; font-weight: 700; color: #fff; }
@@ -442,9 +463,9 @@
                 <div class="stm-config-row">
                     <div class="stm-config-label">Modifiers:</div>
                     <div class="stm-config-input">
-                        <label><input type="checkbox" id="stm-source-ctrl"> Ctrl</label>
-                        <label><input type="checkbox" id="stm-source-alt"> Alt</label>
-                        <label><input type="checkbox" id="stm-source-shift"> Shift</label>
+                        <label for="stm-source-ctrl"><input type="checkbox" id="stm-source-ctrl"> Ctrl</label>
+                        <label for="stm-source-alt"><input type="checkbox" id="stm-source-alt"> Alt</label>
+                        <label for="stm-source-shift"><input type="checkbox" id="stm-source-shift"> Shift</label>
                     </div>
                 </div>
             </div>
@@ -463,9 +484,9 @@
                 <div class="stm-config-row">
                     <div class="stm-config-label">Modifiers:</div>
                     <div class="stm-config-input">
-                        <label><input type="checkbox" id="stm-target-ctrl"> Ctrl</label>
-                        <label><input type="checkbox" id="stm-target-alt"> Alt</label>
-                        <label><input type="checkbox" id="stm-target-shift"> Shift</label>
+                        <label for="stm-target-ctrl"><input type="checkbox" id="stm-target-ctrl"> Ctrl</label>
+                        <label for="stm-target-alt"><input type="checkbox" id="stm-target-alt"> Alt</label>
+                        <label for="stm-target-shift"><input type="checkbox" id="stm-target-shift"> Shift</label>
                     </div>
                 </div>
             </div>
@@ -706,9 +727,15 @@
         }
 
         if (myRole !== 'idle' || (myRole === 'idle' && GM_getValue(KEY_LATEST_SOURCE, null))) {
-            ui.menu.innerHTML = contextMenuItems.map(item =>
-                `<div class="stm-menu-item" data-action="${item.action}">${item.text}</div>`
-            ).join('');
+            ui.menu.innerHTML = `
+                <div role="menu" aria-label="Split View Menu">
+                    ${contextMenuItems.map(item => 
+                        `<button role="menuitem" tabindex="0" data-action="${item.action}" class="stm-menu-item">
+                            ${item.text}
+                        </button>`
+                    ).join('')}
+                </div>
+            `;
         }
     }
 
