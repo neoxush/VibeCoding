@@ -701,15 +701,7 @@
         // Update Volume Button
         // Only show the volume button if there is active media, but maintain the mute state
         // in the background (tab-based mute).
-        if (myRole !== 'idle' && hasMedia) {
-            ui.volume.style.display = 'flex';
-            const volIcon = myIsMuted
-                ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
-                : `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-            ui.volume.innerHTML = volIcon;
-        } else {
-            ui.volume.style.display = 'none';
-        }
+        updateVolumeButton(hasMedia);
 
         // --- CONTEXT MENU ---
         // You can reorder these items to change the order in the menu.
@@ -767,14 +759,21 @@
 
     // --- UI Movement Logic ---
     let isDraggingUI = false;
+    let dragStartX = 0;
     let dragStartY = 0;
+    let initialLeft = 0;
     let initialTop = 0;
+    let isHorizontalSwipe = false;
+    const SWIPE_THRESHOLD = 50; // Minimum horizontal movement to trigger swipe
 
     function handleGripMouseDown(e) {
         if (e.button !== 0) return;
         isDraggingUI = true;
+        dragStartX = e.clientX;
         dragStartY = e.clientY;
+        initialLeft = ui.container.offsetLeft;
         initialTop = ui.container.offsetTop;
+        isHorizontalSwipe = false;
 
         ui.grip.style.cursor = 'grabbing';
         document.addEventListener('mousemove', handleGripMouseMove);
@@ -784,26 +783,75 @@
 
     function handleGripMouseMove(e) {
         if (!isDraggingUI) return;
+        const deltaX = e.clientX - dragStartX;
         const deltaY = e.clientY - dragStartY;
+        
+        // Check if this is a horizontal swipe gesture
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD) {
+            isHorizontalSwipe = true;
+            // Don't move the container during swipe detection
+            return;
+        }
+        
+        // Regular vertical movement
         let newTop = initialTop + deltaY;
-
+        
         // Boundary checks
         const containerHeight = ui.container.offsetHeight;
         const windowHeight = window.innerHeight;
         newTop = Math.max(10, Math.min(newTop, windowHeight - containerHeight - 10));
-
+        
         ui.container.style.top = `${newTop}px`;
     }
 
-    function handleGripMouseUp() {
+    function handleGripMouseUp(e) {
         if (!isDraggingUI) return;
         isDraggingUI = false;
         ui.grip.style.cursor = 'grab';
         document.removeEventListener('mousemove', handleGripMouseMove);
         document.removeEventListener('mouseup', handleGripMouseUp);
-
+        
+        // Handle horizontal swipe for side snapping
+        if (isHorizontalSwipe) {
+            const deltaX = e.clientX - dragStartX;
+            snapToSide(deltaX > 0 ? 'right' : 'left');
+        }
+        
         // Save position
-        GM_setValue(KEY_UI_POS, { top: ui.container.style.top });
+        GM_setValue(KEY_UI_POS, { top: ui.container.style.top, left: ui.container.style.left });
+    }
+    
+    function snapToSide(side) {
+        if (!ui || !ui.container) return;
+        
+        const currentTop = ui.container.offsetTop;
+        
+        // Remove existing side classes
+        ui.container.classList.remove('stm-side-left', 'stm-side-right');
+        
+        // Apply new side class and positioning
+        if (side === 'left') {
+            ui.container.classList.add('stm-side-left');
+            ui.container.style.left = '0';
+            ui.container.style.right = 'auto';
+            ui.container.style.flexDirection = 'row-reverse';
+        } else {
+            ui.container.classList.add('stm-side-right');
+            ui.container.style.right = '0';
+            ui.container.style.left = 'auto';
+            ui.container.style.flexDirection = 'row';
+        }
+        
+        // Pulse to indicate snap
+        pulseDot();
+        
+        // Save new position with proper structure
+        GM_setValue(KEY_UI_POS, { 
+            top: `${currentTop}px`, 
+            left: side === 'left' ? '0' : 'auto',
+            right: side === 'right' ? '0' : 'auto',
+            side: side
+        });
     }
 
     /**
@@ -887,6 +935,22 @@
             GM_setValue(getSourceListKey(groupId), filtered);
         } else {
             GM_deleteValue(getSourceListKey(groupId));
+        }
+    }
+
+    function updateVolumeButton(hasMedia) {
+        if (!ui || !ui.volume) return;
+        
+        // Only show the volume button if there is active media, but maintain the mute state
+        // in the background (tab-based mute).
+        if (myRole !== 'idle' && hasMedia) {
+            ui.volume.style.display = 'flex';
+            const volIcon = myIsMuted
+                ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
+                : `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+            ui.volume.innerHTML = volIcon;
+        } else {
+            ui.volume.style.display = 'none';
         }
     }
 
@@ -1032,7 +1096,7 @@
 
                 // Consider iframe as potential media source
                 this.hasMedia = true;
-                updateUI();
+                updateVolumeButton(true);
             }
         },
 
@@ -1139,7 +1203,7 @@
 
             if (active !== this.hasMedia) {
                 this.hasMedia = active;
-                updateUI();
+                updateVolumeButton(active);
             }
         },
 
@@ -1149,8 +1213,35 @@
             // Apply to all iframes immediately
             this.muteAllIframes(newMutedState);
 
-            // Save state (this will also apply to native elements)
-            saveState(myRole, myId, myLastTs, mySourceTabId, newMutedState);
+            // Save state without triggering full UI update
+            myIsMuted = newMutedState;
+            
+            // Apply mute state to all tracked media elements
+            if (this.elements) {
+                this.elements.forEach(el => {
+                    el.muted = myIsMuted;
+                });
+            }
+            
+            // Update only the volume button UI
+            updateVolumeButton(this.hasMedia);
+            
+            // Save to storage without calling updateUI
+            try {
+                GM_saveTab({
+                    stmRole: myRole,
+                    stmId: myId,
+                    stmLastTs: myLastTs,
+                    stmSourceTabId: mySourceTabId,
+                    stmIsMuted: myIsMuted
+                });
+            } catch (e) {
+                // Fallback to window.name
+                try {
+                    const payload = { stmRole: myRole, stmId: myId, stmLastTs: myLastTs, stmSourceTabId: mySourceTabId, stmIsMuted: myIsMuted };
+                    window.name = JSON.stringify(payload);
+                } catch (err) { /* ignore */ }
+            }
         }
     };
     function setRole(role, id = null, joinExisting = false) {
