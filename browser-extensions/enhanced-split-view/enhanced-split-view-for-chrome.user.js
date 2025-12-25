@@ -191,6 +191,20 @@
             });
         }
 
+        // Save current UI position when establishing a new role
+        if (role !== 'idle' && ui && ui.container) {
+            const currentPos = GM_getValue(KEY_UI_POS, {});
+            currentPos[role] = {
+                top: ui.container.style.top || '85px',
+                left: ui.container.style.left || 'auto',
+                right: ui.container.style.right || 'auto',
+                side: ui.container.classList.contains('stm-side-left') ? 'left' : 
+                      ui.container.classList.contains('stm-side-right') ? 'right' : 
+                      (role === 'target' ? 'left' : 'right')
+            };
+            GM_setValue(KEY_UI_POS, currentPos);
+        }
+
         // Simplified Logic: Save directly to the Tab Object
         // GM_saveTab persists even across domain changes in the same tab.
         GM_saveTab({
@@ -588,6 +602,45 @@
         saveState('idle', null, 0, null);
     }
 
+    function applySavedPosition() {
+        if (!ui || !ui.container) return;
+        
+        const savedPos = GM_getValue(KEY_UI_POS, null);
+        let side, top;
+        
+        if (savedPos && savedPos[myRole]) {
+            // Use role-specific saved position
+            const rolePos = savedPos[myRole];
+            side = rolePos.side || ((myRole === 'target') ? 'left' : 'right');
+            top = rolePos.top || '85px';
+        } else if (savedPos && savedPos.side) {
+            // Fallback to legacy single position format
+            side = savedPos.side;
+            top = savedPos.top || '85px';
+        } else {
+            // Default position based on role
+            side = (myRole === 'target') ? 'left' : 'right';
+            top = '85px';
+        }
+
+        ui.container.classList.remove('stm-side-left', 'stm-side-right');
+        ui.container.classList.add(`stm-side-${side}`);
+
+        // Apply positioning based on side
+        if (side === 'left') {
+            ui.container.style.left = '0';
+            ui.container.style.right = 'auto';
+            ui.container.style.flexDirection = 'row-reverse';
+        } else {
+            ui.container.style.right = '0';
+            ui.container.style.left = 'auto';
+            ui.container.style.flexDirection = 'row';
+        }
+        
+        // Apply vertical position
+        ui.container.style.top = top;
+    }
+
     function updateUI() {
         if (window !== window.top) return; // Only show UI in the top-level window
         if (!document.body) { window.addEventListener('DOMContentLoaded', updateUI, { once: true }); return; }
@@ -655,34 +708,13 @@
         // The UI container is ONLY shown if the tab has an active role (Source or Target) AND not in fullscreen.
         ui.container.style.display = (myRole === 'idle' || isFullscreen) ? 'none' : 'flex';
 
-        // Apply saved position or defaults
-        const savedPos = GM_getValue(KEY_UI_POS, null);
-        const side = (myRole === 'target') ? 'left' : 'right';
-
-        ui.container.classList.remove('stm-side-left', 'stm-side-right');
-        ui.container.classList.add(`stm-side-${side}`);
-
-        if (savedPos) {
-            ui.container.style.top = savedPos.top;
-            if (side === 'left') {
-                ui.container.style.left = '0';
-                ui.container.style.right = 'auto';
-                ui.container.style.flexDirection = 'row-reverse';
-            } else {
-                ui.container.style.right = '0';
-                ui.container.style.left = 'auto';
-                ui.container.style.flexDirection = 'row';
-            }
-        } else {
-            ui.container.style.top = '85px';
-            if (side === 'left') {
-                ui.container.style.left = '0';
-                ui.container.style.right = 'auto';
-                ui.container.style.flexDirection = 'row-reverse';
-            } else {
-                ui.container.style.right = '0';
-                ui.container.style.left = 'auto';
-                ui.container.style.flexDirection = 'row';
+        // Apply saved position or update if needed
+        if (myRole !== 'idle' && !isFullscreen) {
+            applySavedPosition();
+        } else if (myRole === 'idle') {
+            // Hide container when idle
+            if (ui.container) {
+                ui.container.style.display = 'none';
             }
         }
 
@@ -817,8 +849,15 @@
             snapToSide(deltaX > 0 ? 'right' : 'left');
         }
         
-        // Save position
-        GM_setValue(KEY_UI_POS, { top: ui.container.style.top, left: ui.container.style.left });
+        // Save position for current role
+        const currentPos = GM_getValue(KEY_UI_POS, {});
+        currentPos[myRole] = {
+            top: ui.container.style.top,
+            left: ui.container.style.left,
+            right: ui.container.style.right,
+            side: ui.container.classList.contains('stm-side-left') ? 'left' : 'right'
+        };
+        GM_setValue(KEY_UI_POS, currentPos);
     }
     
     function snapToSide(side) {
@@ -845,13 +884,15 @@
         // Pulse to indicate snap
         pulseDot();
         
-        // Save new position with proper structure
-        GM_setValue(KEY_UI_POS, { 
+        // Save new position with role-specific structure
+        const currentPos = GM_getValue(KEY_UI_POS, {});
+        currentPos[myRole] = {
             top: `${currentTop}px`, 
             left: side === 'left' ? '0' : 'auto',
             right: side === 'right' ? '0' : 'auto',
             side: side
-        });
+        };
+        GM_setValue(KEY_UI_POS, currentPos);
     }
 
     /**
