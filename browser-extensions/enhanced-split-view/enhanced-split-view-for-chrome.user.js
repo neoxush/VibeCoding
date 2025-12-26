@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5
+// @version      1.0.6
 // @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -117,12 +117,9 @@
     // --- Configuration & Keys ---
     const GM_PREFIX = 'stm_gm_v18_';
     const KEY_LATEST_SOURCE = `${GM_PREFIX}latest_source`;
-    const KEY_DRAG_PAIR_REQUEST = `${GM_PREFIX}drag_pair_request`;
-    const KEY_DRAG_SOURCE_REQUEST = `${GM_PREFIX}drag_source_request`;
     const KEY_CONFIG = `${GM_PREFIX}config`;
     const KEY_GLOBAL_RESET = `${GM_PREFIX}global_reset`;
     const KEY_UI_POS = `${GM_PREFIX}ui_pos`;
-    const PAIR_MAX_AGE_MS = 5000;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
@@ -151,8 +148,21 @@
     // Lightweight, synchronous prime from window.name so navigation retains role/id even before async loadState finishes.
     function primeStateFromWindowName() {
         try {
-            const parsed = JSON.parse(window.name || '{}');
-            if (parsed.stmRole && parsed.stmId) {
+            // Try window.name first
+            let payloadStr = window.name;
+            let parsed = null;
+
+            try {
+                parsed = JSON.parse(payloadStr || '{}');
+            } catch (e) { /* not JSON */ }
+
+            // Fallback to sessionStorage if window.name is empty or not ours
+            if (!parsed || !parsed.stmRole) {
+                payloadStr = sessionStorage.getItem('stm_state');
+                parsed = JSON.parse(payloadStr || '{}');
+            }
+
+            if (parsed && parsed.stmRole && parsed.stmId) {
                 myRole = parsed.stmRole;
                 myId = parsed.stmId;
                 myLastTs = parsed.stmLastTs || 0;
@@ -185,10 +195,15 @@
         }
 
         // Apply mute state to all tracked media elements
-        if (mediaManager && mediaManager.elements) {
-            mediaManager.elements.forEach(el => {
-                el.muted = myIsMuted;
-            });
+        if (mediaManager) {
+            if (mediaManager.elements) {
+                mediaManager.elements.forEach(el => {
+                    el.muted = myIsMuted;
+                });
+            }
+            if (mediaManager.muteAllIframes) {
+                mediaManager.muteAllIframes(myIsMuted);
+            }
         }
 
         // Save current UI position when establishing a new role
@@ -198,9 +213,9 @@
                 top: ui.container.style.top || '85px',
                 left: ui.container.style.left || 'auto',
                 right: ui.container.style.right || 'auto',
-                side: ui.container.classList.contains('stm-side-left') ? 'left' : 
-                      ui.container.classList.contains('stm-side-right') ? 'right' : 
-                      (role === 'target' ? 'left' : 'right')
+                side: ui.container.classList.contains('stm-side-left') ? 'left' :
+                    ui.container.classList.contains('stm-side-right') ? 'right' :
+                        (role === 'target' ? 'left' : 'right')
             };
             GM_setValue(KEY_UI_POS, currentPos);
         }
@@ -215,8 +230,7 @@
             isMuted: myIsMuted
         });
 
-        // Secondary fallback persistence using window.name to survive edge cases.
-        // Secondary fallback persistence using window.name to survive edge cases.
+        // Secondary fallback persistence using window.name and sessionStorage to survive edge cases.
         try {
             const payload = { stmRole: myRole, stmId: myId, stmLastTs: myLastTs, stmSourceTabId: mySourceTabId, stmIsMuted: myIsMuted };
             const payloadStr = JSON.stringify(payload);
@@ -604,10 +618,10 @@
 
     function applySavedPosition() {
         if (!ui || !ui.container) return;
-        
+
         const savedPos = GM_getValue(KEY_UI_POS, null);
         let side, top;
-        
+
         if (savedPos && savedPos[myRole]) {
             // Use role-specific saved position
             const rolePos = savedPos[myRole];
@@ -636,7 +650,7 @@
             ui.container.style.left = 'auto';
             ui.container.style.flexDirection = 'row';
         }
-        
+
         // Apply vertical position
         ui.container.style.top = top;
     }
@@ -753,11 +767,11 @@
         if (myRole !== 'idle' || (myRole === 'idle' && GM_getValue(KEY_LATEST_SOURCE, null))) {
             ui.menu.innerHTML = `
                 <div role="menu" aria-label="Split View Menu">
-                    ${contextMenuItems.map(item => 
-                        `<button role="menuitem" tabindex="0" data-action="${item.action}" class="stm-menu-item">
+                    ${contextMenuItems.map(item =>
+                `<button role="menuitem" tabindex="0" data-action="${item.action}" class="stm-menu-item">
                             ${item.text}
                         </button>`
-                    ).join('')}
+            ).join('')}
                 </div>
             `;
         }
@@ -817,22 +831,22 @@
         if (!isDraggingUI) return;
         const deltaX = e.clientX - dragStartX;
         const deltaY = e.clientY - dragStartY;
-        
+
         // Check if this is a horizontal swipe gesture
         if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD) {
             isHorizontalSwipe = true;
             // Don't move the container during swipe detection
             return;
         }
-        
+
         // Regular vertical movement
         let newTop = initialTop + deltaY;
-        
+
         // Boundary checks
         const containerHeight = ui.container.offsetHeight;
         const windowHeight = window.innerHeight;
         newTop = Math.max(10, Math.min(newTop, windowHeight - containerHeight - 10));
-        
+
         ui.container.style.top = `${newTop}px`;
     }
 
@@ -842,13 +856,13 @@
         ui.grip.style.cursor = 'grab';
         document.removeEventListener('mousemove', handleGripMouseMove);
         document.removeEventListener('mouseup', handleGripMouseUp);
-        
+
         // Handle horizontal swipe for side snapping
         if (isHorizontalSwipe) {
             const deltaX = e.clientX - dragStartX;
             snapToSide(deltaX > 0 ? 'right' : 'left');
         }
-        
+
         // Save position for current role
         const currentPos = GM_getValue(KEY_UI_POS, {});
         currentPos[myRole] = {
@@ -859,15 +873,15 @@
         };
         GM_setValue(KEY_UI_POS, currentPos);
     }
-    
+
     function snapToSide(side) {
         if (!ui || !ui.container) return;
-        
+
         const currentTop = ui.container.offsetTop;
-        
+
         // Remove existing side classes
         ui.container.classList.remove('stm-side-left', 'stm-side-right');
-        
+
         // Apply new side class and positioning
         if (side === 'left') {
             ui.container.classList.add('stm-side-left');
@@ -880,14 +894,14 @@
             ui.container.style.left = 'auto';
             ui.container.style.flexDirection = 'row';
         }
-        
+
         // Pulse to indicate snap
         pulseDot();
-        
+
         // Save new position with role-specific structure
         const currentPos = GM_getValue(KEY_UI_POS, {});
         currentPos[myRole] = {
-            top: `${currentTop}px`, 
+            top: `${currentTop}px`,
             left: side === 'left' ? '0' : 'auto',
             right: side === 'right' ? '0' : 'auto',
             side: side
@@ -981,7 +995,7 @@
 
     function updateVolumeButton(hasMedia) {
         if (!ui || !ui.volume) return;
-        
+
         // Only show the volume button if there is active media, but maintain the mute state
         // in the background (tab-based mute).
         if (myRole !== 'idle' && hasMedia) {
@@ -1130,10 +1144,8 @@
                     this.ensureYouTubeApiEnabled(iframe);
                 }
 
-                // Apply current mute state
-                if (myIsMuted) {
-                    this.muteIframe(iframe, true);
-                }
+                // Sync with current mute state
+                this.muteIframe(iframe, myIsMuted);
 
                 // Consider iframe as potential media source
                 this.hasMedia = true;
@@ -1216,14 +1228,14 @@
         },
 
         updateState() {
-            // Enforce mute state on all tracked elements if the tab is supposed to be muted.
-            // This prevents websites from programmatically unmuting themselves.
-            if (myIsMuted) {
+            // Enforce mute state on all tracked elements if the tab has a role.
+            // This prevents websites from programmatically changing their mute state.
+            if (myRole !== 'idle') {
                 this.elements.forEach(el => {
-                    if (!el.muted) el.muted = true;
+                    if (el.muted !== myIsMuted) el.muted = myIsMuted;
                 });
-                // Re-send mute commands to iframes periodically to ensure they stay muted
-                this.muteAllIframes(true);
+                // Re-send mute commands to iframes periodically to ensure they stay in sync
+                this.muteAllIframes(myIsMuted);
             }
 
             let active = false;
@@ -1254,35 +1266,15 @@
             // Apply to all iframes immediately
             this.muteAllIframes(newMutedState);
 
-            // Save state without triggering full UI update
-            myIsMuted = newMutedState;
-            
             // Apply mute state to all tracked media elements
             if (this.elements) {
                 this.elements.forEach(el => {
-                    el.muted = myIsMuted;
+                    el.muted = newMutedState;
                 });
             }
-            
-            // Update only the volume button UI
-            updateVolumeButton(this.hasMedia);
-            
-            // Save to storage without calling updateUI
-            try {
-                GM_saveTab({
-                    stmRole: myRole,
-                    stmId: myId,
-                    stmLastTs: myLastTs,
-                    stmSourceTabId: mySourceTabId,
-                    stmIsMuted: myIsMuted
-                });
-            } catch (e) {
-                // Fallback to window.name
-                try {
-                    const payload = { stmRole: myRole, stmId: myId, stmLastTs: myLastTs, stmSourceTabId: mySourceTabId, stmIsMuted: myIsMuted };
-                    window.name = JSON.stringify(payload);
-                } catch (err) { /* ignore */ }
-            }
+
+            // Save state and update UI
+            saveState(myRole, myId, myLastTs, mySourceTabId, newMutedState);
         }
     };
     function setRole(role, id = null, joinExisting = false) {
@@ -1468,17 +1460,6 @@
             });
             activeListeners.push(urlListener);
 
-            // Listen for retargeting requests (when dragged to create new source)
-            const retargetListener = GM_addValueChangeListener(`${GM_PREFIX}retarget_${myId}`, (k, o, n) => {
-                if (n && n.newSourceId) {
-                    // Switch to the new source
-                    saveState('target', n.newSourceId);
-                    // Clean up the retarget request
-                    GM_deleteValue(`${GM_PREFIX}retarget_${myId}`);
-                }
-            });
-            activeListeners.push(retargetListener);
-
             // Initial Check for missed updates (Latency/Race condition fix)
             const serverTs = GM_getValue(getTimestampKey(myId), 0);
             if (serverTs > myLastTs) {
@@ -1503,16 +1484,17 @@
             const mergedId = myId || s.id;
             const mergedTs = myLastTs || s.lastTs;
             const mergedSourceTabId = mySourceTabId || s.sourceTabId;
-            const mergedIsMuted = myIsMuted || s.isMuted;
+
+            // For mute state, we trust the primed state if it has a role, 
+            // because window.name is updated synchronously and is more reliable 
+            // for same-tab navigation than the async GM_getTab.
+            const mergedIsMuted = (myRole !== 'idle') ? myIsMuted : s.isMuted;
+
             saveState(mergedRole, mergedId, mergedTs, mergedSourceTabId, mergedIsMuted);
             stateLoaded = true;
 
             // Initialize media manager after state is loaded
             mediaManager.init();
-
-            // Cleanup any stale interest keys from previous sessions
-            const staleInterests = GM_listValues().filter(k => k.startsWith(`${GM_PREFIX}interest_`));
-            staleInterests.forEach(k => GM_deleteValue(k));
 
             // --- Menu Configuration ---
             const menuCommands = [
@@ -1541,6 +1523,6 @@
 
     initialize();
 
-    console.log('Enhanced Split Tab: Script initialized (dev)');
+    console.log('Enhanced Split Tab: Script initialized');
 
 })();
