@@ -34,7 +34,9 @@
                 padding: 12px 20px;
                 border-radius: 6px;
                 color: white;
-                max-width: 320px;
+                min-width: 200px;
+                max-width: 500px;
+                width: fit-content;
                 z-index: 9999;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                 transform: translateX(120%);
@@ -62,8 +64,8 @@
             notification.innerHTML = `
                 <span style="margin-right: 12px; font-size: 18px; flex-shrink: 0;">${icon}</span>
                 <div style="flex: 1;">
-                    ${title ? `<div style="font-weight: 600; margin: 0 0 4px 0; font-size: 14px;">${title}</div>` : ''}
-                    <div style="margin: 0; font-size: 13px; opacity: 0.9; line-height: 1.4;">${message}</div>
+                    ${title ? `<div style="font-weight: 600; margin: 0 0 4px 0; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">${title}</div>` : ''}
+                    <div style="margin: 0; font-size: 13px; opacity: 0.9; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">${message}</div>
                 </div>
                 <span class="esv-notification-close" style="margin-left: 12px; cursor: pointer; opacity: 0.7; font-size: 16px; line-height: 1; transition: opacity 0.2s;" title="Dismiss">&times;</span>
             `;
@@ -127,6 +129,7 @@
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
     const getSourceListKey = (id) => `${GM_PREFIX}sources_${id}`;
+    const getRoleNotificationKey = (id) => `${GM_PREFIX}role_notification_${id}`;
 
     // Default configuration
     const DEFAULT_CONFIG = {
@@ -1371,12 +1374,31 @@
             saveState(myRole, myId, myLastTs, mySourceTabId, newMutedState);
         }
     };
+    // Broadcast role notification to all tabs in the same connection
+    function broadcastRoleNotification(groupId, newRole, tabId) {
+        const notification = {
+            groupId: groupId,
+            newRole: newRole,
+            tabId: tabId,
+            timestamp: Date.now(),
+            type: 'role_joined'
+        };
+        
+        // Set notification for the group ID so all tabs can see it
+        GM_setValue(getRoleNotificationKey(groupId), notification);
+        
+        // Also set a general notification key for broader visibility
+        GM_setValue(`${GM_PREFIX}latest_role_notification`, notification);
+    }
+    
     function setRole(role, id = null, joinExisting = false) {
         if (role === 'source') {
             let groupId;
             if (joinExisting && id) {
                 // Join existing group
                 groupId = id;
+                // Broadcast notification when joining existing group
+                broadcastRoleNotification(groupId, 'source', myInstanceId);
             } else {
                 // Create new group or use provided ID
                 groupId = id || generateId();
@@ -1386,9 +1408,16 @@
             saveState('source', groupId, 0, sourceTabId);
             addSourceToGroup(groupId, sourceTabId);
             GM_setValue(KEY_LATEST_SOURCE, { sourceId: groupId, timestamp: Date.now() });
+            
+            // Broadcast notification for new source if not joining existing
+            if (!joinExisting) {
+                broadcastRoleNotification(groupId, 'source', myInstanceId);
+            }
         } else if (role === 'target') {
             if (!id) { Notify.error('Cannot become Target without a Source ID.'); return; }
             saveState('target', id);
+            // Broadcast notification when target joins
+            broadcastRoleNotification(id, 'target', myInstanceId);
         }
     }
     // Disconnects just this tab, leaving the other tab in its role.
@@ -1396,6 +1425,20 @@
         if (myRole === 'source' && myId && mySourceTabId) {
             removeSourceFromGroup(myId, mySourceTabId);
         }
+        
+        // Broadcast disconnection notification
+        if (myRole !== 'idle' && myId) {
+            const notification = {
+                groupId: myId,
+                disconnectedRole: myRole,
+                tabId: myInstanceId,
+                timestamp: Date.now(),
+                type: 'role_disconnected'
+            };
+            GM_setValue(getRoleNotificationKey(myId), notification);
+            GM_setValue(`${GM_PREFIX}latest_role_notification`, notification);
+        }
+        
         // Clean up tab-specific storage when revoking role
         if (myRole !== 'idle' && myId) {
             GM_deleteValue(getMuteStateKey(myId, myRole));
@@ -1412,6 +1455,20 @@
         if (myId) {
             GM_setValue(getDisconnectKey(myId), Date.now());
         }
+        
+        // Broadcast disconnection notification
+        if (myRole !== 'idle' && myId) {
+            const notification = {
+                groupId: myId,
+                disconnectedRole: myRole,
+                tabId: myInstanceId,
+                timestamp: Date.now(),
+                type: 'role_disconnected'
+            };
+            GM_setValue(getRoleNotificationKey(myId), notification);
+            GM_setValue(`${GM_PREFIX}latest_role_notification`, notification);
+        }
+        
         // Clean up tab-specific storage when disconnecting
         if (myRole !== 'idle' && myId) {
             GM_deleteValue(getMuteStateKey(myId, myRole));
@@ -1552,6 +1609,36 @@
 
         const globalResetListener = GM_addValueChangeListener(KEY_GLOBAL_RESET, (k, o, n, r) => { if (r) saveState('idle', null, 0, null); });
         activeListeners.push(globalResetListener);
+        
+        // Listen for role notifications in the same connection
+        if (myId) {
+            const roleNotificationListener = GM_addValueChangeListener(getRoleNotificationKey(myId), (k, o, n, r) => {
+                if (r && n && n.tabId !== myInstanceId) {
+                    if (n.type === 'role_joined') {
+                        const roleText = n.newRole === 'source' ? 'Source' : 'Target';
+                        Notify.info(`New ${roleText} tab joined the connection`, 'Role Update');
+                    } else if (n.type === 'role_disconnected') {
+                        const roleText = n.disconnectedRole === 'source' ? 'Source' : 'Target';
+                        Notify.warning(`${roleText} tab disconnected from the connection`, 'Role Update');
+                    }
+                }
+            });
+            activeListeners.push(roleNotificationListener);
+            
+            // Also listen for general role notifications
+            const generalRoleListener = GM_addValueChangeListener(`${GM_PREFIX}latest_role_notification`, (k, o, n, r) => {
+                if (r && n && n.tabId !== myInstanceId && n.groupId === myId) {
+                    if (n.type === 'role_joined') {
+                        const roleText = n.newRole === 'source' ? 'Source' : 'Target';
+                        Notify.info(`New ${roleText} tab joined the connection`, 'Role Update');
+                    } else if (n.type === 'role_disconnected') {
+                        const roleText = n.disconnectedRole === 'source' ? 'Source' : 'Target';
+                        Notify.warning(`${roleText} tab disconnected from the connection`, 'Role Update');
+                    }
+                }
+            });
+            activeListeners.push(generalRoleListener);
+        }
         if (myRole === 'target') {
             // Some managers may not flag `remote` reliably; rely on timestamp monotonicity instead.
             const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n) => {
