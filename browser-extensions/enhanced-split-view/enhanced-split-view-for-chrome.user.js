@@ -134,7 +134,12 @@
     // Default configuration
     const DEFAULT_CONFIG = {
         sourceKey: { button: 1, ctrl: true, alt: false, shift: false },
-        targetKey: { button: 1, ctrl: false, alt: true, shift: false }
+        targetKey: { button: 1, ctrl: false, alt: true, shift: false },
+        notifications: {
+            newSourceRole: true,
+            newTargetRole: true,
+            revokeRole: true
+        }
     };
 
     // --- State Management ---
@@ -188,7 +193,7 @@
         
         muteLazyloadActivated = true;
         saveMuteLazyloadState();
-        Notify.info('Mute control activated - Extension will now manage audio state for this tab');
+        Notify.info('Mute control activated');
         
         // Apply current mute state to all media elements immediately
         if (mediaManager) {
@@ -242,6 +247,10 @@
     function saveConfig(newConfig) {
         config = newConfig;
         GM_setValue(KEY_CONFIG, config);
+        // Reattach listeners with new configuration
+        if (myRole !== 'idle' && myId) {
+            attachRoleSpecificListeners();
+        }
     }
 
     function saveState(role, id, lastTs = 0, sourceTabId = null, isMuted = null) {
@@ -537,7 +546,7 @@
         const panel = document.createElement('div');
         panel.id = 'stm-config-panel';
         panel.innerHTML = `
-            <h3>Split Tab Manager - Key Configuration</h3>
+            <h3>Preference</h3>
             <div class="stm-config-section">
                 <h4>Create Source Tab</h4>
                 <div class="stm-config-row">
@@ -580,6 +589,27 @@
                     </div>
                 </div>
             </div>
+            <div class="stm-config-section">
+                <h4>Notifications</h4>
+                <div class="stm-config-row">
+                    <div class="stm-config-label">Source Role:</div>
+                    <div class="stm-config-input">
+                        <label for="stm-notify-new-source"><input type="checkbox" id="stm-notify-new-source"> Notify when new source tab joins</label>
+                    </div>
+                </div>
+                <div class="stm-config-row">
+                    <div class="stm-config-label">Target Role:</div>
+                    <div class="stm-config-input">
+                        <label for="stm-notify-new-target"><input type="checkbox" id="stm-notify-new-target"> Notify when new target tab joins</label>
+                    </div>
+                </div>
+                <div class="stm-config-row">
+                    <div class="stm-config-label">Revoke Role:</div>
+                    <div class="stm-config-input">
+                        <label for="stm-notify-revoke"><input type="checkbox" id="stm-notify-revoke"> Notify when a tab revokes its role</label>
+                    </div>
+                </div>
+            </div>
             <div class="stm-config-buttons">
                 <button class="stm-config-btn stm-config-btn-reset" id="stm-config-reset">Reset to Default</button>
                 <button class="stm-config-btn stm-config-btn-cancel" id="stm-config-cancel">Cancel</button>
@@ -605,6 +635,13 @@
         document.getElementById('stm-target-ctrl').checked = config.targetKey.ctrl;
         document.getElementById('stm-target-alt').checked = config.targetKey.alt;
         document.getElementById('stm-target-shift').checked = config.targetKey.shift;
+        
+        // Load notification settings
+        const notifications = config.notifications || { newSourceRole: true, newTargetRole: true, revokeRole: true };
+        document.getElementById('stm-notify-new-source').checked = notifications.newSourceRole;
+        document.getElementById('stm-notify-new-target').checked = notifications.newTargetRole;
+        document.getElementById('stm-notify-revoke').checked = notifications.revokeRole;
+        
         configPanel.overlay.style.display = 'block';
         configPanel.panel.style.display = 'block';
     }
@@ -619,7 +656,12 @@
     function saveConfigFromPanel() {
         const newConfig = {
             sourceKey: { button: parseInt(document.getElementById('stm-source-button').value), ctrl: document.getElementById('stm-source-ctrl').checked, alt: document.getElementById('stm-source-alt').checked, shift: document.getElementById('stm-source-shift').checked },
-            targetKey: { button: parseInt(document.getElementById('stm-target-button').value), ctrl: document.getElementById('stm-target-ctrl').checked, alt: document.getElementById('stm-target-alt').checked, shift: document.getElementById('stm-target-shift').checked }
+            targetKey: { button: parseInt(document.getElementById('stm-target-button').value), ctrl: document.getElementById('stm-target-ctrl').checked, alt: document.getElementById('stm-target-alt').checked, shift: document.getElementById('stm-target-shift').checked },
+            notifications: {
+                newSourceRole: document.getElementById('stm-notify-new-source').checked,
+                newTargetRole: document.getElementById('stm-notify-new-target').checked,
+                revokeRole: document.getElementById('stm-notify-revoke').checked
+            }
         };
         saveConfig(newConfig);
         hideConfigPanel();
@@ -1614,12 +1656,17 @@
         if (myId) {
             const roleNotificationListener = GM_addValueChangeListener(getRoleNotificationKey(myId), (k, o, n, r) => {
                 if (r && n && n.tabId !== myInstanceId) {
+                    const notifications = config.notifications || { newSourceRole: true, newTargetRole: true, revokeRole: true };
+                    
                     if (n.type === 'role_joined') {
-                        const roleText = n.newRole === 'source' ? 'Source' : 'Target';
-                        Notify.info(`New ${roleText} tab joined the connection`, 'Role Update');
-                    } else if (n.type === 'role_disconnected') {
+                        if (n.newRole === 'source' && notifications.newSourceRole) {
+                            Notify.info('New Source tab joined', 'Role Update');
+                        } else if (n.newRole === 'target' && notifications.newTargetRole) {
+                            Notify.info('New Target tab joined', 'Role Update');
+                        }
+                    } else if (n.type === 'role_disconnected' && notifications.revokeRole) {
                         const roleText = n.disconnectedRole === 'source' ? 'Source' : 'Target';
-                        Notify.warning(`${roleText} tab disconnected from the connection`, 'Role Update');
+                        Notify.warning(`${roleText} tab revoked its role`, 'Role Update');
                     }
                 }
             });
@@ -1628,12 +1675,17 @@
             // Also listen for general role notifications
             const generalRoleListener = GM_addValueChangeListener(`${GM_PREFIX}latest_role_notification`, (k, o, n, r) => {
                 if (r && n && n.tabId !== myInstanceId && n.groupId === myId) {
+                    const notifications = config.notifications || { newSourceRole: true, newTargetRole: true, revokeRole: true };
+                    
                     if (n.type === 'role_joined') {
-                        const roleText = n.newRole === 'source' ? 'Source' : 'Target';
-                        Notify.info(`New ${roleText} tab joined the connection`, 'Role Update');
-                    } else if (n.type === 'role_disconnected') {
+                        if (n.newRole === 'source' && notifications.newSourceRole) {
+                            Notify.info('New Source tab joined', 'Role Update');
+                        } else if (n.newRole === 'target' && notifications.newTargetRole) {
+                            Notify.info('New Target tab joined', 'Role Update');
+                        }
+                    } else if (n.type === 'role_disconnected' && notifications.revokeRole) {
                         const roleText = n.disconnectedRole === 'source' ? 'Source' : 'Target';
-                        Notify.warning(`${roleText} tab disconnected from the connection`, 'Role Update');
+                        Notify.warning(`${roleText} tab revoked its role`, 'Role Update');
                     }
                 }
             });
@@ -1666,6 +1718,17 @@
         loadMuteLazyloadState(); // Load persistent lazyload state
         injectStyles();
         primeStateFromWindowName();
+        
+        // Listen for configuration changes to update notification settings
+        GM_addValueChangeListener(KEY_CONFIG, (key, oldValue, newValue, remote) => {
+            if (remote) {
+                config = newValue || DEFAULT_CONFIG;
+                // Reattach listeners with new configuration
+                if (myRole !== 'idle' && myId) {
+                    attachRoleSpecificListeners();
+                }
+            }
+        });
         // Attach link interception immediately so early clicks are captured even before state restore completes.
         window.addEventListener('click', handleLinkClick, true);
 
@@ -1690,8 +1753,8 @@
             // --- Menu Configuration ---
             const menuCommands = [
                 { name: "Create Source", func: () => setRole('source') },
-                { name: "Configure Keys", func: showConfigPanel },
-                { name: "Reset Roles", func: resetAllRoles }
+                { name: "Reset Roles", func: resetAllRoles },
+                { name: "Preference", func: showConfigPanel }
             ];
             menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
 
