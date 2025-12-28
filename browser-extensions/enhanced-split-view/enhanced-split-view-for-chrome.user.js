@@ -121,6 +121,8 @@
     const KEY_GLOBAL_RESET = `${GM_PREFIX}global_reset`;
     const KEY_UI_POS = `${GM_PREFIX}ui_pos`;
     const KEY_MUTE_LAZYLOAD = `${GM_PREFIX}mute_lazyload_activated`;
+    const getMuteStateKey = (id, role) => `${GM_PREFIX}mute_${role}_${id}`;
+    const getLazyloadKey = (id, role) => `${GM_PREFIX}lazyload_${role}_${id}`;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
@@ -149,23 +151,41 @@
     // --- Lazyload Mute Control ---
     let muteLazyloadActivated = false;
 
-    // Load persistent lazyload state
+    // Load persistent lazyload state for current tab/role
     function loadMuteLazyloadState() {
-        muteLazyloadActivated = GM_getValue(KEY_MUTE_LAZYLOAD, false);
+        if (myRole !== 'idle' && myId) {
+            muteLazyloadActivated = GM_getValue(getLazyloadKey(myId, myRole), false);
+        }
     }
 
-    // Save persistent lazyload state
+    // Save persistent lazyload state for current tab/role
     function saveMuteLazyloadState() {
-        GM_setValue(KEY_MUTE_LAZYLOAD, muteLazyloadActivated);
+        if (myRole !== 'idle' && myId) {
+            GM_setValue(getLazyloadKey(myId, myRole), muteLazyloadActivated);
+        }
     }
 
-    // Lazyload activation function (one-time per connection)
+    // Load tab-specific mute state
+    function loadTabMuteState() {
+        if (myRole !== 'idle' && myId) {
+            myIsMuted = GM_getValue(getMuteStateKey(myId, myRole), false);
+        }
+    }
+
+    // Save tab-specific mute state
+    function saveTabMuteState() {
+        if (myRole !== 'idle' && myId) {
+            GM_setValue(getMuteStateKey(myId, myRole), myIsMuted);
+        }
+    }
+
+    // Lazyload activation function (one-time per tab/role)
     function activateMuteLazyload() {
         if (muteLazyloadActivated) return;
         
         muteLazyloadActivated = true;
         saveMuteLazyloadState();
-        Notify.info('Mute control activated - Extension will now manage audio state');
+        Notify.info('Mute control activated - Extension will now manage audio state for this tab');
         
         // Apply current mute state to all media elements immediately
         if (mediaManager) {
@@ -204,7 +224,8 @@
                 myId = parsed.stmId;
                 myLastTs = parsed.stmLastTs || 0;
                 mySourceTabId = parsed.stmSourceTabId;
-                myIsMuted = parsed.stmIsMuted || false;
+                loadTabMuteState(); // Load tab-specific mute state
+                loadMuteLazyloadState(); // Load tab-specific lazyload state
                 updateUI();
                 attachRoleSpecificListeners();
             }
@@ -229,6 +250,7 @@
             myIsMuted = false;
         } else if (isMuted !== null) {
             myIsMuted = isMuted;
+            saveTabMuteState(); // Save tab-specific mute state
         }
 
         // Apply mute state to all tracked media elements only if lazyload is activated
@@ -307,7 +329,7 @@
                         id: tab.id,
                         lastTs: tab.lastTs || 0,
                         sourceTabId: tab.sourceTabId,
-                        isMuted: tab.isMuted || false
+                        isMuted: GM_getValue(getMuteStateKey(tab.id, tab.role), false)
                     });
                     return;
                 }
@@ -320,7 +342,7 @@
                             id: parsed.stmId,
                             lastTs: parsed.stmLastTs || 0,
                             sourceTabId: parsed.stmSourceTabId,
-                            isMuted: parsed.stmIsMuted || false
+                            isMuted: GM_getValue(getMuteStateKey(parsed.stmId, parsed.stmRole), false)
                         });
                         return;
                     }
@@ -334,7 +356,7 @@
                             id: parsed.stmId,
                             lastTs: parsed.stmLastTs || 0,
                             sourceTabId: parsed.stmSourceTabId,
-                            isMuted: parsed.stmIsMuted || false
+                            isMuted: GM_getValue(getMuteStateKey(parsed.stmId, parsed.stmRole), false)
                         });
                         return;
                     }
@@ -614,11 +636,18 @@
         const tsPrefix = `${GM_PREFIX}ts_`;
         const disconnectPrefix = `${GM_PREFIX}disconnect_`;
         const sourcesPrefix = `${GM_PREFIX}sources_`;
+        const mutePrefix = `${GM_PREFIX}mute_`;
+        const lazyloadPrefix = `${GM_PREFIX}lazyload_`;
+        
         keys.forEach(k => {
             if (k.startsWith(urlPrefix)) ids.add(k.slice(urlPrefix.length));
             else if (k.startsWith(tsPrefix)) ids.add(k.slice(tsPrefix.length));
             else if (k.startsWith(disconnectPrefix)) ids.add(k.slice(disconnectPrefix.length));
             else if (k.startsWith(sourcesPrefix)) ids.add(k.slice(sourcesPrefix.length));
+            else if (k.startsWith(mutePrefix) || k.startsWith(lazyloadPrefix)) {
+                // Remove tab-specific mute and lazyload states
+                GM_deleteValue(k);
+            }
         });
 
         // Also check the latest source key
@@ -1325,6 +1354,8 @@
             }
             
             const newMutedState = !myIsMuted;
+            myIsMuted = newMutedState;
+            saveTabMuteState(); // Save tab-specific mute state
 
             // Apply to all iframes immediately
             this.muteAllIframes(newMutedState);
@@ -1365,6 +1396,11 @@
         if (myRole === 'source' && myId && mySourceTabId) {
             removeSourceFromGroup(myId, mySourceTabId);
         }
+        // Clean up tab-specific storage when revoking role
+        if (myRole !== 'idle' && myId) {
+            GM_deleteValue(getMuteStateKey(myId, myRole));
+            GM_deleteValue(getLazyloadKey(myId, myRole));
+        }
         saveState('idle', null, 0, null);
     }
 
@@ -1375,8 +1411,13 @@
         }
         if (myId) {
             GM_setValue(getDisconnectKey(myId), Date.now());
-            saveState('idle', null, 0, null);
         }
+        // Clean up tab-specific storage when disconnecting
+        if (myRole !== 'idle' && myId) {
+            GM_deleteValue(getMuteStateKey(myId, myRole));
+            GM_deleteValue(getLazyloadKey(myId, myRole));
+        }
+        saveState('idle', null, 0, null);
     }
 
     function handleLinkDragOver(e) {
@@ -1549,12 +1590,11 @@
             const mergedTs = myLastTs || s.lastTs;
             const mergedSourceTabId = mySourceTabId || s.sourceTabId;
 
-            // For mute state, we trust the primed state if it has a role, 
-            // because window.name is updated synchronously and is more reliable 
-            // for same-tab navigation than the async GM_getTab.
-            const mergedIsMuted = (myRole !== 'idle') ? myIsMuted : s.isMuted;
+            // For mute state, load from tab-specific storage
+            loadTabMuteState();
+            loadMuteLazyloadState();
 
-            saveState(mergedRole, mergedId, mergedTs, mergedSourceTabId, mergedIsMuted);
+            saveState(mergedRole, mergedId, mergedTs, mergedSourceTabId, myIsMuted);
             stateLoaded = true;
 
             // Initialize media manager after state is loaded
