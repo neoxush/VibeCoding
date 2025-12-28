@@ -120,6 +120,7 @@
     const KEY_CONFIG = `${GM_PREFIX}config`;
     const KEY_GLOBAL_RESET = `${GM_PREFIX}global_reset`;
     const KEY_UI_POS = `${GM_PREFIX}ui_pos`;
+    const KEY_MUTE_LAZYLOAD = `${GM_PREFIX}mute_lazyload_activated`;
     const getTargetUrlKey = (id) => `${GM_PREFIX}url_${id}`;
     const getTimestampKey = (id) => `${GM_PREFIX}ts_${id}`;
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
@@ -144,6 +145,42 @@
     let configPanel = null;
     let activeListeners = [];
     let config = null;
+    
+    // --- Lazyload Mute Control ---
+    let muteLazyloadActivated = false;
+
+    // Load persistent lazyload state
+    function loadMuteLazyloadState() {
+        muteLazyloadActivated = GM_getValue(KEY_MUTE_LAZYLOAD, false);
+    }
+
+    // Save persistent lazyload state
+    function saveMuteLazyloadState() {
+        GM_setValue(KEY_MUTE_LAZYLOAD, muteLazyloadActivated);
+    }
+
+    // Lazyload activation function (one-time per connection)
+    function activateMuteLazyload() {
+        if (muteLazyloadActivated) return;
+        
+        muteLazyloadActivated = true;
+        saveMuteLazyloadState();
+        Notify.info('Mute control activated - Extension will now manage audio state');
+        
+        // Apply current mute state to all media elements immediately
+        if (mediaManager) {
+            if (mediaManager.elements) {
+                mediaManager.elements.forEach(el => {
+                    el.muted = myIsMuted;
+                });
+            }
+            if (mediaManager.muteAllIframes) {
+                mediaManager.muteAllIframes(myIsMuted);
+            }
+        }
+        
+        updateUI(); // Update UI to show active volume button
+    }
 
     // Lightweight, synchronous prime from window.name so navigation retains role/id even before async loadState finishes.
     function primeStateFromWindowName() {
@@ -194,8 +231,8 @@
             myIsMuted = isMuted;
         }
 
-        // Apply mute state to all tracked media elements
-        if (mediaManager) {
+        // Apply mute state to all tracked media elements only if lazyload is activated
+        if (mediaManager && muteLazyloadActivated) {
             if (mediaManager.elements) {
                 mediaManager.elements.forEach(el => {
                     el.muted = myIsMuted;
@@ -704,7 +741,13 @@
             ui.dot.addEventListener('drop', handleLinkDrop);
 
             ui.menu.addEventListener('click', handleMenuClick);
-            ui.volume.addEventListener('click', () => mediaManager.toggleMute());
+            ui.volume.addEventListener('click', () => {
+                if (!muteLazyloadActivated) {
+                    activateMuteLazyload();
+                } else {
+                    mediaManager.toggleMute();
+                }
+            });
             window.addEventListener('click', (e) => {
                 if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) {
                     toggleMenu();
@@ -996,14 +1039,25 @@
     function updateVolumeButton(hasMedia) {
         if (!ui || !ui.volume) return;
 
-        // Only show the volume button if there is active media, but maintain the mute state
-        // in the background (tab-based mute).
+        // Always show volume button when there is active media and tab has a role
+        // Show different icons and styles for sleep vs active modes
         if (myRole !== 'idle' && hasMedia) {
             ui.volume.style.display = 'flex';
-            const volIcon = myIsMuted
-                ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
-                : `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-            ui.volume.innerHTML = volIcon;
+            
+            if (!muteLazyloadActivated) {
+                // Sleep mode - show activation icon with visual indicator
+                ui.volume.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`;
+                ui.volume.style.background = 'rgba(255, 193, 7, 0.2)'; // Amber background for sleep mode
+                ui.volume.title = 'Click to activate mute control (currently in sleep mode)';
+            } else {
+                // Active mode - show normal volume icons
+                ui.volume.style.background = 'rgba(255, 255, 255, 0.1)'; // Normal background
+                const volIcon = myIsMuted
+                    ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
+                    : `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+                ui.volume.innerHTML = volIcon;
+                ui.volume.title = myIsMuted ? 'Click to unmute' : 'Click to mute';
+            }
         } else {
             ui.volume.style.display = 'none';
         }
@@ -1109,8 +1163,10 @@
             el.addEventListener('pause', update);
             el.addEventListener('volumechange', update);
 
-            // Sync with current mute state
-            el.muted = myIsMuted;
+            // Sync with current mute state only if lazyload is activated
+            if (muteLazyloadActivated) {
+                el.muted = myIsMuted;
+            }
         },
 
         trackIframe(iframe) {
@@ -1144,8 +1200,10 @@
                     this.ensureYouTubeApiEnabled(iframe);
                 }
 
-                // Sync with current mute state
-                this.muteIframe(iframe, myIsMuted);
+                // Sync with current mute state only if lazyload is activated
+                if (muteLazyloadActivated) {
+                    this.muteIframe(iframe, myIsMuted);
+                }
 
                 // Consider iframe as potential media source
                 this.hasMedia = true;
@@ -1228,9 +1286,9 @@
         },
 
         updateState() {
-            // Enforce mute state on all tracked elements if the tab has a role.
+            // Enforce mute state on all tracked elements if the tab has a role AND lazyload is activated
             // This prevents websites from programmatically changing their mute state.
-            if (myRole !== 'idle') {
+            if (myRole !== 'idle' && muteLazyloadActivated) {
                 this.elements.forEach(el => {
                     if (el.muted !== myIsMuted) el.muted = myIsMuted;
                 });
@@ -1261,6 +1319,11 @@
         },
 
         toggleMute() {
+            // Auto-activate lazyload on first mute toggle
+            if (!muteLazyloadActivated) {
+                activateMuteLazyload();
+            }
+            
             const newMutedState = !myIsMuted;
 
             // Apply to all iframes immediately
@@ -1472,6 +1535,7 @@
 
     function initialize() {
         loadConfig();
+        loadMuteLazyloadState(); // Load persistent lazyload state
         injectStyles();
         primeStateFromWindowName();
         // Attach link interception immediately so early clicks are captured even before state restore completes.
