@@ -553,23 +553,90 @@
                 border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             }
 
-            #stm-config-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; border: 1px solid #333; border-radius: 16px; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); z-index: 2147483648; font-family: 'Inter', system-ui, sans-serif; color: #fff; min-width: 400px; }
-            #stm-config-panel h3 { margin: 0 0 20px 0; font-size: 20px; font-weight: 700; color: #fff; }
-            .stm-config-section { margin-bottom: 24px; padding: 16px; background: #252525; border-radius: 12px; border: 1px solid #333; }
-            .stm-config-section h4 { margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #4CAF50; text-transform: uppercase; letter-spacing: 0.5px; }
-            .stm-config-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
-            .stm-config-label { flex: 1; font-size: 14px; color: #bbb; }
-            .stm-config-input select { background: #333; color: #fff; border: 1px solid #444; border-radius: 6px; padding: 6px 10px; cursor: pointer; outline: none; }
+            #stm-config-panel { 
+                display: none; 
+                position: fixed; 
+                top: 50%; 
+                left: 50%; 
+                transform: translate(-50%, -50%); 
+                background: #1a1a1a; 
+                border: 1px solid #333; 
+                border-radius: 16px; 
+                padding: 24px; 
+                box-shadow: 0 20px 50px rgba(0,0,0,0.8); 
+                z-index: 2147483648; 
+                font-family: 'Inter', system-ui, sans-serif; 
+                color: #fff; 
+                width: 95%;
+                max-width: 500px;
+                max-height: 90vh;
+                overflow-y: auto;
+                box-sizing: border-box;
+            }
+            #stm-config-panel::-webkit-scrollbar { width: 8px; }
+            #stm-config-panel::-webkit-scrollbar-track { background: #1a1a1a; }
+            #stm-config-panel::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+            #stm-config-panel::-webkit-scrollbar-thumb:hover { background: #444; }
+
+            #stm-config-panel h3 { margin: 0; font-size: 20px; font-weight: 700; color: #fff; }
+            .stm-config-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+            #stm-config-close-x { cursor: pointer; font-size: 28px; color: #666; line-height: 1; transition: color 0.2s; }
+            #stm-config-close-x:hover { color: #fff; }
+
+            .stm-config-section { margin-bottom: 20px; padding: 16px; background: rgba(255, 255, 255, 0.03); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05); transition: background 0.2s; }
+            .stm-config-section:hover { background: rgba(255, 255, 255, 0.05); }
+            .stm-config-section h4 { margin: 0 0 16px 0; font-size: 13px; font-weight: 600; color: #4CAF50; text-transform: uppercase; letter-spacing: 1px; }
+            
+            .stm-config-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; align-items: flex-start; }
+            .stm-config-row:last-child { margin-bottom: 0; }
+            .stm-config-label { flex: 1 1 140px; font-size: 14px; color: #bbb; font-weight: 500; padding-top: 8px; }
+            .stm-config-input { flex: 2 1 200px; display: flex; flex-wrap: wrap; gap: 16px; }
+            .stm-config-input label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: #eee; padding: 4px 0; transition: color 0.2s; }
+            .stm-config-input label:hover { color: #fff; }
+            
+            /* Custom Checkbox Styling */
+            .stm-config-input input[type="checkbox"] { 
+                appearance: none; 
+                -webkit-appearance: none; 
+                width: 20px; 
+                height: 20px; 
+                border: 2px solid #444; 
+                border-radius: 6px; 
+                background: #2a2a2a; 
+                cursor: pointer; 
+                position: relative; 
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+                margin: 0; 
+                outline: none;
+                flex-shrink: 0;
+            }
+            .stm-config-input input[type="checkbox"]:hover { border-color: #666; background: #333; }
+            .stm-config-input input[type="checkbox"]:checked { background: #4CAF50; border-color: #4CAF50; }
+            .stm-config-input input[type="checkbox"]:checked::after { 
+                content: ''; 
+                position: absolute; 
+                left: 6px; 
+                top: 2px; 
+                width: 5px; 
+                height: 10px; 
+                border: solid white; 
+                border-width: 0 2px 2px 0; 
+                transform: rotate(45deg); 
+            }
+            .stm-config-input input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.4); }
+            
+            .stm-config-input select { background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 8px; padding: 8px 12px; cursor: pointer; outline: none; width: 100%; max-width: 220px; font-size: 13px; transition: border-color 0.2s; }
             .stm-config-input select:focus { border-color: #4CAF50; }
-            .stm-config-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
-            .stm-config-btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
-            .stm-config-btn-save { background: #4CAF50; color: white; }
-            .stm-config-btn-save:hover { background: #45a049; transform: translateY(-1px); }
-            .stm-config-btn-cancel { background: #444; color: white; }
-            .stm-config-btn-cancel:hover { background: #555; }
-            .stm-config-btn-reset { background: #f44336; color: white; }
-            .stm-config-btn-reset:hover { background: #da190b; }
-            #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2147483647; }
+            
+            .stm-config-buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; margin-top: 32px; }
+            .stm-config-btn { padding: 12px 20px; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; flex: 1 1 auto; min-width: 100px; text-align: center; }
+            .stm-config-btn-save { background: #4CAF50; color: white; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2); }
+            .stm-config-btn-save:hover { background: #45a049; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(76, 175, 80, 0.3); }
+            .stm-config-btn-cancel { background: #333; color: #ccc; }
+            .stm-config-btn-cancel:hover { background: #444; color: #fff; }
+            .stm-config-btn-reset { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.2); }
+            .stm-config-btn-reset:hover { background: #f44336; color: white; }
+            #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 2147483647; }
 
             /* Playlist Styles */
             #stm-playlist-panel {
@@ -692,7 +759,10 @@
         const panel = document.createElement('div');
         panel.id = 'stm-config-panel';
         panel.innerHTML = ttPolicy.createHTML(`
-            <h3>Preference</h3>
+            <div class="stm-config-header">
+                <h3>Preference</h3>
+                <span id="stm-config-close-x">&times;</span>
+            </div>
             <div class="stm-config-section">
                 <h4>Create Source Tab</h4>
                 <div class="stm-config-row">
@@ -766,6 +836,7 @@
         document.body.appendChild(panel);
         overlay.addEventListener('click', hideConfigPanel);
         panel.querySelector('#stm-config-cancel').addEventListener('click', hideConfigPanel);
+        panel.querySelector('#stm-config-close-x').addEventListener('click', hideConfigPanel);
         panel.querySelector('#stm-config-save').addEventListener('click', saveConfigFromPanel);
         panel.querySelector('#stm-config-reset').addEventListener('click', resetConfigToDefault);
         return { overlay, panel };
