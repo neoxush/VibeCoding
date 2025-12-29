@@ -503,6 +503,14 @@
                 height: 12px;
                 background: transparent;
             }
+            #stm-ui-container.stm-role-playlist #stm-menu {
+                top: auto;
+                bottom: calc(100% + 4px);
+            }
+            #stm-ui-container.stm-role-playlist #stm-menu::before {
+                top: auto;
+                bottom: -12px;
+            }
             #stm-ui-container.stm-side-right #stm-menu { right: 0; }
             #stm-ui-container.stm-side-left #stm-menu { left: 0; }
             .stm-menu-item {
@@ -595,19 +603,20 @@
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                padding: 10px 14px;
-                color: #ccc;
+                padding: 10px 16px;
+                color: #eee;
                 cursor: pointer;
                 transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                font-size: 12px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+                font-size: 13px;
+                line-height: 1.4;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
                 position: relative;
                 overflow: hidden;
             }
             .stm-playlist-item:hover {
-                background: rgba(255, 255, 255, 0.08);
+                background: rgba(255, 255, 255, 0.1);
                 color: #fff;
-                padding-left: 18px;
+                padding-left: 20px;
             }
             .stm-playlist-item.active {
                 background: rgba(0, 123, 255, 0.15);
@@ -1034,6 +1043,7 @@
         }
 
         ui.dot.classList.remove('stm-role-p');
+        ui.container.classList.remove('stm-role-playlist');
         ui.miniPlaylist.style.display = 'none';
 
         if (myRole === 'source') {
@@ -1046,6 +1056,7 @@
             ui.dot.textContent = 'P';
             ui.dot.style.display = 'flex';
             ui.dot.classList.add('stm-role-p');
+            ui.container.classList.add('stm-role-playlist');
             ui.miniPlaylist.style.display = 'flex';
         } else {
             // This block is mostly for safety if the container display logic changes.
