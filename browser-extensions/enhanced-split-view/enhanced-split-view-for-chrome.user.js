@@ -44,6 +44,7 @@
 
     const Notify = {
         show(type, message, title = '') {
+            if (window !== window.top) return;
             const notification = document.createElement('div');
             notification.className = `esv-notification ${type}`;
             notification.style.cssText = `
@@ -234,6 +235,7 @@
 
     // Lightweight, synchronous prime from window.name so navigation retains role/id even before async loadState finishes.
     function primeStateFromWindowName() {
+        if (window !== window.top) return;
         try {
             // Try window.name first
             let payloadStr = window.name;
@@ -684,6 +686,7 @@
     }
 
     function createConfigPanel() {
+        if (window !== window.top) return;
         const overlay = document.createElement('div');
         overlay.id = 'stm-config-overlay';
         const panel = document.createElement('div');
@@ -769,6 +772,7 @@
     }
 
     function showConfigPanel() {
+        if (window !== window.top) return;
         if (!configPanel) { configPanel = createConfigPanel(); }
         document.getElementById('stm-source-button').value = config.sourceKey.button;
         document.getElementById('stm-source-ctrl').checked = config.sourceKey.ctrl;
@@ -2120,7 +2124,9 @@
     function initialize() {
         loadConfig();
         loadMuteLazyloadState(); // Load persistent lazyload state
-        injectStyles();
+        if (window === window.top) {
+            injectStyles();
+        }
         primeStateFromWindowName();
 
         // Listen for configuration changes to update notification settings
@@ -2155,24 +2161,26 @@
             mediaManager.init();
 
             // --- Menu Configuration ---
-            const menuCommands = [
-                { name: "Create Source", func: () => setRole('source') },
-                { name: "Reset Roles", func: resetAllRoles },
-                { name: "Preference", func: showConfigPanel }
-            ];
-            menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
+            if (window === window.top) {
+                const menuCommands = [
+                    { name: "Create Source", func: () => setRole('source') },
+                    { name: "Reset Roles", func: resetAllRoles },
+                    { name: "Preference", func: showConfigPanel }
+                ];
+                menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
 
-            window.addEventListener('mousedown', (e) => {
-                if (matchesKeyConfig(e, config.sourceKey)) {
-                    e.preventDefault(); e.stopPropagation();
-                    setRole('source');
-                } else if (matchesKeyConfig(e, config.targetKey)) {
-                    e.preventDefault(); e.stopPropagation();
-                    const l = GM_getValue(KEY_LATEST_SOURCE, null);
-                    if (l) setRole('target', l.sourceId);
-                    else Notify.warning('No Source tab found.');
-                }
-            }, true);
+                window.addEventListener('mousedown', (e) => {
+                    if (matchesKeyConfig(e, config.sourceKey)) {
+                        e.preventDefault(); e.stopPropagation();
+                        setRole('source');
+                    } else if (matchesKeyConfig(e, config.targetKey)) {
+                        e.preventDefault(); e.stopPropagation();
+                        const l = GM_getValue(KEY_LATEST_SOURCE, null);
+                        if (l) setRole('target', l.sourceId);
+                        else Notify.warning('No Source tab found.');
+                    }
+                }, true);
+            }
 
             // Listen for fullscreen changes to hide/show UI
             document.addEventListener('fullscreenchange', () => updateUI());
