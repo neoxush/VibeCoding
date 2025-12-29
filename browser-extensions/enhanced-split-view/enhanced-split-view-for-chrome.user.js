@@ -130,6 +130,8 @@
     const getDisconnectKey = (id) => `${GM_PREFIX}disconnect_${id}`;
     const getSourceListKey = (id) => `${GM_PREFIX}sources_${id}`;
     const getRoleNotificationKey = (id) => `${GM_PREFIX}role_notification_${id}`;
+    const getPlaylistKey = (id) => `${GM_PREFIX}playlist_${id}`;
+    const getPlaylistIndexKey = (id) => `${GM_PREFIX}playlist_index_${id}`;
 
     // Default configuration
     const DEFAULT_CONFIG = {
@@ -155,6 +157,7 @@
     let configPanel = null;
     let activeListeners = [];
     let config = null;
+    let collapseTimeout = null;
 
     // --- Lazyload Mute Control ---
     let muteLazyloadActivated = false;
@@ -479,7 +482,7 @@
             #stm-menu {
                 display: none;
                 position: absolute;
-                top: calc(100% + 8px);
+                top: calc(100% + 4px);
                 background: rgba(30, 30, 30, 0.95);
                 backdrop-filter: blur(16px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
@@ -490,6 +493,15 @@
                 font-family: 'Inter', system-ui, sans-serif;
                 font-size: 13px;
                 z-index: 3;
+            }
+            #stm-menu::before {
+                content: '';
+                position: absolute;
+                top: -12px;
+                left: 0;
+                right: 0;
+                height: 12px;
+                background: transparent;
             }
             #stm-ui-container.stm-side-right #stm-menu { right: 0; }
             #stm-ui-container.stm-side-left #stm-menu { left: 0; }
@@ -537,6 +549,135 @@
             .stm-config-btn-reset { background: #f44336; color: white; }
             .stm-config-btn-reset:hover { background: #da190b; }
             #stm-config-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2147483647; }
+
+            /* Playlist Styles */
+            #stm-playlist-panel {
+                position: absolute;
+                top: calc(100% + 4px);
+                background: rgba(30, 30, 30, 0.95);
+                backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
+                width: 240px;
+                max-height: 400px;
+                overflow-y: auto;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                font-family: 'Inter', system-ui, sans-serif;
+                z-index: 3;
+                display: none;
+                padding: 8px 0;
+            }
+            /* Bridge to prevent mouseleave when moving between dot and panel */
+            #stm-playlist-panel::before {
+                content: '';
+                position: absolute;
+                top: -12px;
+                left: 0;
+                right: 0;
+                height: 12px;
+                background: transparent;
+            }
+            /* Safe zone around the expanded UI */
+            #stm-ui-container:not(.stm-collapsed)::after {
+                content: '';
+                position: absolute;
+                top: -15px;
+                left: -15px;
+                right: -15px;
+                bottom: -15px;
+                z-index: -1;
+                background: transparent;
+            }
+            .stm-side-right #stm-playlist-panel { right: 0; }
+            .stm-side-left #stm-playlist-panel { left: 0; }
+
+            .stm-playlist-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 14px;
+                color: #ccc;
+                cursor: pointer;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                font-size: 12px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+                position: relative;
+                overflow: hidden;
+            }
+            .stm-playlist-item:hover {
+                background: rgba(255, 255, 255, 0.08);
+                color: #fff;
+                padding-left: 18px;
+            }
+            .stm-playlist-item.active {
+                background: rgba(0, 123, 255, 0.15);
+                color: #fff;
+                border-left: 4px solid #007bff;
+            }
+            .stm-playlist-item.playing {
+                background: rgba(40, 167, 69, 0.15);
+                color: #fff;
+                border-left: 4px solid #28a745;
+            }
+            .stm-playlist-item-title {
+                flex: 1;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                font-weight: 500;
+            }
+            .stm-playlist-item-play-icon {
+                width: 12px;
+                height: 12px;
+                fill: currentColor;
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+            .stm-playlist-item:hover .stm-playlist-item-play-icon,
+            .stm-playlist-item.playing .stm-playlist-item-play-icon {
+                opacity: 1;
+            }
+            .stm-playlist-item-remove {
+                opacity: 0;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 16px;
+                transition: all 0.2s;
+                color: #888;
+            }
+            .stm-playlist-item:hover .stm-playlist-item-remove {
+                opacity: 0.6;
+            }
+            .stm-playlist-item-remove:hover {
+                opacity: 1 !important;
+                background: rgba(255, 68, 68, 0.2);
+                color: #ff4444;
+            }
+
+            #stm-mini-playlist {
+                display: none;
+                align-items: center;
+                gap: 4px;
+                margin: 0 4px;
+            }
+            #stm-ui-container:not(.stm-collapsed) #stm-mini-playlist { display: flex; }
+            .stm-mini-btn {
+                width: 24px;
+                height: 24px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s;
+                color: #fff;
+                font-size: 12px;
+            }
+            .stm-mini-btn:hover { background: rgba(255, 255, 255, 0.2); }
+            .stm-mini-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+            #stm-status-dot.stm-role-p { background: linear-gradient(135deg, #6f42c1, #5a32a3); box-shadow: 0 2px 10px rgba(111, 66, 193, 0.3); }
         `);
     }
 
@@ -683,14 +824,15 @@
         const sourcesPrefix = `${GM_PREFIX}sources_`;
         const mutePrefix = `${GM_PREFIX}mute_`;
         const lazyloadPrefix = `${GM_PREFIX}lazyload_`;
+        const playlistPrefix = `${GM_PREFIX}playlist_`;
 
         keys.forEach(k => {
             if (k.startsWith(urlPrefix)) ids.add(k.slice(urlPrefix.length));
             else if (k.startsWith(tsPrefix)) ids.add(k.slice(tsPrefix.length));
             else if (k.startsWith(disconnectPrefix)) ids.add(k.slice(disconnectPrefix.length));
             else if (k.startsWith(sourcesPrefix)) ids.add(k.slice(sourcesPrefix.length));
-            else if (k.startsWith(mutePrefix) || k.startsWith(lazyloadPrefix)) {
-                // Remove tab-specific mute and lazyload states
+            else if (k.startsWith(mutePrefix) || k.startsWith(lazyloadPrefix) || k.startsWith(playlistPrefix)) {
+                // Remove tab-specific mute, lazyload, and playlist states (including index)
                 GM_deleteValue(k);
             }
         });
@@ -779,7 +921,9 @@
                 dot: document.createElement('div'),
                 menu: document.createElement('div'),
                 volume: document.createElement('div'),
-                grip: document.createElement('div')
+                grip: document.createElement('div'),
+                playlistPanel: document.createElement('div'),
+                miniPlaylist: document.createElement('div')
             };
             ui.container.id = 'stm-ui-container';
             ui.container.classList.add('stm-collapsed');
@@ -789,24 +933,64 @@
             ui.grip.id = 'stm-grip';
             ui.grip.innerHTML = '<div class="stm-grip-dot"></div><div class="stm-grip-dot"></div><div class="stm-grip-dot"></div>';
 
-            ui.container.append(ui.grip, ui.volume, ui.dot, ui.menu);
+            ui.playlistPanel.id = 'stm-playlist-panel';
+            ui.miniPlaylist.id = 'stm-mini-playlist';
+            ui.miniPlaylist.innerHTML = `
+                <div class="stm-mini-btn" title="Previous" data-action="prev">
+                    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                </div>
+                <div class="stm-mini-btn" title="Next" data-action="next">
+                    <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6zm9-12h2v12h-2z"/></svg>
+                </div>
+            `;
+
+            ui.container.append(ui.grip, ui.volume, ui.miniPlaylist, ui.dot, ui.menu, ui.playlistPanel);
             document.body.appendChild(ui.container);
 
             // Native Drag & Click (Role Assignment)
             ui.dot.setAttribute('draggable', 'true');
             ui.dot.addEventListener('click', (e) => { if (e.button === 0) toggleMenu(); });
+            ui.dot.addEventListener('dblclick', (e) => {
+                if (myRole === 'target') {
+                    setRole('playlist', myId);
+                } else if (myRole === 'playlist') {
+                    setRole('target', myId);
+                }
+            });
             ui.dot.addEventListener('dragstart', handleRoleDragStart);
+
+            ui.miniPlaylist.addEventListener('click', (e) => {
+                const btn = e.target.closest('.stm-mini-btn');
+                if (btn) {
+                    navigatePlaylist(btn.dataset.action);
+                }
+            });
 
             // UI Movement (Custom Dragging)
             ui.grip.addEventListener('mousedown', handleGripMouseDown);
 
             // Hover Expansion
-            ui.container.addEventListener('mouseenter', () => ui.container.classList.remove('stm-collapsed'));
-            ui.container.addEventListener('mouseleave', (e) => {
-                if (!ui.menu.style.display || ui.menu.style.display === 'none') {
-                    ui.container.classList.add('stm-collapsed');
+            ui.container.addEventListener('mouseenter', () => {
+                if (collapseTimeout) {
+                    clearTimeout(collapseTimeout);
+                    collapseTimeout = null;
                 }
-                handleContainerMouseLeave(e);
+                ui.container.classList.remove('stm-collapsed');
+                if (myRole === 'playlist') {
+                    ui.playlistPanel.style.display = 'block';
+                    updatePlaylistUI();
+                }
+            });
+            ui.container.addEventListener('mouseleave', (e) => {
+                if (collapseTimeout) clearTimeout(collapseTimeout);
+                collapseTimeout = setTimeout(() => {
+                    if (!ui.menu.style.display || ui.menu.style.display === 'none') {
+                        ui.container.classList.add('stm-collapsed');
+                    }
+                    ui.playlistPanel.style.display = 'none';
+                    handleContainerMouseLeave(e);
+                    collapseTimeout = null;
+                }, 400); // 400ms buffer to prevent "slippy" collapse
             });
 
             // Link Drop Support
@@ -849,12 +1033,20 @@
             }
         }
 
+        ui.dot.classList.remove('stm-role-p');
+        ui.miniPlaylist.style.display = 'none';
+
         if (myRole === 'source') {
             ui.dot.textContent = 'S';
             ui.dot.style.display = 'flex';
         } else if (myRole === 'target') {
             ui.dot.textContent = 'T';
             ui.dot.style.display = 'flex';
+        } else if (myRole === 'playlist') {
+            ui.dot.textContent = 'P';
+            ui.dot.style.display = 'flex';
+            ui.dot.classList.add('stm-role-p');
+            ui.miniPlaylist.style.display = 'flex';
         } else {
             // This block is mostly for safety if the container display logic changes.
             ui.dot.style.display = 'none';
@@ -1135,6 +1327,129 @@
         } else {
             ui.volume.style.display = 'none';
         }
+    }
+
+    // --- Playlist Management ---
+    function addToPlaylist(url, title = null) {
+        if (!myId) return;
+        const key = getPlaylistKey(myId);
+        const playlist = GM_getValue(key, []);
+
+        // Avoid duplicates
+        if (playlist.find(item => item.url === url)) {
+            Notify.info('Link already in playlist');
+            return;
+        }
+
+        const newItem = {
+            url: url,
+            title: title || url.split('/').pop() || url,
+            timestamp: Date.now()
+        };
+
+        playlist.push(newItem);
+        GM_setValue(key, playlist);
+        Notify.success('Added to playlist');
+        updatePlaylistUI();
+        pulseDot();
+    }
+
+    function removeFromPlaylist(index) {
+        if (!myId) return;
+        const key = getPlaylistKey(myId);
+        const indexKey = getPlaylistIndexKey(myId);
+        const playlist = GM_getValue(key, []);
+        let currentIndex = GM_getValue(indexKey, -1);
+
+        playlist.splice(index, 1);
+        GM_setValue(key, playlist);
+
+        // Adjust current index if needed
+        if (currentIndex === index) {
+            GM_setValue(indexKey, -1);
+        } else if (currentIndex > index) {
+            GM_setValue(indexKey, currentIndex - 1);
+        }
+
+        updatePlaylistUI();
+    }
+
+    function navigatePlaylist(direction) {
+        if (!myId) return;
+        const key = getPlaylistKey(myId);
+        const indexKey = getPlaylistIndexKey(myId);
+        const playlist = GM_getValue(key, []);
+        if (playlist.length === 0) return;
+
+        let currentIndex = GM_getValue(indexKey, -1);
+
+        // If no index saved, try to find it by current URL
+        if (currentIndex === -1) {
+            const currentUrl = window.location.href;
+            currentIndex = playlist.findIndex(item => item.url === currentUrl);
+        }
+
+        let nextIndex;
+        if (direction === 'next') {
+            nextIndex = (currentIndex + 1) % playlist.length;
+        } else {
+            nextIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+        }
+
+        GM_setValue(indexKey, nextIndex);
+        window.location.href = playlist[nextIndex].url;
+    }
+
+    function updatePlaylistUI() {
+        if (!ui || !ui.playlistPanel || myRole !== 'playlist') return;
+
+        const playlist = GM_getValue(getPlaylistKey(myId), []);
+        const indexKey = getPlaylistIndexKey(myId);
+        const playingIndex = GM_getValue(indexKey, -1);
+        const currentUrl = window.location.href;
+
+        if (playlist.length === 0) {
+            ui.playlistPanel.innerHTML = '<div style="padding: 12px; text-align: center; color: #888; font-size: 12px;">Playlist is empty</div>';
+            return;
+        }
+
+        ui.playlistPanel.innerHTML = playlist.map((item, index) => {
+            const isPlaying = index === playingIndex;
+            const isActive = item.url === currentUrl;
+
+            // Format title: SiteName | PageTitle (or URL part)
+            let siteName = '';
+            try {
+                const urlObj = new URL(item.url);
+                siteName = urlObj.hostname.replace('www.', '');
+            } catch (e) {
+                siteName = 'Link';
+            }
+
+            const displayTitle = `${siteName} | ${item.title}`;
+
+            return `
+                <div class="stm-playlist-item ${isPlaying ? 'playing' : ''} ${isActive ? 'active' : ''}" data-index="${index}">
+                    <div class="stm-playlist-item-play-icon">
+                        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <div class="stm-playlist-item-title" title="${item.url}">${displayTitle}</div>
+                    <div class="stm-playlist-item-remove" data-action="remove" data-index="${index}">&times;</div>
+                </div>
+            `;
+        }).join('');
+
+        ui.playlistPanel.querySelectorAll('.stm-playlist-item').forEach(el => {
+            el.addEventListener('click', (e) => {
+                const index = parseInt(el.dataset.index);
+                if (e.target.dataset.action === 'remove') {
+                    removeFromPlaylist(index);
+                } else {
+                    GM_setValue(indexKey, index);
+                    window.location.href = playlist[index].url;
+                }
+            });
+        });
     }
 
     // --- Media Management (Volume/Mute) ---
@@ -1460,6 +1775,11 @@
             saveState('target', id);
             // Broadcast notification when target joins
             broadcastRoleNotification(id, 'target', myInstanceId);
+        } else if (role === 'playlist') {
+            if (!id) { Notify.error('Cannot become Playlist without a Source ID.'); return; }
+            saveState('playlist', id);
+            // Broadcast notification when playlist joins
+            broadcastRoleNotification(id, 'playlist', myInstanceId);
         }
     }
     // Disconnects just this tab, leaving the other tab in its role.
@@ -1515,6 +1835,8 @@
         if (myRole !== 'idle' && myId) {
             GM_deleteValue(getMuteStateKey(myId, myRole));
             GM_deleteValue(getLazyloadKey(myId, myRole));
+            GM_deleteValue(getPlaylistKey(myId));
+            GM_deleteValue(getPlaylistIndexKey(myId));
         }
         saveState('idle', null, 0, null);
     }
@@ -1544,11 +1866,16 @@
 
         const url = extractUrlFromDataTransfer(e.dataTransfer);
         if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-            // ALWAYS navigate the current tab, regardless of role (S or T).
-            // This maintains the existing user expectation of local navigation.
             e.preventDefault();
             e.stopPropagation();
-            window.location.href = url;
+
+            if (myRole === 'playlist') {
+                addToPlaylist(url);
+            } else {
+                // ALWAYS navigate the current tab, regardless of role (S or T).
+                // This maintains the existing user expectation of local navigation.
+                window.location.href = url;
+            }
         }
     }
 
@@ -1600,8 +1927,13 @@
 
                 e.preventDefault();
                 if (data.role === 'source') {
-                    setRole('target', data.sourceId);
-                } else if (data.role === 'target') {
+                    // If we are already a playlist, stay a playlist but join the new source
+                    if (myRole === 'playlist') {
+                        setRole('playlist', data.sourceId);
+                    } else {
+                        setRole('target', data.sourceId);
+                    }
+                } else if (data.role === 'target' || data.role === 'playlist') {
                     setRole('source', data.sourceId, true);
                 }
             } catch (err) { /* ignore */ }
@@ -1709,6 +2041,27 @@
                 pulseDot();
                 saveState('target', myId, serverTs);
                 window.location.href = GM_getValue(getTargetUrlKey(myId));
+            }
+        } else if (myRole === 'playlist') {
+            const urlListener = GM_addValueChangeListener(getTimestampKey(myId), (k, o, n) => {
+                if (n > myLastTs) {
+                    const url = GM_getValue(getTargetUrlKey(myId));
+                    if (url) {
+                        addToPlaylist(url);
+                        saveState('playlist', myId, n);
+                    }
+                }
+            });
+            activeListeners.push(urlListener);
+
+            // Initial Check for missed updates
+            const serverTs = GM_getValue(getTimestampKey(myId), 0);
+            if (serverTs > myLastTs) {
+                const url = GM_getValue(getTargetUrlKey(myId));
+                if (url) {
+                    addToPlaylist(url);
+                    saveState('playlist', myId, serverTs);
+                }
             }
         }
     }
