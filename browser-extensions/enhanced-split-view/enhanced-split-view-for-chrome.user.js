@@ -23,6 +23,25 @@
     'use strict';
 
     // --- Modern Notification System ---
+    const ttPolicy = (function () {
+        if (window.trustedTypes && window.trustedTypes.createPolicy) {
+            try {
+                return window.trustedTypes.createPolicy('stmPolicy', {
+                    createHTML: (s) => s,
+                    createScript: (s) => s,
+                    createScriptURL: (s) => s
+                });
+            } catch (e) {
+                console.warn('Split View: Trusted Types policy creation failed', e);
+            }
+        }
+        return {
+            createHTML: (s) => s,
+            createScript: (s) => s,
+            createScriptURL: (s) => s
+        };
+    })();
+
     const Notify = {
         show(type, message, title = '') {
             const notification = document.createElement('div');
@@ -61,14 +80,14 @@
                 warning: '⚠'
             }[type] || 'ℹ';
 
-            notification.innerHTML = `
+            notification.innerHTML = ttPolicy.createHTML(`
                 <span style="margin-right: 12px; font-size: 18px; flex-shrink: 0;">${icon}</span>
                 <div style="flex: 1;">
                     ${title ? `<div style="font-weight: 600; margin: 0 0 4px 0; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">${title}</div>` : ''}
                     <div style="margin: 0; font-size: 13px; opacity: 0.9; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">${message}</div>
                 </div>
                 <span class="esv-notification-close" style="margin-left: 12px; cursor: pointer; opacity: 0.7; font-size: 16px; line-height: 1; transition: opacity 0.2s;" title="Dismiss">&times;</span>
-            `;
+            `);
 
             document.body.appendChild(notification);
 
@@ -503,14 +522,6 @@
                 height: 12px;
                 background: transparent;
             }
-            #stm-ui-container.stm-role-playlist #stm-menu {
-                top: auto;
-                bottom: calc(100% + 4px);
-            }
-            #stm-ui-container.stm-role-playlist #stm-menu::before {
-                top: auto;
-                bottom: -12px;
-            }
             #stm-ui-container.stm-side-right #stm-menu { right: 0; }
             #stm-ui-container.stm-side-left #stm-menu { left: 0; }
             .stm-menu-item {
@@ -560,41 +571,22 @@
 
             /* Playlist Styles */
             #stm-playlist-panel {
+                display: none;
                 position: absolute;
                 top: calc(100% + 4px);
                 background: rgba(30, 30, 30, 0.95);
                 backdrop-filter: blur(16px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: 12px;
-                width: 240px;
-                max-height: 400px;
+                width: auto;
+                min-width: 240px;
+                max-width: min(400px, 85vw);
+                max-height: 500px;
                 overflow-y: auto;
                 box-shadow: 0 10px 25px rgba(0,0,0,0.5);
                 font-family: 'Inter', system-ui, sans-serif;
-                z-index: 3;
-                display: none;
-                padding: 8px 0;
-            }
-            /* Bridge to prevent mouseleave when moving between dot and panel */
-            #stm-playlist-panel::before {
-                content: '';
-                position: absolute;
-                top: -12px;
-                left: 0;
-                right: 0;
-                height: 12px;
-                background: transparent;
-            }
-            /* Safe zone around the expanded UI */
-            #stm-ui-container:not(.stm-collapsed)::after {
-                content: '';
-                position: absolute;
-                top: -15px;
-                left: -15px;
-                right: -15px;
-                bottom: -15px;
-                z-index: -1;
-                background: transparent;
+                z-index: 2;
+                padding: 4px 0;
             }
             .stm-side-right #stm-playlist-panel { right: 0; }
             .stm-side-left #stm-playlist-panel { left: 0; }
@@ -634,6 +626,7 @@
                 overflow: hidden;
                 text-overflow: ellipsis;
                 font-weight: 500;
+                font-size: 13px;
             }
             .stm-playlist-item-play-icon {
                 width: 12px;
@@ -695,7 +688,7 @@
         overlay.id = 'stm-config-overlay';
         const panel = document.createElement('div');
         panel.id = 'stm-config-panel';
-        panel.innerHTML = `
+        panel.innerHTML = ttPolicy.createHTML(`
             <h3>Preference</h3>
             <div class="stm-config-section">
                 <h4>Create Source Tab</h4>
@@ -712,9 +705,9 @@
                 <div class="stm-config-row">
                     <div class="stm-config-label">Modifiers:</div>
                     <div class="stm-config-input">
-                        <label for="stm-source-ctrl"><input type="checkbox" id="stm-source-ctrl"> Ctrl</label>
-                        <label for="stm-source-alt"><input type="checkbox" id="stm-source-alt"> Alt</label>
-                        <label for="stm-source-shift"><input type="checkbox" id="stm-source-shift"> Shift</label>
+                        <label><input type="checkbox" id="stm-source-ctrl"> Ctrl</label>
+                        <label><input type="checkbox" id="stm-source-alt"> Alt</label>
+                        <label><input type="checkbox" id="stm-source-shift"> Shift</label>
                     </div>
                 </div>
             </div>
@@ -733,9 +726,9 @@
                 <div class="stm-config-row">
                     <div class="stm-config-label">Modifiers:</div>
                     <div class="stm-config-input">
-                        <label for="stm-target-ctrl"><input type="checkbox" id="stm-target-ctrl"> Ctrl</label>
-                        <label for="stm-target-alt"><input type="checkbox" id="stm-target-alt"> Alt</label>
-                        <label for="stm-target-shift"><input type="checkbox" id="stm-target-shift"> Shift</label>
+                        <label><input type="checkbox" id="stm-target-ctrl"> Ctrl</label>
+                        <label><input type="checkbox" id="stm-target-alt"> Alt</label>
+                        <label><input type="checkbox" id="stm-target-shift"> Shift</label>
                     </div>
                 </div>
             </div>
@@ -744,19 +737,19 @@
                 <div class="stm-config-row">
                     <div class="stm-config-label">Source Role:</div>
                     <div class="stm-config-input">
-                        <label for="stm-notify-new-source"><input type="checkbox" id="stm-notify-new-source"> Notify when new source tab joins</label>
+                        <label><input type="checkbox" id="stm-notify-new-source"> Notify when new source tab joins</label>
                     </div>
                 </div>
                 <div class="stm-config-row">
                     <div class="stm-config-label">Target Role:</div>
                     <div class="stm-config-input">
-                        <label for="stm-notify-new-target"><input type="checkbox" id="stm-notify-new-target"> Notify when new target tab joins</label>
+                        <label><input type="checkbox" id="stm-notify-new-target"> Notify when new target tab joins</label>
                     </div>
                 </div>
                 <div class="stm-config-row">
                     <div class="stm-config-label">Revoke Role:</div>
                     <div class="stm-config-input">
-                        <label for="stm-notify-revoke"><input type="checkbox" id="stm-notify-revoke"> Notify when a tab revokes its role</label>
+                        <label><input type="checkbox" id="stm-notify-revoke"> Notify when a tab revokes its role</label>
                     </div>
                 </div>
             </div>
@@ -765,7 +758,7 @@
                 <button class="stm-config-btn stm-config-btn-cancel" id="stm-config-cancel">Cancel</button>
                 <button class="stm-config-btn stm-config-btn-save" id="stm-config-save">Save</button>
             </div>
-        `;
+        `);
         document.body.appendChild(overlay);
         document.body.appendChild(panel);
         overlay.addEventListener('click', hideConfigPanel);
@@ -940,18 +933,18 @@
             ui.menu.id = 'stm-menu';
             ui.volume.id = 'stm-volume-btn';
             ui.grip.id = 'stm-grip';
-            ui.grip.innerHTML = '<div class="stm-grip-dot"></div><div class="stm-grip-dot"></div><div class="stm-grip-dot"></div>';
+            ui.grip.innerHTML = ttPolicy.createHTML('<div class="stm-grip-dot"></div><div class="stm-grip-dot"></div><div class="stm-grip-dot"></div>');
 
             ui.playlistPanel.id = 'stm-playlist-panel';
             ui.miniPlaylist.id = 'stm-mini-playlist';
-            ui.miniPlaylist.innerHTML = `
+            ui.miniPlaylist.innerHTML = ttPolicy.createHTML(`
                 <div class="stm-mini-btn" title="Previous" data-action="prev">
                     <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
                 </div>
                 <div class="stm-mini-btn" title="Next" data-action="next">
                     <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6zm9-12h2v12h-2z"/></svg>
                 </div>
-            `;
+            `);
 
             ui.container.append(ui.grip, ui.volume, ui.miniPlaylist, ui.dot, ui.menu, ui.playlistPanel);
             document.body.appendChild(ui.container);
@@ -985,18 +978,15 @@
                     collapseTimeout = null;
                 }
                 ui.container.classList.remove('stm-collapsed');
-                if (myRole === 'playlist') {
-                    ui.playlistPanel.style.display = 'block';
-                    updatePlaylistUI();
-                }
+                // Playlist panel is now toggled via click, not hover
             });
             ui.container.addEventListener('mouseleave', (e) => {
                 if (collapseTimeout) clearTimeout(collapseTimeout);
                 collapseTimeout = setTimeout(() => {
-                    if (!ui.menu.style.display || ui.menu.style.display === 'none') {
+                    if ((!ui.menu.style.display || ui.menu.style.display === 'none') &&
+                        (!ui.playlistPanel.style.display || ui.playlistPanel.style.display === 'none')) {
                         ui.container.classList.add('stm-collapsed');
                     }
-                    ui.playlistPanel.style.display = 'none';
                     handleContainerMouseLeave(e);
                     collapseTimeout = null;
                 }, 400); // 400ms buffer to prevent "slippy" collapse
@@ -1042,6 +1032,11 @@
             }
         }
 
+        // Re-inject if missing (aggressive self-healing)
+        if (myRole !== 'idle' && !isFullscreen && document.body && !ui.container.isConnected) {
+            document.body.appendChild(ui.container);
+        }
+
         ui.dot.classList.remove('stm-role-p');
         ui.container.classList.remove('stm-role-playlist');
         ui.miniPlaylist.style.display = 'none';
@@ -1085,7 +1080,7 @@
         }
 
         if (myRole !== 'idle' || (myRole === 'idle' && GM_getValue(KEY_LATEST_SOURCE, null))) {
-            ui.menu.innerHTML = `
+            ui.menu.innerHTML = ttPolicy.createHTML(`
                 <div role="menu" aria-label="Split View Menu">
                     ${contextMenuItems.map(item =>
                 `<button role="menuitem" tabindex="0" data-action="${item.action}" class="stm-menu-item">
@@ -1093,7 +1088,7 @@
                         </button>`
             ).join('')}
                 </div>
-            `;
+            `);
         }
     }
 
@@ -1101,14 +1096,31 @@
         if (ui && ui.menu) {
             const isVisible = ui.menu.style.display === 'block';
             ui.menu.style.display = isVisible ? 'none' : 'block';
+
+            // Also toggle playlist if in playlist role
+            if (myRole === 'playlist' && ui.playlistPanel) {
+                const showing = !isVisible;
+                ui.playlistPanel.style.display = showing ? 'block' : 'none';
+                if (showing) {
+                    updatePlaylistUI();
+                    // Position playlist below menu. 
+                    // Since menu is 140px wide and has 2 items, it's roughly 85px high.
+                    setTimeout(() => {
+                        const menuHeight = ui.menu.offsetHeight || 85;
+                        ui.playlistPanel.style.top = `calc(100% + ${menuHeight + 6}px)`;
+                    }, 0);
+                }
+            }
+
             if (!isVisible) {
                 ui.container.classList.remove('stm-collapsed');
             }
         }
     }
     function hideMenu() {
-        if (ui && ui.menu) {
-            ui.menu.style.display = 'none';
+        if (ui) {
+            if (ui.menu) ui.menu.style.display = 'none';
+            if (ui.playlistPanel) ui.playlistPanel.style.display = 'none';
             ui.container.classList.add('stm-collapsed');
         }
     }
@@ -1116,7 +1128,7 @@
         if (!ui || !ui.container) return;
         const toEl = e.relatedTarget;
         if (!toEl || !ui.container.contains(toEl)) {
-            if (ui.menu.style.display !== 'block') {
+            if (ui.menu.style.display !== 'block' && ui.playlistPanel.style.display !== 'block') {
                 hideMenu();
             }
         }
@@ -1332,7 +1344,7 @@
                 const volIcon = myIsMuted
                     ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
                     : `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-                ui.volume.innerHTML = volIcon;
+                ui.volume.innerHTML = ttPolicy.createHTML(volIcon);
                 ui.volume.title = myIsMuted ? 'Click to unmute' : 'Click to mute';
             }
         } else {
@@ -1420,11 +1432,11 @@
         const currentUrl = window.location.href;
 
         if (playlist.length === 0) {
-            ui.playlistPanel.innerHTML = '<div style="padding: 12px; text-align: center; color: #888; font-size: 12px;">Playlist is empty</div>';
+            ui.playlistPanel.innerHTML = ttPolicy.createHTML('<div style="padding: 12px; text-align: center; color: #888; font-size: 12px;">Playlist is empty</div>');
             return;
         }
 
-        ui.playlistPanel.innerHTML = playlist.map((item, index) => {
+        ui.playlistPanel.innerHTML = ttPolicy.createHTML(playlist.map((item, index) => {
             const isPlaying = index === playingIndex;
             const isActive = item.url === currentUrl;
 
@@ -1448,7 +1460,7 @@
                     <div class="stm-playlist-item-remove" data-action="remove" data-index="${index}">&times;</div>
                 </div>
             `;
-        }).join('');
+        }).join(''));
 
         ui.playlistPanel.querySelectorAll('.stm-playlist-item').forEach(el => {
             el.addEventListener('click', (e) => {
@@ -2077,6 +2089,34 @@
         }
     }
 
+    // --- SPA & YouTube Navigation Support ---
+    function waitForShortsPlayer() {
+        const checkPlayer = () => {
+            // Target specific player elements that indicate a video has loaded in an SPA
+            const player = document.querySelector('#shorts-player') ||
+                document.querySelector('video[is-shorts]') ||
+                document.querySelector('ytd-shorts') ||
+                document.querySelector('#movie_player video'); // Regular YouTube player
+
+            if (player && !player.dataset.esvRestarted) {
+                player.dataset.esvRestarted = 'true';
+                if (stateLoaded && myRole !== 'idle') {
+                    console.log('[Extension] Player detected – refreshing UI');
+                    updateUI();
+                }
+            }
+        };
+
+        // Watch for player injection in the app root
+        const appRoot = document.querySelector('ytd-app') || document.body;
+        const observer = new MutationObserver(checkPlayer);
+        observer.observe(appRoot, { childList: true, subtree: true });
+
+        // Fallback interval
+        checkPlayer();
+        setInterval(checkPlayer, 1000);
+    }
+
     function initialize() {
         loadConfig();
         loadMuteLazyloadState(); // Load persistent lazyload state
@@ -2136,6 +2176,18 @@
 
             // Listen for fullscreen changes to hide/show UI
             document.addEventListener('fullscreenchange', () => updateUI());
+
+            // --- SPA Support Listeners ---
+            document.addEventListener('yt-navigate-finish', () => {
+                setTimeout(waitForShortsPlayer, 300);
+                if (stateLoaded && myRole !== 'idle') updateUI();
+            });
+
+            window.addEventListener('popstate', () => {
+                if (stateLoaded && myRole !== 'idle') updateUI();
+            });
+
+            waitForShortsPlayer();
         });
     }
 
