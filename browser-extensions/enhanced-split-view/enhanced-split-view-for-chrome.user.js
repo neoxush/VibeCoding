@@ -1058,10 +1058,6 @@
             ui.container.addEventListener('mouseleave', (e) => {
                 if (collapseTimeout) clearTimeout(collapseTimeout);
                 collapseTimeout = setTimeout(() => {
-                    if ((!ui.menu.style.display || ui.menu.style.display === 'none') &&
-                        (!ui.playlistPanel.style.display || ui.playlistPanel.style.display === 'none')) {
-                        ui.container.classList.add('stm-collapsed');
-                    }
                     handleContainerMouseLeave(e);
                     collapseTimeout = null;
                 }, 400); // 400ms buffer to prevent "slippy" collapse
@@ -1081,9 +1077,10 @@
                 }
             });
             window.addEventListener('click', (e) => {
-                if (ui && ui.menu.style.display === 'block' && !ui.container.contains(e.target)) {
-                    toggleMenu();
-                    ui.container.classList.add('stm-collapsed');
+                if (ui && !ui.container.contains(e.target)) {
+                    if (ui.menu.style.display === 'block' || (ui.playlistPanel && ui.playlistPanel.style.display === 'block')) {
+                        hideMenu();
+                    }
                 }
             }, true);
 
@@ -1203,9 +1200,7 @@
         if (!ui || !ui.container) return;
         const toEl = e.relatedTarget;
         if (!toEl || !ui.container.contains(toEl)) {
-            if (ui.menu.style.display !== 'block' && ui.playlistPanel.style.display !== 'block') {
-                hideMenu();
-            }
+            hideMenu();
         }
     }
     function pulseDot() { if (ui && ui.dot) { ui.dot.classList.add('stm-pulse-animate'); ui.dot.addEventListener('animationend', () => ui.dot.classList.remove('stm-pulse-animate'), { once: true }); } }
@@ -1498,6 +1493,93 @@
         window.location.href = playlist[nextIndex].url;
     }
 
+    function exportPlaylist() {
+        if (!myId) return;
+        const playlist = GM_getValue(getPlaylistKey(myId), []);
+        if (playlist.length === 0) {
+            Notify.info('Playlist is empty');
+            return;
+        }
+
+        const mdContent = playlist.map(item => `- [${item.title}](${item.url})`).join('\n');
+        const blob = new Blob([mdContent], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `playlist_${new Date().toISOString().slice(0, 10)}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function importPlaylist(files) {
+        if (!files || files.length === 0) return;
+        const file = files[0];
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target.result;
+            const lines = text.split('\n');
+            let addedCount = 0;
+            const currentPlaylist = GM_getValue(getPlaylistKey(myId), []);
+            // Simple regex for - [Title](Url) or just Url
+            const mdLinkRegex = /\[(.*?)\]\((.*?)\)/;
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (!line) return;
+
+                let title = null;
+                let url = null;
+
+                const match = line.match(mdLinkRegex);
+                if (match) {
+                    title = match[1];
+                    url = match[2];
+                } else if (line.startsWith('http')) {
+                    url = line;
+                } else {
+                    // cleaner check for list items that are just urls '- http...'
+                    const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
+                    if (urlMatch) url = urlMatch[1];
+                }
+
+                if (url) {
+                    // Check duplicate
+                    if (!currentPlaylist.find(p => p.url === url)) {
+                        currentPlaylist.push({
+                            url: url,
+                            title: title || url,
+                            timestamp: Date.now()
+                        });
+                        addedCount++;
+                    }
+                }
+            });
+
+            if (addedCount > 0) {
+                GM_setValue(getPlaylistKey(myId), currentPlaylist);
+                Notify.success(`Imported ${addedCount} items`);
+                updatePlaylistUI();
+            } else {
+                Notify.info('No new items found');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function clearPlaylist() {
+        if (!myId) return;
+        if (confirm('Are you sure you want to clear the playlist?')) {
+            GM_setValue(getPlaylistKey(myId), []);
+            GM_setValue(getPlaylistIndexKey(myId), -1);
+            Notify.success('Playlist cleared');
+            updatePlaylistUI();
+        }
+    }
+
     function updatePlaylistUI() {
         if (!ui || !ui.playlistPanel || myRole !== 'playlist') return;
 
@@ -1506,27 +1588,42 @@
         const playingIndex = GM_getValue(indexKey, -1);
         const currentUrl = window.location.href;
 
+        let contentHtml = `
+            <div style="padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+                <div class="stm-mini-btn" style="width: auto; padding: 0 8px; background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.2);" id="stm-playlist-clear" title="Clear Playlist">
+                    Clear
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <label class="stm-mini-btn" style="width: auto; padding: 0 8px; cursor: pointer;" title="Import Playlist">
+                        Import <input type="file" accept=".md,.txt" style="display: none;" id="stm-playlist-import">
+                    </label>
+                    <div class="stm-mini-btn" style="width: auto; padding: 0 8px;" id="stm-playlist-export" title="Export Playlist">
+                        Export
+                    </div>
+                </div>
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+        `;
+
         if (playlist.length === 0) {
-            ui.playlistPanel.innerHTML = ttPolicy.createHTML('<div style="padding: 12px; text-align: center; color: #888; font-size: 12px;">Playlist is empty</div>');
-            return;
-        }
+            contentHtml += '<div style="padding: 12px; text-align: center; color: #888; font-size: 12px;">Playlist is empty</div>';
+        } else {
+            contentHtml += playlist.map((item, index) => {
+                const isPlaying = index === playingIndex;
+                const isActive = item.url === currentUrl;
 
-        ui.playlistPanel.innerHTML = ttPolicy.createHTML(playlist.map((item, index) => {
-            const isPlaying = index === playingIndex;
-            const isActive = item.url === currentUrl;
+                // Format title: SiteName | PageTitle (or URL part)
+                let siteName = '';
+                try {
+                    const urlObj = new URL(item.url);
+                    siteName = urlObj.hostname.replace('www.', '');
+                } catch (e) {
+                    siteName = 'Link';
+                }
 
-            // Format title: SiteName | PageTitle (or URL part)
-            let siteName = '';
-            try {
-                const urlObj = new URL(item.url);
-                siteName = urlObj.hostname.replace('www.', '');
-            } catch (e) {
-                siteName = 'Link';
-            }
+                const displayTitle = `${siteName} | ${item.title}`;
 
-            const displayTitle = `${siteName} | ${item.title}`;
-
-            return `
+                return `
                 <div class="stm-playlist-item ${isPlaying ? 'playing' : ''} ${isActive ? 'active' : ''}" data-index="${index}">
                     <div class="stm-playlist-item-play-icon">
                         <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -1535,7 +1632,28 @@
                     <div class="stm-playlist-item-remove" data-action="remove" data-index="${index}">&times;</div>
                 </div>
             `;
-        }).join(''));
+            }).join('');
+        }
+
+        contentHtml += '</div>';
+
+        ui.playlistPanel.innerHTML = ttPolicy.createHTML(contentHtml);
+
+        // Attach listeners
+        const importInput = ui.playlistPanel.querySelector('#stm-playlist-import');
+        if (importInput) {
+            importInput.addEventListener('change', (e) => importPlaylist(e.target.files));
+        }
+
+        const exportBtn = ui.playlistPanel.querySelector('#stm-playlist-export');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', exportPlaylist);
+        }
+
+        const clearBtn = ui.playlistPanel.querySelector('#stm-playlist-clear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', clearPlaylist);
+        }
 
         ui.playlistPanel.querySelectorAll('.stm-playlist-item').forEach(el => {
             el.addEventListener('click', (e) => {
