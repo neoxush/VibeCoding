@@ -749,78 +749,6 @@
             .stm-mini-btn svg { width: 14px; height: 14px; fill: currentColor; }
 
             #stm-status-dot.stm-role-p { background: linear-gradient(135deg, #6f42c1, #5a32a3); box-shadow: 0 2px 10px rgba(111, 66, 193, 0.3); }
-
-            /* Side Action Bar for Playlist Role */
-            #stm-menu-actions {
-                position: absolute;
-                bottom: 8px; /* Align with the bottom padding of the menu */
-                display: flex;
-                flex-direction: row; /* Horizontal layout */
-                gap: 6px;
-                padding: 0;
-                z-index: 2;
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity 0.2s, transform 0.2s;
-            }
-            /* Position to the right of menu by default, aligning horizontally with bottom items */
-            .stm-side-left #stm-menu-actions {
-                left: 100%;
-                margin-left: 8px;
-                transform: translateX(-10px);
-            }
-            .stm-side-right #stm-menu-actions {
-                right: 100%;
-                margin-right: 8px;
-                transform: translateX(10px);
-            }
-            
-            #stm-menu.visible ~ #stm-menu-actions {
-                opacity: 1;
-                pointer-events: auto;
-                transform: translateX(0);
-            }
-
-            .stm-round-btn {
-                width: 24px; height: 24px; border-radius: 50%;
-                display: flex; align-items: center; justify-content: center;
-                font-weight: 700; font-size: 11px; color: #fff; cursor: pointer;
-                transition: transform 0.2s, background 0.2s;
-                border: 1px solid rgba(255,255,255,0.15);
-                position: relative;
-                background: rgba(20, 20, 20, 0.8); /* Dark background for individual buttons */
-                backdrop-filter: blur(4px);
-                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            }
-            .stm-round-btn:hover { transform: scale(1.15); z-index: 10; }
-            
-            /* Tooltip on hover */
-            .stm-round-btn::after {
-                content: attr(title);
-                position: absolute;
-                top: 50%;
-                transform: translateY(-50%);
-                background: rgba(0,0,0,0.8);
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-                white-space: nowrap;
-                pointer-events: none;
-                opacity: 0;
-                transition: opacity 0.2s;
-            }
-            .stm-side-left .stm-round-btn::after { left: 100%; margin-left: 8px; }
-            .stm-side-right .stm-round-btn::after { right: 100%; margin-right: 8px; }
-            .stm-round-btn:hover::after { opacity: 1; }
-
-            .stm-round-btn[data-type="clear"] { border-color: rgba(244, 67, 54, 0.5); color: #ff6b6b; }
-            .stm-round-btn[data-type="clear"]:hover { background: rgba(244, 67, 54, 0.2); }
-            
-            .stm-round-btn[data-type="import"] { border-color: rgba(33, 150, 243, 0.5); color: #64b5f6; }
-            .stm-round-btn[data-type="import"]:hover { background: rgba(33, 150, 243, 0.2); }
-            
-            .stm-round-btn[data-type="export"] { border-color: rgba(76, 175, 80, 0.5); color: #81c784; }
-            .stm-round-btn[data-type="export"]:hover { background: rgba(76, 175, 80, 0.2); }
         `);
     }
 
@@ -1069,7 +997,6 @@
                 container: document.createElement('div'),
                 dot: document.createElement('div'),
                 menu: document.createElement('div'),
-                menuActions: document.createElement('div'),
                 volume: document.createElement('div'),
                 grip: document.createElement('div'),
                 playlistPanel: document.createElement('div'),
@@ -1079,7 +1006,6 @@
             ui.container.classList.add('stm-collapsed');
             ui.dot.id = 'stm-status-dot';
             ui.menu.id = 'stm-menu';
-            ui.menuActions.id = 'stm-menu-actions';
             ui.volume.id = 'stm-volume-btn';
             ui.grip.id = 'stm-grip';
             ui.grip.innerHTML = ttPolicy.createHTML('<div class="stm-grip-dot"></div><div class="stm-grip-dot"></div><div class="stm-grip-dot"></div>');
@@ -1095,7 +1021,7 @@
                 </div>
             `);
 
-            ui.container.append(ui.grip, ui.volume, ui.miniPlaylist, ui.dot, ui.menu, ui.menuActions, ui.playlistPanel);
+            ui.container.append(ui.grip, ui.volume, ui.miniPlaylist, ui.dot, ui.menu, ui.playlistPanel);
             document.body.appendChild(ui.container);
 
             // Native Drag & Click (Role Assignment)
@@ -1143,8 +1069,6 @@
             ui.dot.addEventListener('drop', handleLinkDrop);
 
             ui.menu.addEventListener('click', handleMenuClick);
-
-
             ui.volume.addEventListener('click', () => {
                 if (!muteLazyloadActivated) {
                     activateMuteLazyload();
@@ -1228,7 +1152,6 @@
         }
 
         if (myRole !== 'idle' || (myRole === 'idle' && GM_getValue(KEY_LATEST_SOURCE, null))) {
-            // Update Menu Content
             ui.menu.innerHTML = ttPolicy.createHTML(`
                 <div role="menu" aria-label="Split View Menu">
                     ${contextMenuItems.map(item =>
@@ -1238,35 +1161,13 @@
             ).join('')}
                 </div>
             `);
-
-            // Update Side Actions (Only for Playlist Role)
-            if (myRole === 'playlist') {
-                ui.menuActions.innerHTML = ttPolicy.createHTML(`
-                    <div class="stm-round-btn" data-type="clear" data-action="clear-playlist" title="Clear Playlist">C</div>
-                    <label class="stm-round-btn" data-type="import" title="Import Playlist" style="cursor: pointer;">
-                        I <input type="file" accept=".md,.txt" style="display: none;" id="stm-playlist-import-menu">
-                    </label>
-                    <div class="stm-round-btn" data-type="export" data-action="export-playlist" title="Export Playlist">E</div>
-                `);
-                ui.menuActions.style.display = 'flex';
-                bindMenuActionListeners(); // Bind listeners after re-render
-            } else {
-                ui.menuActions.innerHTML = '';
-                ui.menuActions.style.display = 'none';
-            }
         }
     }
 
     function toggleMenu() {
         if (ui && ui.menu) {
-            const isVisible = ui.menu.classList.contains('visible');
-            if (isVisible) {
-                ui.menu.classList.remove('visible');
-                ui.menu.style.display = 'none'; // Fallback
-            } else {
-                ui.menu.classList.add('visible');
-                ui.menu.style.display = 'block';
-            }
+            const isVisible = ui.menu.style.display === 'block';
+            ui.menu.style.display = isVisible ? 'none' : 'block';
 
             // Also toggle playlist if in playlist role
             if (myRole === 'playlist' && ui.playlistPanel) {
@@ -1290,10 +1191,7 @@
     }
     function hideMenu() {
         if (ui) {
-            if (ui.menu) {
-                ui.menu.classList.remove('visible');
-                ui.menu.style.display = 'none';
-            }
+            if (ui.menu) ui.menu.style.display = 'none';
             if (ui.playlistPanel) ui.playlistPanel.style.display = 'none';
             ui.container.classList.add('stm-collapsed');
         }
@@ -1301,9 +1199,6 @@
     function handleContainerMouseLeave(e) {
         if (!ui || !ui.container) return;
         const toEl = e.relatedTarget;
-        // prevent closing if moving to menu actions which might be slightly outside due to absolute positioning
-        if (ui.menuActions && ui.menuActions.contains(toEl)) return;
-
         if (!toEl || !ui.container.contains(toEl)) {
             hideMenu();
         }
@@ -1694,6 +1589,19 @@
         const currentUrl = window.location.href;
 
         let contentHtml = `
+            <div style="padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+                <div class="stm-mini-btn" style="width: auto; padding: 0 8px; background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.2);" id="stm-playlist-clear" title="Clear Playlist">
+                    Clear
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <label class="stm-mini-btn" style="width: auto; padding: 0 8px; cursor: pointer;" title="Import Playlist">
+                        Import <input type="file" accept=".md,.txt" style="display: none;" id="stm-playlist-import">
+                    </label>
+                    <div class="stm-mini-btn" style="width: auto; padding: 0 8px;" id="stm-playlist-export" title="Export Playlist">
+                        Export
+                    </div>
+                </div>
+            </div>
             <div style="max-height: 400px; overflow-y: auto;">
         `;
 
@@ -1758,26 +1666,6 @@
                 }
             });
         });
-    }
-    // New helper to handle action delegation from side pannel
-    function bindMenuActionListeners() {
-        if (!ui || !ui.menuActions) return;
-        ui.menuActions.addEventListener('click', (e) => {
-            const btn = e.target.closest('.stm-round-btn');
-            if (!btn) return;
-
-            const action = btn.dataset.action;
-            if (action === 'clear-playlist') clearPlaylist();
-            else if (action === 'export-playlist') exportPlaylist();
-        });
-
-        const fileInput = ui.menuActions.querySelector('#stm-playlist-import-menu');
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => {
-                importPlaylist(e.target.files);
-                toggleMenu(); // Close after import
-            });
-        }
     }
 
     // --- Media Management (Volume/Mute) ---
