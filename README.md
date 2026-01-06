@@ -42,7 +42,32 @@ A powerful browser extension that provides an enhanced split-view experience for
 
 Each project is self-contained with its own setup instructions. Navigate to the project folder of your choice and follow the README for specific setup and usage details.
 
-## �️ Development
+### 📦 Installing Dependencies
+
+Some projects require dependencies to be installed before running. After cloning this repository:
+
+**For Node.js projects** (Match3Craft, TypingFeast):
+```bash
+# Navigate to the project folder
+cd games/match3craft
+# or
+cd games/typingfeast
+
+# Install dependencies
+npm install
+```
+
+**Projects with dependencies:**
+- `games/match3craft` - Requires Node.js and npm
+- `games/typingfeast` - Requires Node.js and npm
+
+**Projects without dependencies:**
+- `games/junglerush` - Pure HTML/CSS/JS (no installation needed)
+- `games/wordly` - Pure HTML/CSS/JS (no installation needed)
+- `tools/*` - Most tools are standalone
+- `browser-extensions/*` - Follow browser-specific installation
+
+## 💻 Development
 
 This repository showcases various web technologies and development approaches. Feel free to explore, learn, and contribute to any project that interests you.
 
