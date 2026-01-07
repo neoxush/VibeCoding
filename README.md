@@ -2,6 +2,11 @@
 
 A curated collection of interactive web applications, games, and development tools, each crafted with modern web technologies and designed for both entertainment and productivity.
 
+## 🌐 Browser Extensions
+
+### [Enhanced Split View](./browser-extensions/enhanced-split-view/)
+A powerful browser extension that provides an enhanced split-view experience for comparing web content side by side.
+
 ## 🎮 Games
 
 ### [JungleRush](./games/junglerush/)
@@ -29,15 +34,6 @@ A versatile checklist application with multiple versions, designed to help you s
 
 ### [Drafter](./tools/drafter/)
 A sketch-to-3D conversion tool that helps transform 2D drawings into 3D models with ease.
-
-## 🌐 Browser Extensions
-
-### [Enhanced Split View](./browser-extensions/enhanced-split-view/)
-A powerful browser extension that provides an enhanced split-view experience for comparing web content side by side.
-
-## 🚀 Getting Started
-
-Each project is self-contained with its own setup instructions. Navigate to the project folder of your choice and follow the README for specific setup and usage details.
 
 ### 📦 Installing Dependencies
 
