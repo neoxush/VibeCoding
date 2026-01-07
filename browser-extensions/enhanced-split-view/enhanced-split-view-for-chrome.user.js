@@ -749,6 +749,27 @@
             .stm-mini-btn svg { width: 14px; height: 14px; fill: currentColor; }
 
             #stm-status-dot.stm-role-p { background: linear-gradient(135deg, #6f42c1, #5a32a3); box-shadow: 0 2px 10px rgba(111, 66, 193, 0.3); }
+
+            .stm-playlist-action-btn {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 6px;
+                padding: 6px;
+                color: #eee;
+                font-size: 12px;
+                font-family: inherit;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .stm-playlist-action-btn:hover {
+                background: rgba(255, 255, 255, 0.15);
+                color: white;
+            }
         `);
     }
 
@@ -1498,6 +1519,65 @@
         window.location.href = playlist[nextIndex].url;
     }
 
+    function sharePlaylist() {
+        if (!myId) return;
+        const playlist = GM_getValue(getPlaylistKey(myId), []);
+        if (playlist.length === 0) {
+            Notify.warning('Playlist is empty');
+            return;
+        }
+
+        try {
+            const minified = playlist.map(p => ({ u: p.url, t: p.title }));
+            const json = JSON.stringify(minified);
+            const encoded = btoa(encodeURIComponent(json));
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('stm_playlist', encoded);
+
+            navigator.clipboard.writeText(url.toString()).then(() => {
+                Notify.success('Playlist URL copied to clipboard');
+            }).catch(err => {
+                console.error(err);
+                Notify.error('Failed to copy to clipboard');
+            });
+        } catch (e) {
+            console.error(e);
+            Notify.error('Failed to generate share link');
+        }
+    }
+
+    function checkPlaylistParam() {
+        if (window !== window.top) return;
+        const params = new URLSearchParams(window.location.search);
+        const encoded = params.get('stm_playlist');
+        if (encoded) {
+            try {
+                const json = decodeURIComponent(atob(encoded));
+                const minified = JSON.parse(json);
+                if (Array.isArray(minified)) {
+                    const playlist = minified.map(p => ({
+                        url: p.u || p.url,
+                        title: p.t || p.title,
+                        timestamp: Date.now()
+                    }));
+
+                    const newId = generateId();
+                    GM_setValue(getPlaylistKey(newId), playlist);
+                    setRole('playlist', newId);
+
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('stm_playlist');
+                    window.history.replaceState({}, '', url);
+
+                    Notify.success(`Imported ${playlist.length} items to playlist`);
+                }
+            } catch (e) {
+                console.error('Split View: Failed to parse playlist', e);
+            }
+        }
+    }
+
     function updatePlaylistUI() {
         if (!ui || !ui.playlistPanel || myRole !== 'playlist') return;
 
@@ -1506,36 +1586,60 @@
         const playingIndex = GM_getValue(indexKey, -1);
         const currentUrl = window.location.href;
 
+        let content = `
+            <div style="display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); margin-bottom: 4px;">
+                <button id="stm-playlist-share-btn" class="stm-playlist-action-btn" title="Copy Playlist URL">
+                    <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor;"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
+                    Share
+                </button>
+                <button id="stm-playlist-clear-btn" class="stm-playlist-action-btn" title="Clear Playlist">
+                    <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: currentColor;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                    Clear
+                </button>
+            </div>
+        `;
+
         if (playlist.length === 0) {
-            ui.playlistPanel.innerHTML = ttPolicy.createHTML('<div style="padding: 12px; text-align: center; color: #888; font-size: 12px;">Playlist is empty</div>');
-            return;
+            content += '<div style="padding: 12px; text-align: center; color: #888; font-size: 12px;">Playlist is empty</div>';
+        } else {
+            content += playlist.map((item, index) => {
+                const isPlaying = index === playingIndex;
+                const isActive = item.url === currentUrl;
+
+                let siteName = '';
+                try {
+                    const urlObj = new URL(item.url);
+                    siteName = urlObj.hostname.replace('www.', '');
+                } catch (e) {
+                    siteName = 'Link';
+                }
+
+                const displayTitle = `${siteName} | ${item.title}`;
+
+                return `
+                    <div class="stm-playlist-item ${isPlaying ? 'playing' : ''} ${isActive ? 'active' : ''}" data-index="${index}">
+                        <div class="stm-playlist-item-play-icon">
+                            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </div>
+                        <div class="stm-playlist-item-title" title="${item.url}">${displayTitle}</div>
+                        <div class="stm-playlist-item-remove" data-action="remove" data-index="${index}">&times;</div>
+                    </div>
+                `;
+            }).join('');
         }
 
-        ui.playlistPanel.innerHTML = ttPolicy.createHTML(playlist.map((item, index) => {
-            const isPlaying = index === playingIndex;
-            const isActive = item.url === currentUrl;
+        ui.playlistPanel.innerHTML = ttPolicy.createHTML(content);
 
-            // Format title: SiteName | PageTitle (or URL part)
-            let siteName = '';
-            try {
-                const urlObj = new URL(item.url);
-                siteName = urlObj.hostname.replace('www.', '');
-            } catch (e) {
-                siteName = 'Link';
+        const shareBtn = ui.playlistPanel.querySelector('#stm-playlist-share-btn');
+        if (shareBtn) shareBtn.addEventListener('click', sharePlaylist);
+
+        const clearBtn = ui.playlistPanel.querySelector('#stm-playlist-clear-btn');
+        if (clearBtn) clearBtn.addEventListener('click', () => {
+            if (confirm('Clear playlist?')) {
+                GM_setValue(getPlaylistKey(myId), []);
+                updatePlaylistUI();
             }
-
-            const displayTitle = `${siteName} | ${item.title}`;
-
-            return `
-                <div class="stm-playlist-item ${isPlaying ? 'playing' : ''} ${isActive ? 'active' : ''}" data-index="${index}">
-                    <div class="stm-playlist-item-play-icon">
-                        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                    </div>
-                    <div class="stm-playlist-item-title" title="${item.url}">${displayTitle}</div>
-                    <div class="stm-playlist-item-remove" data-action="remove" data-index="${index}">&times;</div>
-                </div>
-            `;
-        }).join(''));
+        });
 
         ui.playlistPanel.querySelectorAll('.stm-playlist-item').forEach(el => {
             el.addEventListener('click', (e) => {
@@ -2197,6 +2301,7 @@
         loadMuteLazyloadState(); // Load persistent lazyload state
         if (window === window.top) {
             injectStyles();
+            checkPlaylistParam();
         }
         primeStateFromWindowName();
 
