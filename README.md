@@ -30,9 +30,6 @@ A versatile checklist application with multiple versions, designed to help you s
 ### [Drafter](./tools/drafter/)
 A sketch-to-3D conversion tool that helps transform 2D drawings into 3D models with ease.
 
-### [URL Switch](./tools/urlswitch/)
-A handy utility for quickly switching between different URL configurations, perfect for web developers and testers.
-
 ## 🌐 Browser Extensions
 
 ### [Enhanced Split View](./browser-extensions/enhanced-split-view/)
