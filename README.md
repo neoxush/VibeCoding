@@ -18,6 +18,9 @@ An innovative browser-based match-3 tower defense game built with Three.js and W
 ### [TypingFeast](./games/typingfeast/)
 An immersive 3D typing game featuring word rain mechanics, real-time performance tracking, and progressively challenging gameplay. Built with Three.js and TypeScript.
 
+### [Puzzle RPG](./games/puzzle-rpg/)
+A puzzle-based RPG prototype built with Godot 4.x, combining match-3 mechanics with role-playing elements. Swap candies to create matches and clear the board in this engaging puzzle adventure game.
+
 ### [Wordly](./games/wordly/)
 A modern word puzzle game that challenges your vocabulary and problem-solving skills with daily puzzles and multiple difficulty levels.
 
@@ -50,9 +53,17 @@ cd games/typingfeast
 npm install
 ```
 
+**For Godot projects** (Puzzle RPG):
+```bash
+# Requires Godot 4.x to be installed
+# Open the project.godot file in Godot editor
+# No additional dependencies needed
+```
+
 **Projects with dependencies:**
 - `games/match3craft` - Requires Node.js and npm
 - `games/typingfeast` - Requires Node.js and npm
+- `games/puzzle-rpg` - Requires Godot 4.x
 
 **Projects without dependencies:**
 - `games/junglerush` - Pure HTML/CSS/JS (no installation needed)
