@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/grid.gd" id="1_grid"]
+
+[node name="Main" type="Node2D"]
+
+[node name="BackgroundLayer" type="CanvasLayer" parent="."]
+layer = -1
+
+[node name="ColorRect" type="ColorRect" parent="BackgroundLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.12, 0.12, 0.18, 1.0)
+
+[node name="GameGrid" type="Node2D" parent="."]
+script = ExtResource("1_grid")
+width = 6
+height = 8
+x_start = 70
+y_start = 200
+offset = 110

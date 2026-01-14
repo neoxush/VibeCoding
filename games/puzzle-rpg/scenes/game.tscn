@@ -1,0 +1,23 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/grid.gd" id="1_grid"]
+
+[node name="Game" type="Node2D"]
+
+[node name="Background" type="ColorRect" parent="."]
+visible = false
+offset_right = 720.0
+offset_bottom = 1280.0
+mouse_filter = 2
+color = Color(0.1, 0.1, 0.15, 1) # Dark fallback color
+
+
+[node name="Grid" type="Node2D" parent="."]
+z_index = 99
+script = ExtResource("1_grid")
+width = 6
+height = 8
+x_start = 85
+y_start = 200
+offset = 110
+
