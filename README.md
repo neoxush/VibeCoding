@@ -2,12 +2,12 @@
 
 A curated collection of interactive web applications, games, and development tools, each crafted with modern web technologies and designed for both entertainment and productivity.
 
-## 🌐 Browser Extensions
+## Browser Extensions
 
 ### [Enhanced Split View](./browser-extensions/enhanced-split-view/)
 A powerful browser extension that provides an enhanced split-view experience for comparing web content side by side.
 
-## 🎮 Games
+## Games
 
 ### [godot-match3](./games/puzzle-rpg/)
 A puzzle-based RPG prototype built with Godot 4.x, combining match-3 mechanics with role-playing elements. Swap candies to create matches and clear the board in this engaging puzzle adventure game.
@@ -28,7 +28,7 @@ An immersive 3D typing game featuring word rain mechanics, real-time performance
 A modern word puzzle game that challenges your vocabulary and problem-solving skills with daily puzzles and multiple difficulty levels.
 </details>
 
-## 🛠️ Tools
+## Tools
 
 ### [3D Layout](./tools/3dlayout/)
 A powerful tool for creating 3D blockouts and layouts, perfect for game level design and architectural visualization.
@@ -42,7 +42,7 @@ A versatile checklist application with multiple versions, designed to help you s
 ### [Drafter](./tools/drafter/)
 A sketch-to-3D conversion tool that helps transform 2D drawings into 3D models with ease.
 
-### 📦 Installing Dependencies
+### Installing Dependencies
 
 Some projects require dependencies to be installed before running. After cloning this repository:
 
@@ -75,10 +75,10 @@ npm install
 - `tools/*` - Most tools are standalone
 - `browser-extensions/*` - Follow browser-specific installation
 
-## 💻 Development
+## Development
 
 This repository showcases various web technologies and development approaches. Feel free to explore, learn, and contribute to any project that interests you.
 
-## 📝 License
+## License
 
 Unless otherwise specified, all projects are open-source and available under the MIT License.
