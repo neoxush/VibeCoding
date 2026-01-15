@@ -9,6 +9,12 @@ A powerful browser extension that provides an enhanced split-view experience for
 
 ## 🎮 Games
 
+### [godot-match3](./games/puzzle-rpg/)
+A puzzle-based RPG prototype built with Godot 4.x, combining match-3 mechanics with role-playing elements. Swap candies to create matches and clear the board in this engaging puzzle adventure game.
+
+<details>
+    <summary>Deprecated Ones</summary>
+
 ### [JungleRush](./games/junglerush/)
 A turn-based strategy game with side-scrolling elements, combining platformer mechanics with tactical combat. Navigate through jungle environments and engage in strategic turn-based battles with various enemies.
 
@@ -18,11 +24,9 @@ An innovative browser-based match-3 tower defense game built with Three.js and W
 ### [TypingFeast](./games/typingfeast/)
 An immersive 3D typing game featuring word rain mechanics, real-time performance tracking, and progressively challenging gameplay. Built with Three.js and TypeScript.
 
-### [Puzzle RPG](./games/puzzle-rpg/)
-A puzzle-based RPG prototype built with Godot 4.x, combining match-3 mechanics with role-playing elements. Swap candies to create matches and clear the board in this engaging puzzle adventure game.
-
 ### [Wordly](./games/wordly/)
 A modern word puzzle game that challenges your vocabulary and problem-solving skills with daily puzzles and multiple difficulty levels.
+</details>
 
 ## 🛠️ Tools
 
