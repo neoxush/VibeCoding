@@ -1,4 +1,4 @@
-# Puzzle RPG - Prototype
+# GD Match3 - Prototype
 
 ## How to Run
 1. **Open Godot 4.x**.
