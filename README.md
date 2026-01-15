@@ -9,7 +9,7 @@ A powerful browser extension that provides an enhanced split-view experience for
 
 ## Games
 
-### [godot-match3](./games/puzzle-rpg/)
+### [godot-match3](./games/godot-match3/)
 A puzzle-based RPG prototype built with Godot 4.x, combining match-3 mechanics with role-playing elements. Swap candies to create matches and clear the board in this engaging puzzle adventure game.
 
 <details>
