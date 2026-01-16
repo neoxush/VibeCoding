@@ -218,7 +218,51 @@ func swap_pieces(pos_a, pos_b):
 	
 	await get_tree().create_timer(0.4).timeout
 	
-	find_matches()
+	# Check if this swap creates any matches
+	if check_for_matches():
+		# Valid swap - destroy matches and continue game loop
+		find_matches()
+	else:
+		# Invalid swap - no matches found, swap pieces back
+		print("No match found, swapping back...")
+		swap_back(pos_a, pos_b)
+
+func check_for_matches() -> bool:
+	# Check if there are any matches on the board without marking/destroying them
+	for i in width:
+		for j in height:
+			if all_pieces[i][j] != null:
+				var type = all_pieces[i][j].type
+				# Horizontal check (center piece)
+				if i > 0 and i < width - 1:
+					if all_pieces[i-1][j] != null and all_pieces[i+1][j] != null:
+						if all_pieces[i-1][j].type == type and all_pieces[i+1][j].type == type:
+							return true
+				# Vertical check (center piece)
+				if j > 0 and j < height - 1:
+					if all_pieces[i][j-1] != null and all_pieces[i][j+1] != null:
+						if all_pieces[i][j-1].type == type and all_pieces[i][j+1].type == type:
+							return true
+	return false
+
+func swap_back(pos_a, pos_b):
+	# Swap the pieces back to their original positions
+	var piece_a = all_pieces[pos_a.x][pos_a.y]
+	var piece_b = all_pieces[pos_b.x][pos_b.y]
+	
+	if piece_a == null or piece_b == null:
+		return
+	
+	# Swap in data (reverse)
+	all_pieces[pos_a.x][pos_a.y] = piece_b
+	all_pieces[pos_b.x][pos_b.y] = piece_a
+	
+	piece_a.grid_position = pos_b
+	piece_b.grid_position = pos_a
+	
+	# Animate back to original positions
+	piece_a.move(grid_to_pixel(pos_b.x, pos_b.y))
+	piece_b.move(grid_to_pixel(pos_a.x, pos_a.y))
 
 func find_matches():
 	# Reset flags first? No, we just need to set them for new matches.
