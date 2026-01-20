@@ -22,6 +22,10 @@ var is_dragging = false
 
 var tile_scene = preload("res://scenes/tile.tscn")
 var explosion_scene = preload("res://scenes/explosion_particles.tscn")
+var explosion_counter_scene = preload("res://scenes/explosion_counter.tscn")
+
+# Single explosion counter for the whole grid
+var explosion_counter: Node2D = null
 
 
 # Assets
@@ -340,12 +344,12 @@ func destroy_matches():
 				all_pieces[i][j].queue_free()
 				all_pieces[i][j] = null
 	
+	# Trigger single counter for this match batch
 	if was_matched:
+		trigger_explosion_counter()
 		print("Matches found and destroyed")
 		await get_tree().create_timer(0.4).timeout
 		collapse_columns()
-	else:
-		pass
 
 func collapse_columns():
 	for i in width:
@@ -383,3 +387,17 @@ func refill_columns():
 				
 	await get_tree().create_timer(0.4).timeout
 	find_matches()
+
+# Explosion Counter Functions
+func trigger_explosion_counter():
+	# Create counter if it doesn't exist
+	if explosion_counter == null or not is_instance_valid(explosion_counter):
+		explosion_counter = explosion_counter_scene.instantiate()
+		# Position at center of the grid
+		var center_x = x_start + (width - 1) * offset / 2.0
+		var center_y = y_start + (height - 1) * offset / 2.0
+		explosion_counter.position = Vector2(center_x, center_y)
+		explosion_counter.set_original_position(explosion_counter.position)
+		add_child(explosion_counter)
+	
+	explosion_counter.add_explosion()

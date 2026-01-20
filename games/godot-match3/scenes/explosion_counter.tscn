@@ -1,0 +1,100 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/explosion_counter.gd" id="1_script"]
+[ext_resource type="Shader" path="res://assets/gem.gdshader" id="2_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_glow"]
+shader = ExtResource("2_shader")
+shader_parameter/shine_speed = 0.5
+shader_parameter/shine_width = 0.2
+shader_parameter/shine_opacity = 0.3
+shader_parameter/saturation_boost = 1.2
+shader_parameter/counter_mode = true
+shader_parameter/pulse_speed = 4.0
+shader_parameter/glow_intensity = 2.5
+shader_parameter/glow_color = Color(1, 0.9, 0.1, 1)
+
+[sub_resource type="Curve" id="Curve_burst"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), -1.0, 0.0, 0, 0]
+point_count = 2
+
+[node name="ExplosionCounter" type="Node2D"]
+z_index = 500
+script = ExtResource("1_script")
+
+[node name="GlowBackground" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_glow")
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -120.0
+offset_top = -120.0
+offset_right = 120.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 0)
+
+[node name="Particles" type="CPUParticles2D" parent="."]
+emitting = false
+amount = 16
+lifetime = 0.6
+one_shot = true
+explosiveness = 0.9
+spread = 180.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 150.0
+initial_velocity_max = 250.0
+damping_min = 100.0
+damping_max = 100.0
+scale_amount_min = 8.0
+scale_amount_max = 15.0
+scale_amount_curve = SubResource("Curve_burst")
+color = Color(1, 0.8, 0.2, 1)
+
+[node name="ShadowLabel" type="Label" parent="."]
+modulate = Color(0.4, 0.1, 0, 0.6)
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -72.0
+offset_top = -62.0
+offset_right = 88.0
+offset_bottom = 88.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/outline_size = 25
+theme_override_font_sizes/font_size = 120
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Label" type="Label" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -80.0
+offset_top = -70.0
+offset_right = 80.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0.8, 0.3, 0.1, 1)
+theme_override_colors/font_outline_color = Color(1, 0.5, 0, 1)
+theme_override_constants/shadow_offset_x = 8
+theme_override_constants/shadow_offset_y = 8
+theme_override_constants/outline_size = 22
+theme_override_font_sizes/font_size = 120
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
