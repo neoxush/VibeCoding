@@ -18,27 +18,78 @@ shader_parameter/glow_color = Color(1, 0.9, 0.1, 1)
 _data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), -1.0, 0.0, 0, 0]
 point_count = 2
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gauge_bg"]
+bg_color = Color(0.1, 0.05, 0.2, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.8, 0.2, 0.3)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+expand_margin_left = 2.0
+expand_margin_top = 2.0
+expand_margin_right = 2.0
+expand_margin_bottom = 2.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gauge_fill"]
+bg_color = Color(0.2, 0.6, 1, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.5, 0.9, 1, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+shadow_color = Color(0, 0.4, 1, 0.4)
+shadow_size = 8
+
 [node name="ExplosionCounter" type="Node2D"]
 z_index = 500
 script = ExtResource("1_script")
 
-[node name="GlowBackground" type="ColorRect" parent="."]
-material = SubResource("ShaderMaterial_glow")
-anchors_preset = 8
+[node name="Lightning" type="Line2D" parent="."]
+top_level = true
+z_index = 600
+width = 8.0
+default_color = Color(0.4, 0.8, 1, 1)
+begin_cap_mode = 2
+end_cap_mode = 2
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="EnergyGauge" type="ProgressBar" parent="UI"]
+z_index = -1
+anchors_preset = 5
 anchor_left = 0.5
-anchor_top = 0.5
 anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -120.0
-offset_top = -120.0
-offset_right = 120.0
-offset_bottom = 120.0
+offset_left = -330.0
+offset_top = 155.0
+offset_right = 330.0
+offset_bottom = 175.0
 grow_horizontal = 2
-grow_vertical = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_gauge_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_gauge_fill")
+value = 50.0
+show_percentage = false
+
+[node name="Content" type="Node2D" parent="UI"]
+position = Vector2(360, 150)
+
+[node name="GlowBackground" type="ColorRect" parent="UI/Content"]
+material = SubResource("ShaderMaterial_glow")
+offset_left = -150.0
+offset_top = -70.0
+offset_right = 150.0
+offset_bottom = 70.0
 mouse_filter = 2
 color = Color(1, 1, 1, 0)
 
-[node name="Particles" type="CPUParticles2D" parent="."]
+[node name="Particles" type="CPUParticles2D" parent="UI/Content"]
 emitting = false
 amount = 16
 lifetime = 0.6
@@ -55,38 +106,24 @@ scale_amount_max = 15.0
 scale_amount_curve = SubResource("Curve_burst")
 color = Color(1, 0.8, 0.2, 1)
 
-[node name="ShadowLabel" type="Label" parent="."]
+[node name="ShadowLabel" type="Label" parent="UI/Content"]
 modulate = Color(0.4, 0.1, 0, 0.6)
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -72.0
-offset_top = -62.0
-offset_right = 88.0
-offset_bottom = 88.0
-grow_horizontal = 2
-grow_vertical = 2
+offset_left = -158.0
+offset_top = -58.0
+offset_right = 162.0
+offset_bottom = 52.0
 mouse_filter = 2
 theme_override_constants/outline_size = 25
-theme_override_font_sizes/font_size = 120
+theme_override_font_sizes/font_size = 100
 text = "1"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Label" type="Label" parent="."]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -80.0
-offset_top = -70.0
-offset_right = 80.0
-offset_bottom = 80.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="Label" type="Label" parent="UI/Content"]
+offset_left = -160.0
+offset_top = -60.0
+offset_right = 160.0
+offset_bottom = 50.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0.8, 0.3, 0.1, 1)
@@ -94,7 +131,37 @@ theme_override_colors/font_outline_color = Color(1, 0.5, 0, 1)
 theme_override_constants/shadow_offset_x = 8
 theme_override_constants/shadow_offset_y = 8
 theme_override_constants/outline_size = 22
-theme_override_font_sizes/font_size = 120
+theme_override_font_sizes/font_size = 100
 text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ShadowSkillLabel" type="Label" parent="UI/Content"]
+modulate = Color(0, 0.1, 0.4, 0.6)
+offset_left = -158.0
+offset_top = 42.0
+offset_right = 162.0
+offset_bottom = 92.0
+mouse_filter = 2
+theme_override_constants/outline_size = 15
+theme_override_font_sizes/font_size = 35
+text = "[かみなり]"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SkillLabel" type="Label" parent="UI/Content"]
+offset_left = -160.0
+offset_top = 40.0
+offset_right = 160.0
+offset_bottom = 90.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0.1, 0.3, 0.8, 1)
+theme_override_colors/font_outline_color = Color(0.2, 0.6, 1, 1)
+theme_override_constants/shadow_offset_x = 4
+theme_override_constants/shadow_offset_y = 4
+theme_override_constants/outline_size = 12
+theme_override_font_sizes/font_size = 35
+text = "[かみなり]"
 horizontal_alignment = 1
 vertical_alignment = 1

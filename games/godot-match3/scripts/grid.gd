@@ -37,15 +37,35 @@ var piece_assets = {
 	"yellow": "res://assets/yellow_candy.svg"
 }
 
+# Layout Constants for Section Identification
+const RPG_AREA_HEIGHT: int = 240
+const BRICK_BOARD_Y_START: int = 300
+
 func _ready():
 	print("!!! GRID SCRIPT STARTED !!!")
-	print("Viewport Rect: ", get_viewport_rect())
-	print("Grid Settings: Width=", width, " Height=", height, " X=", x_start)
-	print("Grid initialized")
+	# Initialize Layout Sections
+	setup_layout_sections()
+	
 	all_pieces = make_2d_array()
 	spawn_pieces()
-	# Fix background last so it doesn't block gameplay
+	# Ensure RPG Area elements (gauge/counter) are active
+	initialize_explosion_counter()
 	call_deferred("_fix_background_texture")
+
+func setup_layout_sections():
+	# Identifying the two main zones:
+	# 1. RPG Area (Top): Contains portraits, gauges, and combo notifications
+	# 2. Brick Board (Bottom): The match-3 interactive grid
+	y_start = BRICK_BOARD_Y_START
+	print("Layout Ready: RPG Area Height=", RPG_AREA_HEIGHT, " Brick Board Start=", y_start)
+
+func initialize_explosion_counter():
+	# This widget resides in the RPG Area and uses a CanvasLayer for fixed UI
+	if explosion_counter == null or not is_instance_valid(explosion_counter):
+		explosion_counter = explosion_counter_scene.instantiate()
+		explosion_counter.grid = self
+		# Position (0,0) is fine as the internal CanvasLayer positions itself
+		add_child(explosion_counter)
 
 func _fix_background_texture():
 	print("Attempting to fix background...")
@@ -390,14 +410,54 @@ func refill_columns():
 
 # Explosion Counter Functions
 func trigger_explosion_counter():
-	# Create counter if it doesn't exist
-	if explosion_counter == null or not is_instance_valid(explosion_counter):
-		explosion_counter = explosion_counter_scene.instantiate()
-		# Position at center of the grid
-		var center_x = x_start + (width - 1) * offset / 2.0
-		var center_y = y_start + (height - 1) * offset / 2.0
-		explosion_counter.position = Vector2(center_x, center_y)
-		explosion_counter.set_original_position(explosion_counter.position)
-		add_child(explosion_counter)
-	
+	initialize_explosion_counter()
 	explosion_counter.add_explosion()
+
+func select_random_targets(count_to_select: int):
+	var available_positions = []
+	for i in width:
+		for j in height:
+			if all_pieces[i][j] != null:
+				available_positions.append(Vector2i(i, j))
+	
+	if available_positions.is_empty():
+		return []
+		
+	available_positions.shuffle()
+	var targets = []
+	var actual_count = min(count_to_select, available_positions.size())
+	
+	for i in range(actual_count):
+		var pos = available_positions[i]
+		var piece = all_pieces[pos.x][pos.y]
+		if piece != null:
+			targets.append(grid_to_pixel(pos.x, pos.y))
+	return targets
+
+func explode_at_position(pixel_pos: Vector2):
+	var grid_pos = pixel_to_grid(pixel_pos)
+	if not is_in_grid(grid_pos): return
+	
+	var piece = all_pieces[grid_pos.x][grid_pos.y]
+	if piece == null: return
+	
+	# Visual effect: Replicate match explosion
+	var explosion = explosion_scene.instantiate()
+	explosion.position = pixel_pos
+	explosion.z_index = 110
+	
+	# Lightning flash explosion
+	explosion.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	explosion.emission_sphere_radius = 40.0
+	explosion.color = Color(1.0, 1.0, 1.4, 1.0) # Overbright lightning white
+	explosion.scale_amount_min = 15.0
+	explosion.scale_amount_max = 25.0
+	
+	add_child(explosion)
+	explosion.emitting = true
+	
+	piece.queue_free()
+	all_pieces[grid_pos.x][grid_pos.y] = null
+
+func refill_after_lightning():
+	collapse_columns()
