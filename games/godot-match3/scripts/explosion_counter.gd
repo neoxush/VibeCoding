@@ -26,6 +26,7 @@ var wiggle_tween: Tween = null
 var shake_tween: Tween = null
 var is_disappearing: bool = false
 var is_lingering: bool = false
+var is_casting: bool = false
 var base_rotation: float = 0.0
 var content_original_pos: Vector2 = Vector2.ZERO
 
@@ -53,8 +54,11 @@ func add_explosion():
 	if current_tween and current_tween.is_valid(): current_tween.kill()
 	if shake_tween and shake_tween.is_valid(): shake_tween.kill()
 	
-	is_disappearing = false
-	is_lingering = false
+	if not is_casting:
+		if is_disappearing:
+			is_lingering = false
+		is_disappearing = false
+	
 	count += 1
 	energy += 1
 	reset_timer = RESET_TIME
@@ -72,12 +76,12 @@ func add_explosion():
 	premium_pop_animation()
 	shake_effect()
 	
-	if energy >= max_volume:
+	if energy >= max_volume and not is_casting:
 		cast_lightning_chain()
 
 func update_display():
 	var display_text = ""
-	var is_skill = (energy >= max_volume) or is_lingering
+	var is_skill = (energy >= max_volume) or is_lingering or is_casting
 	
 	if is_skill:
 		display_text = "⚡"
@@ -104,6 +108,8 @@ func update_gauge():
 		gf_tween.tween_property(energy_gauge, "value", energy, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 func cast_lightning_chain():
+	if is_casting: return
+	is_casting = true
 	print("LIGHTNING CHAIN CAST!")
 	var num_targets = floor(max_volume / 2.0)
 	
@@ -127,12 +133,20 @@ func cast_lightning_chain():
 	max_volume += 2
 	count = 0
 	is_lingering = true
+	is_casting = false
 	update_display()
 	
 	# Short delay before fading out
 	await get_tree().create_timer(0.5).timeout
-	update_gauge()
-	disappear_animation()
+	
+	if count > 0:
+		# A new match started during the lingering phase!
+		# Switch back to normal display without disappearing
+		is_lingering = false
+		update_display()
+	else:
+		update_gauge()
+		disappear_animation()
 
 func animate_lightning(targets: Array):
 	lightning.show()
