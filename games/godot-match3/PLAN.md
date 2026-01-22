@@ -9,17 +9,23 @@
 - `collapse_speed` (0.4s): Delay before columns collapse.
 - `refill_speed` (0.4s): Delay before new pieces spawn.
 
-**Skill & Counter (`explosion_counter.gd`):**
+**Skill & Counter (`scripts/explosion_counter.gd`):**
 - `max_volume` (4): Matches needed to trigger the first skill.
 - `RESET_TIME` (5.0s): Time before the combo counter resets.
 - `max_volume_increase` (+2): How much the requirement increases after each cast.
-- `lightning_targets` (floor(max_volume / 2.0)): Number of random tiles destroyed by the skill.
 - `lingering_time` (0.5s): Grace period after a skill cast before the counter fades.
 
+**Active Skills (`scripts/skills/`):**
+- **Thundergod's Wrath** (`scripts/skills/skill_thundergod.gd`):
+    - `energy_cost` (4): Base cost to cast.
+    - `icon`: `res://assets/skill_zuus_thundergods_wrath.png`
+    - `targets`: `floor(energy / 2.0)` random tiles.
+    - `visuals`: Lightning chain effect using `Line2D`.
+
 **Visuals (Juice):**
-- `shake_intensity`: Hardcoded random range (-10, 10).
-- `flash_duration`: Lightning flash speed (0.04s).
-- `scale_punch`: How much the counter grows on impact (1.8x).
+- `shake_intensity`: Hardcoded random range (-10, 10) in `explosion_counter.gd`.
+- `flash_duration`: Lightning flash speed (0.04s) in `skill_thundergod.gd`.
+- `scale_punch`: How much the counter grows on impact (1.8x) in `explosion_counter.gd`.
 
 ---
 
@@ -75,7 +81,9 @@
 ---
 
 ## 3. Immediate Action Items (Next Steps)
-1.  **Refactor `grid.gd`:** Extract the "RPG" logic (Lightning cast) out of the grid and into a dedicated `BattleManager` or `SkillSystem`.
+1.  **Refactor `grid.gd` & Skill System:**
+    - [x] Extract "Lightning cast" logic into a dedicated `Skill` system (Done).
+    - [ ] Move remaining RPG logic (stats, damage) to `BattleManager`.
 2.  **Define the "Battle Scene":** Create a layout that accommodates the Grid (bottom) and the Battle View (top - Player vs Enemy).
 3.  **Implement Basic Stats:** Add HP variables and make Red matches reduce Enemy HP.
 
