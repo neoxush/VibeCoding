@@ -18,6 +18,9 @@ var grid: Node2D = null
 @onready var content: Node2D = $UI/Content
 @onready var energy_gauge: ProgressBar = $UI/EnergyGauge
 @onready var lightning: Line2D = $Lightning
+@onready var skill_icon: TextureRect = $UI/Content/SkillIcon
+
+var current_skill: Resource = null
 
 var current_tween: Tween = null
 var wiggle_tween: Tween = null
@@ -40,6 +43,12 @@ func _ready():
 	lightning.hide()
 	
 	skill_label.visible = false
+	if skill_icon: skill_icon.visible = false
+	
+	# Load default skill
+	var skill_script = load("res://scripts/skills/skill_thundergod.gd")
+	if skill_script:
+		current_skill = skill_script.new()
 
 func _process(delta):
 	if reset_timer > 0 and not is_disappearing:
@@ -73,25 +82,42 @@ func add_explosion():
 	premium_pop_animation()
 	shake_effect()
 	
-	if energy >= max_volume and not is_casting:
-		cast_lightning_chain()
+	if current_skill and energy >= current_skill.energy_cost and not is_casting:
+		cast_skill()
 
 func update_display():
 	var display_text = ""
-	var is_skill = (energy >= max_volume) or is_lingering or is_casting
+	var is_skill_ready = (current_skill and energy >= current_skill.energy_cost) or is_lingering or is_casting
 	
-	if is_skill:
-		display_text = "⚡"
+	if is_skill_ready:
+		if skill_icon and current_skill and current_skill.icon:
+			skill_icon.texture = current_skill.icon
+			skill_icon.visible = true
+			if label: label.visible = false
+		else:
+			# Fallback if no icon
+			display_text = "⚡"
+			if label: 
+				label.text = display_text
+				label.visible = true
+				
 		skill_label.visible = true
+		if current_skill:
+			skill_label.text = "[" + current_skill.name + "]"
 	elif count > 0:
 		display_text = str(count)
 		skill_label.visible = false
+		if skill_icon: skill_icon.visible = false
+		if label:
+			label.text = display_text
+			label.visible = true
 	else:
 		display_text = ""
 		skill_label.visible = false
-		
-	if label:
-		label.text = display_text
+		if skill_icon: skill_icon.visible = false
+		if label:
+			label.text = ""
+			label.visible = false
 
 func update_gauge():
 	if energy_gauge:
@@ -99,11 +125,9 @@ func update_gauge():
 		var gf_tween = create_tween()
 		gf_tween.tween_property(energy_gauge, "value", energy, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
-func cast_lightning_chain():
-	if is_casting: return
+func cast_skill():
+	if is_casting or not current_skill: return
 	is_casting = true
-	print("LIGHTNING CHAIN CAST!")
-	var num_targets = floor(max_volume / 2.0)
 	
 	update_display()
 	content.visible = true 
@@ -111,14 +135,14 @@ func cast_lightning_chain():
 	# Stop the combo reset timer while casting
 	reset_timer = 0
 	
-	await get_tree().create_timer(0.4).timeout
-
-	if grid and grid.has_method("select_random_targets"):
-		var targets = grid.select_random_targets(num_targets)
-		if not targets.is_empty():
-			await animate_lightning(targets)
-			if grid.has_method("refill_after_lightning"):
-				grid.refill_after_lightning()
+	var context = {
+		"grid": grid,
+		"runner": self,
+		"lightning_node": lightning,
+		"origin_pos": content.global_position
+	}
+	
+	await current_skill.execute(context)
 	
 	# Transition into lingering state for fade out
 	energy = 0
@@ -140,44 +164,7 @@ func cast_lightning_chain():
 		update_gauge()
 		disappear_animation()
 
-func animate_lightning(targets: Array):
-	lightning.show()
-	lightning.modulate.a = 1.0
-	# lightning is global, content.global_position is our anchor
-	var start_pos = content.global_position
-	
-	for target_pos in targets:
-		var points = []
-		points.append(start_pos)
-		
-		var segments = 10
-		for i in range(1, segments):
-			var t = float(i) / segments
-			var pos = start_pos.lerp(target_pos, t)
-			var displace = 35.0 * (1.0 - abs(t * 2.0 - 1.0))
-			pos += Vector2(randf_range(-displace, displace), randf_range(-displace, displace))
-			points.append(pos)
-		
-		points.append(target_pos)
-		
-		for flash in range(2):
-			lightning.points = PackedVector2Array(points)
-			lightning.default_color = Color(4.0, 4.0, 4.0, 1)
-			lightning.width = 14.0
-			await get_tree().create_timer(0.04).timeout
-			lightning.default_color = Color(0.4, 0.7, 1.0, 1.0)
-			lightning.width = 7.0
-			await get_tree().create_timer(0.04).timeout
-		
-		if grid and grid.has_method("explode_at_position"):
-			grid.explode_at_position(target_pos)
-		
-		var fade = create_tween()
-		fade.tween_property(lightning, "modulate:a", 0.0, 0.08)
-		await get_tree().create_timer(0.12).timeout
-		lightning.modulate.a = 1.0
-	
-	lightning.hide()
+# animate_lightning removed as it is now in the skill script
 
 func premium_pop_animation():
 	if count <= 0 and energy < max_volume and not is_lingering: return

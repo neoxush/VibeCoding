@@ -41,9 +41,11 @@
 
 ### Phase 2: Enhanced Match-3 Mechanics
 *Focus: Adding strategic options to the grid.*
-- [ ] **Active Skills:**
-    - Replace the automatic "Lightning Chain" with a player-activated skill system.
-    - Example: Spend 10 Blue Mana to cast "Fireball" (3x3 explosion).
+- [x] **Active Skills:**
+    - Refactored `explosion_counter.gd` to use a modular `Skill` resource system.
+    - Implemented "Thundergod's Wrath" as the first `Skill` resource.
+    - Added support for custom skill icons (PNG).
+    - *Next:* Add UI for selecting/activating different skills.
 - [ ] **Special Tiles:**
     - **Bombs:** Created by matching 4+. Explode for area damage.
     - **Locked Tiles:** Created by Enemy debuffs. Must be matched to clear.
