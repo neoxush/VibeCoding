@@ -12,9 +12,7 @@ var energy: int = 0
 var grid: Node2D = null
 
 @onready var label: Label = $UI/Content/Label
-@onready var shadow_label: Label = $UI/Content/ShadowLabel
 @onready var skill_label: Label = $UI/Content/SkillLabel
-@onready var shadow_skill_label: Label = $UI/Content/ShadowSkillLabel
 @onready var glow_bg: ColorRect = $UI/Content/GlowBackground
 @onready var particles: CPUParticles2D = $UI/Content/Particles
 @onready var content: Node2D = $UI/Content
@@ -42,7 +40,6 @@ func _ready():
 	lightning.hide()
 	
 	skill_label.visible = false
-	shadow_skill_label.visible = false
 
 func _process(delta):
 	if reset_timer > 0 and not is_disappearing:
@@ -86,20 +83,15 @@ func update_display():
 	if is_skill:
 		display_text = "⚡"
 		skill_label.visible = true
-		shadow_skill_label.visible = true
 	elif count > 0:
 		display_text = str(count)
 		skill_label.visible = false
-		shadow_skill_label.visible = false
 	else:
 		display_text = ""
 		skill_label.visible = false
-		shadow_skill_label.visible = false
 		
 	if label:
 		label.text = display_text
-	if shadow_label:
-		shadow_label.text = display_text
 
 func update_gauge():
 	if energy_gauge:
