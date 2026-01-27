@@ -17,6 +17,7 @@ var controlling: bool = false
 var first_touch = Vector2i.ZERO
 var final_touch = Vector2i.ZERO
 var is_dragging = false
+var clink_audio_player: AudioStreamPlayer = null
 
 # Preload
 
@@ -50,6 +51,11 @@ func _ready():
 	spawn_pieces()
 	# Ensure RPG Area elements (gauge/counter) are active
 	initialize_explosion_counter()
+	
+	clink_audio_player = AudioStreamPlayer.new()
+	add_child(clink_audio_player)
+	clink_audio_player.stream = load("res://assets/explosion-clinking.mp3")
+	
 	call_deferred("_fix_background_texture")
 
 func setup_layout_sections():
@@ -366,6 +372,10 @@ func destroy_matches():
 	
 	# Trigger single counter for this match batch
 	if was_matched:
+		if clink_audio_player:
+			clink_audio_player.stop()
+			clink_audio_player.play()
+			
 		trigger_explosion_counter()
 		print("Matches found and destroyed")
 		await get_tree().create_timer(0.4).timeout

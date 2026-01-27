@@ -23,9 +23,13 @@
     - `visuals`: Lightning chain effect using `Line2D`.
 
 **Visuals (Juice):**
-- `shake_intensity`: Hardcoded random range (-10, 10) in `explosion_counter.gd`.
-- `flash_duration`: Lightning flash speed (0.04s) in `skill_thundergod.gd`.
 - `scale_punch`: How much the counter grows on impact (1.8x) in `explosion_counter.gd`.
+- `shake_intensity`: Hardcoded random range (-10, 10).
+
+**Audio Assets:**
+- `res://assets/skill-lightning-4s.mp3`: Skill activation (Thundergod's Wrath).
+- `res://assets/skill-lightning-1s.mp3`: Lightning strike hit.
+- `res://assets/explosion-clinking.mp3`: Successful match on the board.
 
 ---
 
@@ -64,7 +68,9 @@
 - [ ] **Damage Numbers:** Pop-up text for damage dealt/taken.
 - [ ] **Health Bars:** Visual HP gauges for Player and Enemy.
 - [ ] **Skill Animations:** Unique visual effects for different skills (Fire, Ice, Lightning).
-- [ ] **Feedback Loop:** Screen shake on heavy hits, sound effects for matches and skills.
+- [x] **Feedback Loop:** Screen shake on hits, sound effects for matches and skills.
+    - Added match clinking sound.
+    - Added skill activation and strike sounds with queuing logic.
 
 ### Phase 4: Data Center (Configuration & State Management)
 *Focus: Centralized control for game balance and monitoring.*

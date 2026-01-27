@@ -18,6 +18,9 @@ func execute(context: Dictionary) -> void:
 
 	print("CASTING THUNDERGOD'S WRATH!")
 	
+	if runner.has_method("play_skill_sound"):
+		runner.play_skill_sound()
+	
 	# Logic adapted from original cast_lightning_chain
 	var power = energy_cost
 	if "max_volume" in runner:
@@ -61,6 +64,10 @@ func animate_lightning(runner: Node, lightning: Line2D, start_pos: Vector2, targ
 			lightning.default_color = Color(0.4, 0.7, 1.0, 1.0)
 			lightning.width = 7.0
 			await runner.get_tree().create_timer(0.04).timeout
+		
+		# Play strike sound
+		if runner.has_method("play_strike_sound"):
+			runner.play_strike_sound()
 		
 		if grid and grid.has_method("explode_at_position"):
 			grid.explode_at_position(target_pos)

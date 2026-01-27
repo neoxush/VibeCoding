@@ -30,6 +30,9 @@ var is_lingering: bool = false
 var is_casting: bool = false
 var base_rotation: float = 0.0
 var content_original_pos: Vector2 = Vector2.ZERO
+var skill_audio_player: AudioStreamPlayer = null
+var strike_audio_player: AudioStreamPlayer = null
+var skill_audio_queue: Array = []
 
 func _ready():
 	count = 0
@@ -41,6 +44,18 @@ func _ready():
 	content_original_pos = content.position
 	update_gauge()
 	lightning.hide()
+	
+	# Audio setup
+	skill_audio_player = AudioStreamPlayer.new()
+	strike_audio_player = AudioStreamPlayer.new()
+	add_child(skill_audio_player)
+	add_child(strike_audio_player)
+	
+	skill_audio_player.stream = load("res://assets/skill-lightning-4s.mp3")
+	strike_audio_player.stream = load("res://assets/skill-lightning-1s.mp3")
+	
+	# Connect finished signal for queue management
+	skill_audio_player.finished.connect(_on_skill_audio_finished)
 	
 	skill_label.visible = false
 	if skill_icon: skill_icon.visible = false
@@ -227,6 +242,28 @@ func reset_counter():
 	is_disappearing = false
 	is_lingering = false
 
-func set_original_position(_pos: Vector2):
-	# Ignored as we use fixed screen positions now
-	pass
+# Audio Management
+func play_strike_sound():
+	if strike_audio_player:
+		# Use a separate player if we want overlapping strikes, 
+		# but for now we just restart it for each strike.
+		strike_audio_player.stop()
+		strike_audio_player.play()
+
+func play_skill_sound():
+	if not skill_audio_player: return
+	
+	if skill_audio_player.playing:
+		# Already playing, add to queue
+		skill_audio_queue.append(skill_audio_player.stream)
+		print("Skill audio playing, adding to queue. Queue size: ", skill_audio_queue.size())
+	else:
+		skill_audio_player.play()
+		print("Playing skill audio.")
+
+func _on_skill_audio_finished():
+	if not skill_audio_queue.is_empty():
+		var next_stream = skill_audio_queue.pop_front()
+		skill_audio_player.stream = next_stream
+		skill_audio_player.play()
+		print("Playing next skill audio from queue.")
