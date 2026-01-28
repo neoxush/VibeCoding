@@ -97,12 +97,12 @@ func add_explosion():
 	premium_pop_animation()
 	shake_effect()
 	
-	if current_skill and energy >= current_skill.energy_cost and not is_casting:
+	if current_skill and energy >= max_volume and not is_casting:
 		cast_skill()
 
 func update_display():
 	var display_text = ""
-	var is_skill_ready = (current_skill and energy >= current_skill.energy_cost) or is_lingering or is_casting
+	var is_skill_ready = (current_skill and energy >= max_volume) or is_lingering or is_casting
 	
 	if is_skill_ready:
 		if skill_icon and current_skill and current_skill.icon:
@@ -144,6 +144,10 @@ func cast_skill():
 	if is_casting or not current_skill: return
 	is_casting = true
 	
+	# Spend energy immediately and update gauge
+	energy = 0
+	update_gauge()
+	
 	update_display()
 	content.visible = true 
 	
@@ -160,7 +164,6 @@ func cast_skill():
 	await current_skill.execute(context)
 	
 	# Transition into lingering state for fade out
-	energy = 0
 	max_volume += 2
 	count = 0
 	is_lingering = true
