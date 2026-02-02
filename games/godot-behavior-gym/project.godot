@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="godot-behavior-gym"
-run/main_scene="uid://dv4abhd4wg48v"
+run/main_scene="res://Level.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 

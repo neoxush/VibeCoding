@@ -1,0 +1,36 @@
+[gd_scene load_steps=5 format=3 uid="uid://fake_cat_uid_123"]
+
+[ext_resource type="Script" path="res://CatController.gd" id="1_controller"]
+[ext_resource type="PackedScene" uid="uid://mmrxcaq5m845" path="res://creaturebundle/Meshes/SK_Cat.fbx" id="2_cat_mesh"]
+[ext_resource type="Script" uid="uid://duohla867my2" path="res://creaturebundle/CreatureTextureAligner.gd" id="3_texture_aligner"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cat"]
+radius = 0.25
+height = 0.8
+
+[node name="Cat" type="CharacterBody3D"]
+script = ExtResource("1_controller")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+shape = SubResource("CapsuleShape3D_cat")
+
+[node name="SK_Cat" parent="." instance=ExtResource("2_cat_mesh")]
+script = ExtResource("3_texture_aligner")
+species = "Cat"
+
+[node name="CameraPivot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 0.5, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraPivot"]
+spring_length = 3.0
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot/SpringArm3D"]
+current = true
+
+[node name="StateLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+billboard = 1
+text = "State: Init"
+font_size = 32
+outline_render_priority = 0
