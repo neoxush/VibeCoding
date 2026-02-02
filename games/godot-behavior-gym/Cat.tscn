@@ -1,6 +1,6 @@
 [gd_scene load_steps=5 format=3 uid="uid://fake_cat_uid_123"]
 
-[ext_resource type="Script" path="res://CatController.gd" id="1_controller"]
+[ext_resource type="Script" path="res://CreatureController.gd" id="1_controller"]
 [ext_resource type="PackedScene" uid="uid://mmrxcaq5m845" path="res://creaturebundle/Meshes/SK_Cat.fbx" id="2_cat_mesh"]
 [ext_resource type="Script" uid="uid://duohla867my2" path="res://creaturebundle/CreatureTextureAligner.gd" id="3_texture_aligner"]
 
@@ -10,6 +10,8 @@ height = 0.8
 
 [node name="Cat" type="CharacterBody3D"]
 script = ExtResource("1_controller")
+visual_path = NodePath("SK_Cat")
+player_controllable = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)

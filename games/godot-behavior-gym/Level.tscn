@@ -1,6 +1,9 @@
-[gd_scene load_steps=10 format=3 uid="uid://fake_level_uid_456"]
+[gd_scene load_steps=13 format=3 uid="uid://fake_level_uid_456"]
 
 [ext_resource type="PackedScene" path="res://Cat.tscn" id="1_cat"]
+[ext_resource type="PackedScene" path="res://Cow.tscn" id="2_cow"]
+[ext_resource type="PackedScene" path="res://Bear.tscn" id="3_bear"]
+[ext_resource type="PackedScene" path="res://Wolf.tscn" id="4_wolf"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_top_color = Color(0.38, 0.45, 0.55, 1)
@@ -82,3 +85,12 @@ shape = SubResource("BoxShape3D_obstacle")
 
 [node name="Cat" parent="." instance=ExtResource("1_cat")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+
+[node name="Cow" parent="." instance=ExtResource("2_cow")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0.5, 5)
+
+[node name="Bear" parent="." instance=ExtResource("3_bear")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0.5, -6)
+
+[node name="Wolf" parent="." instance=ExtResource("4_wolf")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0.5, -2)

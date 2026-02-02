@@ -1,0 +1,28 @@
+[gd_scene load_steps=5 format=3 uid="uid://fake_cow_uid_111"]
+
+[ext_resource type="Script" path="res://CreatureController.gd" id="1_controller"]
+[ext_resource type="PackedScene" uid="uid://b1107jwn1a46b" path="res://creaturebundle/Meshes/SK_Cow.fbx" id="2_cow_mesh"]
+[ext_resource type="Script" uid="uid://duohla867my2" path="res://creaturebundle/CreatureTextureAligner.gd" id="3_texture_aligner"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cow"]
+radius = 0.5
+height = 1.5
+
+[node name="Cow" type="CharacterBody3D"]
+script = ExtResource("1_controller")
+visual_path = NodePath("SK_Cow")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("CapsuleShape3D_cow")
+
+[node name="SK_Cow" parent="." instance=ExtResource("2_cow_mesh")]
+script = ExtResource("3_texture_aligner")
+species = "Cow"
+
+[node name="StateLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
+billboard = 1
+text = "State: Init"
+font_size = 32
+outline_render_priority = 0

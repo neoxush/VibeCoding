@@ -1,0 +1,28 @@
+[gd_scene load_steps=5 format=3 uid="uid://fake_bear_uid_222"]
+
+[ext_resource type="Script" path="res://CreatureController.gd" id="1_controller"]
+[ext_resource type="PackedScene" uid="uid://biyugnm6p05pw" path="res://creaturebundle/Meshes/SK_Bear.fbx" id="2_bear_mesh"]
+[ext_resource type="Script" uid="uid://duohla867my2" path="res://creaturebundle/CreatureTextureAligner.gd" id="3_texture_aligner"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_bear"]
+radius = 0.6
+height = 1.8
+
+[node name="Bear" type="CharacterBody3D"]
+script = ExtResource("1_controller")
+visual_path = NodePath("SK_Bear")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_bear")
+
+[node name="SK_Bear" parent="." instance=ExtResource("2_bear_mesh")]
+script = ExtResource("3_texture_aligner")
+species = "Bear"
+
+[node name="StateLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+billboard = 1
+text = "State: Init"
+font_size = 32
+outline_render_priority = 0
