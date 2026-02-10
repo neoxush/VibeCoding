@@ -8,159 +8,108 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <h1 class="app-title">🏆 Steam Trophy Hunter</h1>
-                <button class="btn-icon" id="settingsBtn" title="About">
-                    <span>⚙️</span>
-                </button>
-            </div>
-        </header>
-
-        <!-- Game Selector Bar -->
-        <div class="game-selector-bar">
-            <div class="game-tabs" id="gameTabs">
-                <!-- Game tabs will be dynamically inserted here -->
+<body data-theme="light">
+    <!-- Fixed Navigation -->
+    <nav class="fixed-nav">
+        <div class="nav-header">
+            <h1>Steam Trophy Hunter</h1>
+            <div class="nav-buttons">
+                <button class="btn-nav" onclick="toggleTheme()" title="Theme">🌓</button>
+                <button class="btn-nav" onclick="showDataModal()" title="Import / Export Data">💾</button>
+                <button class="btn-nav" onclick="showAddGameModal()" title="Add Game">➕</button>
+                <button class="btn-nav" onclick="showAboutModal()" title="About">ℹ️</button>
             </div>
         </div>
 
-        <!-- Search and Filter Bar -->
-        <div class="search-bar">
-            <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search achievements...">
-            <select id="filterSelect" class="filter-select">
-                <option value="all">All Achievements</option>
-                <option value="priority">Priority</option>
-                <option value="favorite">Favorites ⭐</option>
+        <div class="game-tabs" id="gameTabs"></div>
+
+        <div class="nav-controls">
+            <button id="deleteGameBtn" class="btn-nav hidden" onclick="confirmDeleteGame()"
+                title="Delete Current Game">🗑️</button>
+            <input type="text" id="searchInput" placeholder="Search...">
+            <select id="filterSelect">
+                <option value="all">All</option>
                 <option value="incomplete">Incomplete</option>
-                <option value="completed">Completed ✓</option>
+                <option value="completed">Completed</option>
             </select>
+            <span class="stats-compact"><span id="completedCount">0</span>/<span id="totalCount">0</span></span>
         </div>
+    </nav>
 
-        <!-- Stats Summary -->
-        <div class="stats-container">
-            <div class="stat-card">
-                <div class="stat-value" id="totalCount">0</div>
-                <div class="stat-label">Total</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="completedCount">0</div>
-                <div class="stat-label">Completed</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="priorityCount">0</div>
-                <div class="stat-label">Priority</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="completionRate">0%</div>
-                <div class="stat-label">Completion</div>
+    <!-- Main Content -->
+    <main class="main-content">
+        <div id="emptyState" class="empty-state">
+            <p>No achievements found</p>
+            <div class="empty-state-actions">
+                <button class="btn-primary" onclick="showAddGameModal()">+ Add Game</button>
+                <button class="btn-secondary" onclick="showDataModal()">Import Data</button>
             </div>
         </div>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Empty State -->
-            <div id="emptyState" class="empty-state">
-                <div class="empty-icon">🎮</div>
-                <h2>No Achievements Loaded</h2>
-                <p>Click "Load Demo Data" below to see sample achievements from multiple games!</p>
-            </div>
-
-            <!-- Achievement List -->
-            <div id="achievementList" class="achievement-list hidden">
-                <!-- Achievements will be dynamically inserted here -->
-            </div>
-        </main>
-
-        <!-- Footer Actions -->
-        <footer class="footer">
-            <button class="btn-primary" onclick="showAddGameModal()">
-                + Add Game
-            </button>
-            <button class="btn-secondary" onclick="loadDemoData()">
-                �️ Load Demo Data
-            </button>
-            <button class="btn-secondary" onclick="clearData()">
-                🗑️ Clear Data
-            </button>
-        </footer>
-    </div>
+        <div id="achievementList" class="achievement-list hidden"></div>
+    </main>
 
     <!-- Add Game Modal -->
     <div id="addGameModal" class="modal hidden">
         <div class="modal-overlay" onclick="closeAddGameModal()"></div>
         <div class="modal-content">
-            <div class="modal-header">
-                <h2>Add Steam Game</h2>
-                <button class="btn-close" onclick="closeAddGameModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <p class="modal-hint">
-                    Add a Steam game to track its achievements.<br>
-                    You'll need the App ID and game name.
-                </p>
-                <div class="example-box">
-                    <strong>Find App ID:</strong>
-                    <code>https://store.steampowered.com/app/<span class="highlight">2499860</span>/</code>
-                    → App ID is <strong>2499860</strong>
-                </div>
-                <div class="form-group">
-                    <label for="appIdInput">Steam App ID *</label>
-                    <input type="text" id="appIdInput" class="form-input" placeholder="e.g., 2499860">
-                </div>
-                <div class="form-group">
-                    <label for="gameNameInput">Game Name *</label>
-                    <input type="text" id="gameNameInput" class="form-input"
-                        placeholder="e.g., Warhammer 40,000: Space Marine 2">
-                </div>
-                <div id="addGameError" class="modal-error hidden"></div>
-                <div id="addGameLoading" class="modal-loading hidden">
-                    <div class="spinner-small"></div>
-                    <span>Adding game...</span>
-                </div>
-            </div>
-            <div class="modal-footer">
+            <h3>Add Game</h3>
+            <input type="text" id="appIdInput" placeholder="App ID (e.g., 2499860)">
+            <input type="text" id="gameNameInput" placeholder="Game Name">
+            <div id="addGameError" class="error-msg hidden"></div>
+            <div id="addGameLoading" class="loading-msg hidden">Fetching...</div>
+            <div class="modal-buttons">
                 <button class="btn-secondary" onclick="closeAddGameModal()">Cancel</button>
-                <button class="btn-primary" id="addGameBtn" onclick="addGameByAppId()">Add Game</button>
+                <button class="btn-primary" id="addGameBtn" onclick="addGameByAppId()">Add</button>
             </div>
         </div>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal hidden">
-        <div class="modal-overlay" onclick="closeSettingsModal()"></div>
+    <!-- Data Management Modal -->
+    <div id="dataModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeDataModal()"></div>
         <div class="modal-content">
-            <div class="modal-header">
-                <h2>About</h2>
-                <button class="btn-close" onclick="closeSettingsModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="info-box">
-                    <h3>Steam Trophy Hunter</h3>
-                    <p><strong>Version:</strong> 1.0 (Design Prototype)</p>
-                    <p><strong>Purpose:</strong> Visualize achievement tracking UI/UX</p>
-                    <br>
-                    <p>This is a design prototype to demonstrate the interface for tracking Steam achievements across
-                        multiple games.</p>
-                    <br>
-                    <p><strong>Features:</strong></p>
-                    <ul style="margin-left: 20px; margin-top: 8px;">
-                        <li>Multi-game support with game tabs</li>
-                        <li>Achievement search and filtering</li>
-                        <li>Priority and favorite marking</li>
-                        <li>Progress tracking</li>
-                        <li>Statistics dashboard</li>
-                    </ul>
-                    <br>
-                    <p><strong>Note:</strong> This is a static prototype. To connect to real Steam data, a backend
-                        service would be needed.</p>
+            <h3>Data Management</h3>
+            <p class="modal-subtitle">Export your progress to transfer to another device or backup.</p>
+
+            <div class="data-section">
+                <h4>Export Data</h4>
+                <div class="field-group">
+                    <textarea id="exportInput" readonly placeholder="Your data will appear here..."></textarea>
+                    <button class="btn-primary" onclick="exportData()">Copy to Clipboard</button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-primary" onclick="closeSettingsModal()">Close</button>
+
+            <div class="data-section">
+                <h4>Import Data</h4>
+                <div class="field-group">
+                    <textarea id="importInput" placeholder="Paste your data code here..."></textarea>
+                    <button class="btn-warning" onclick="importData()">Import & Overwrite</button>
+                    <div id="importError" class="error-msg hidden"></div>
+                </div>
             </div>
+
+            <div class="data-section">
+                <h4>Reset</h4>
+                <div class="field-group">
+                    <button class="btn-danger" onclick="clearData()">Reset All Data</button>
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeDataModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeAboutModal()"></div>
+        <div class="modal-content">
+            <h3>About</h3>
+            <p>Steam Trophy Hunter v1.0</p>
+            <p>Track achievements across multiple games</p>
+            <p><strong>Click achievements to mark complete</strong></p>
+            <button class="btn-primary" onclick="closeAboutModal()">Close</button>
         </div>
     </div>
 
