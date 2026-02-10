@@ -145,15 +145,28 @@ body {
     cursor: pointer;
 }
 
-#deleteGameBtn {
-    background: var(--danger-color);
+#deleteGameBtn,
+#syncProgressBtn {
     color: white;
     opacity: 0.8;
 }
 
-#deleteGameBtn:hover {
+#deleteGameBtn {
+    background: var(--danger-color);
+}
+
+#syncProgressBtn {
+    background: var(--success-color);
+}
+
+#deleteGameBtn:hover,
+#syncProgressBtn:hover {
     opacity: 1;
     transform: scale(1.05);
+}
+
+#syncInput {
+    height: 200px;
 }
 
 .stats-compact {
@@ -429,17 +442,38 @@ body {
 }
 
 .achievement-card.completed .achievement-name {
-    text-decoration: line-through;
+    text-decoration: none;
 }
 
 .achievement-icon {
     width: 40px;
     height: 40px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 20px;
     flex-shrink: 0;
+    position: relative;
+}
+
+.achievement-card.completed .achievement-icon::after {
+    content: '✓';
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    background: var(--success-color);
+    color: white;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--bg-primary);
+    font-weight: bold;
 }
 
 .achievement-content {

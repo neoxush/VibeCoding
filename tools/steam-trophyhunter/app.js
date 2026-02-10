@@ -8,16 +8,33 @@ let currentGame = 'all'; // 'all' or specific game name
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
-    loadAchievements();
-    setupEventListeners();
-    initializeTheme();
-    updateUI();
+    console.log('[App] Initializing sync...');
+    try {
+        loadAchievements();
+        setupEventListeners();
+        initializeTheme();
+
+        // Final sync of the UI state
+        updateUI();
+
+        console.log(`[App] Started. Tracking ${achievements.length} achievements.`);
+    } catch (e) {
+        console.error("[App] Fatal startup error:", e);
+    }
 });
 
 // Event Listeners
 function setupEventListeners() {
-    document.getElementById('searchInput').addEventListener('input', handleSearch);
-    document.getElementById('filterSelect').addEventListener('change', handleFilter);
+    const searchInput = document.getElementById('searchInput');
+    const filterSelect = document.getElementById('filterSelect');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', handleSearch);
+        searchInput.addEventListener('paste', handleSearchPaste);
+    }
+    if (filterSelect) {
+        filterSelect.addEventListener('change', handleFilter);
+    }
 }
 
 // Search Handler
@@ -28,13 +45,26 @@ function handleSearch(event) {
 
 // Filter Handler
 function handleFilter(event) {
-    const query = document.getElementById('searchInput').value.toLowerCase();
+    const searchInput = document.getElementById('searchInput');
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
     applyFilters(query);
+}
+
+// Paste Handler for Search Bar (Smart Sync Detection)
+function handleSearchPaste(event) {
+    const pastedText = (event.clipboardData || window.clipboardData).getData('text');
+
+    // If it looks like a Steam Achievement list (long text with 'Unlocked' or 'Earned')
+    if (pastedText.length > 300 && (pastedText.includes('Unlocked') || pastedText.includes('earned') || pastedText.includes('@'))) {
+        event.preventDefault(); // Don't put the huge text in the search box
+        showSyncModal(pastedText);
+    }
 }
 
 // Apply all filters
 function applyFilters(searchQuery = '') {
-    const filter = document.getElementById('filterSelect').value;
+    const filterSelect = document.getElementById('filterSelect');
+    const filter = filterSelect ? filterSelect.value : '';
 
     // Start with all achievements
     let filtered = [...achievements];
@@ -99,17 +129,19 @@ function switchGame(gameName, event) {
     }
 
     // Apply filters with current game
-    const query = document.getElementById('searchInput').value.toLowerCase();
+    const searchInput = document.getElementById('searchInput');
+    const query = searchInput ? searchInput.value.toLowerCase() : '';
     applyFilters(query);
 
     // Show/Hide delete button
     const deleteBtn = document.getElementById('deleteGameBtn');
     if (deleteBtn) {
-        if (currentGame === 'all') {
-            deleteBtn.classList.add('hidden');
-        } else {
-            deleteBtn.classList.remove('hidden');
-        }
+        deleteBtn.classList.toggle('hidden', currentGame === 'all');
+    }
+
+    // Persist current game selection
+    if (currentGame) {
+        localStorage.setItem('currentGame', currentGame);
     }
 }
 
@@ -117,49 +149,60 @@ function switchGame(gameName, event) {
 function renderGameTabs() {
     const tabsContainer = document.getElementById('gameTabs');
 
+    if (!tabsContainer) {
+        console.error("Game tabs container not found.");
+        return;
+    }
+
     if (achievements.length === 0) {
         tabsContainer.innerHTML = '';
         return;
     }
 
-    // Get unique games with counts
-    const gameStats = {};
-    achievements.forEach(ach => {
-        if (!gameStats[ach.game]) {
-            gameStats[ach.game] = {
-                total: 0,
-                completed: 0,
-                icon: ach.gameIcon || '�'
-            };
-        }
-        gameStats[ach.game].total++;
-        if (ach.achieved) {
-            gameStats[ach.game].completed++;
-        }
-    });
+    try {
+        // Get unique games with counts
+        const gameStats = {};
+        achievements.forEach(ach => {
+            const name = ach.game || 'Unknown Game';
+            if (!gameStats[name]) {
+                gameStats[name] = {
+                    total: 0,
+                    completed: 0,
+                    icon: ach.gameIcon || '🏆'
+                };
+            }
+            gameStats[name].total++;
+            if (ach.achieved) {
+                gameStats[name].completed++;
+            }
+        });
 
-    // Create tabs HTML
-    let tabsHTML = `
-        <div class="game-tab game-tab-all ${currentGame === 'all' ? 'active' : ''}" onclick="switchGame('all', event)">
-            <span class="game-tab-icon">�</span>
-            <span class="game-tab-name">All Games</span>
-            <span class="game-tab-count">${achievements.length}</span>
-        </div>
-    `;
-
-    Object.keys(gameStats).sort().forEach(gameName => {
-        const stats = gameStats[gameName];
-        const escapedName = gameName.replace(/'/g, "\\'");
-        tabsHTML += `
-            <div class="game-tab ${currentGame === gameName ? 'active' : ''}" onclick="switchGame('${escapedName}', event)">
-                <span class="game-tab-icon">${stats.icon}</span>
-                <span class="game-tab-name">${gameName}</span>
-                <span class="game-tab-count">${stats.completed}/${stats.total}</span>
+        // Create tabs HTML
+        let tabsHTML = `
+            <div class="game-tab game-tab-all ${currentGame === 'all' ? 'active' : ''}" onclick="switchGame('all', event)">
+                <span class="game-tab-icon">🏆</span>
+                <span class="game-tab-name">All Games</span>
+                <span class="game-tab-count">${achievements.length}</span>
             </div>
         `;
-    });
 
-    tabsContainer.innerHTML = tabsHTML;
+        Object.keys(gameStats).sort().forEach(gameName => {
+            const stats = gameStats[gameName];
+            const escapedName = gameName.replace(/'/g, "\\'");
+            tabsHTML += `
+                <div class="game-tab ${currentGame === gameName ? 'active' : ''}" onclick="switchGame('${escapedName}', event)">
+                    <span class="game-tab-icon">${stats.icon}</span>
+                    <span class="game-tab-name">${gameName}</span>
+                    <span class="game-tab-count">${stats.completed}/${stats.total}</span>
+                </div>
+            `;
+        });
+
+        tabsContainer.innerHTML = tabsHTML;
+    } catch (e) {
+        console.error("Error rendering game tabs:", e);
+        tabsContainer.innerHTML = '<div class="error-message">Error loading game tabs.</div>';
+    }
 }
 
 // Load Demo Data with more games
@@ -170,7 +213,7 @@ function loadDemoData() {
             id: '1',
             name: 'Heartbreaker',
             description: 'Complete the game in co-op mode',
-            icon: '🎯',
+            icon: '🏆',
             achieved: false,
             progress: 60,
             priority: 'high',
@@ -178,7 +221,7 @@ function loadDemoData() {
             globalPercentage: 12.5,
             rarity: 'rare',
             game: 'Portal 2',
-            gameIcon: '🔵'
+            gameIcon: '🏆'
         },
         {
             id: '2',
@@ -192,13 +235,13 @@ function loadDemoData() {
             globalPercentage: 78.3,
             rarity: 'common',
             game: 'Portal 2',
-            gameIcon: '🔵'
+            gameIcon: '🏆'
         },
         {
             id: '3',
             name: 'Professor Portal',
             description: 'Complete all test chambers',
-            icon: '🎓',
+            icon: '🏆',
             achieved: false,
             progress: 75,
             priority: 'medium',
@@ -206,13 +249,13 @@ function loadDemoData() {
             globalPercentage: 45.2,
             rarity: 'uncommon',
             game: 'Portal 2',
-            gameIcon: '🔵'
+            gameIcon: '🏆'
         },
         {
             id: '6',
             name: 'Speed Runner',
             description: 'Complete the game in under 2 hours',
-            icon: '⚡',
+            icon: '🏆',
             achieved: false,
             progress: 0,
             priority: 'high',
@@ -220,13 +263,13 @@ function loadDemoData() {
             globalPercentage: 3.2,
             rarity: 'epic',
             game: 'Portal 2',
-            gameIcon: '🔵'
+            gameIcon: '🏆'
         },
         {
             id: '7',
             name: 'Friendly Fire',
             description: 'Complete co-op without killing your partner',
-            icon: '🤝',
+            icon: '🏆',
             achieved: true,
             progress: 100,
             priority: 'low',
@@ -234,7 +277,7 @@ function loadDemoData() {
             globalPercentage: 56.8,
             rarity: 'common',
             game: 'Portal 2',
-            gameIcon: '🔵'
+            gameIcon: '🏆'
         },
 
         // Half-Life 2
@@ -242,7 +285,7 @@ function loadDemoData() {
             id: '4',
             name: 'Lambda Locator',
             description: 'Find all lambda caches',
-            icon: '🔍',
+            icon: '🏆',
             achieved: false,
             progress: 18,
             priority: 'low',
@@ -250,13 +293,13 @@ function loadDemoData() {
             globalPercentage: 23.1,
             rarity: 'uncommon',
             game: 'Half-Life 2',
-            gameIcon: '🔶'
+            gameIcon: '🏆'
         },
         {
             id: '5',
             name: 'Zombie Chopper',
             description: 'Kill 1000 zombies with the gravity gun',
-            icon: '⚔️',
+            icon: '🏆',
             achieved: false,
             progress: 45,
             priority: 'high',
@@ -264,13 +307,13 @@ function loadDemoData() {
             globalPercentage: 8.7,
             rarity: 'rare',
             game: 'Half-Life 2',
-            gameIcon: '🔶'
+            gameIcon: '🏆'
         },
         {
             id: '9',
             name: 'Gravity Master',
             description: 'Kill 50 enemies with physics objects',
-            icon: '🌀',
+            icon: '🏆',
             achieved: true,
             progress: 100,
             priority: 'medium',
@@ -278,7 +321,7 @@ function loadDemoData() {
             globalPercentage: 42.3,
             rarity: 'common',
             game: 'Half-Life 2',
-            gameIcon: '🔶'
+            gameIcon: '🏆'
         },
 
         // Undertale
@@ -286,7 +329,7 @@ function loadDemoData() {
             id: '8',
             name: 'Pacifist',
             description: 'Complete the game without killing anyone',
-            icon: '☮️',
+            icon: '🏆',
             achieved: false,
             progress: 30,
             priority: 'medium',
@@ -294,13 +337,13 @@ function loadDemoData() {
             globalPercentage: 15.4,
             rarity: 'rare',
             game: 'Undertale',
-            gameIcon: '❤️'
+            gameIcon: '🏆'
         },
         {
             id: '10',
             name: 'True Hero',
             description: 'Get the true pacifist ending',
-            icon: '⭐',
+            icon: '🏆',
             achieved: false,
             progress: 10,
             priority: 'high',
@@ -308,13 +351,13 @@ function loadDemoData() {
             globalPercentage: 8.9,
             rarity: 'rare',
             game: 'Undertale',
-            gameIcon: '❤️'
+            gameIcon: '🏆'
         },
         {
             id: '11',
             name: 'Determined',
             description: 'Die 100 times',
-            icon: '💀',
+            icon: '🏆',
             achieved: true,
             progress: 100,
             priority: 'low',
@@ -322,7 +365,7 @@ function loadDemoData() {
             globalPercentage: 67.2,
             rarity: 'common',
             game: 'Undertale',
-            gameIcon: '❤️'
+            gameIcon: '🏆'
         },
 
         // Terraria
@@ -330,7 +373,7 @@ function loadDemoData() {
             id: '12',
             name: 'Eye on You',
             description: 'Defeat the Eye of Cthulhu',
-            icon: '👁️',
+            icon: '🏆',
             achieved: true,
             progress: 100,
             priority: 'medium',
@@ -338,13 +381,13 @@ function loadDemoData() {
             globalPercentage: 82.5,
             rarity: 'common',
             game: 'Terraria',
-            gameIcon: '🌳'
+            gameIcon: '🏆'
         },
         {
             id: '13',
             name: 'Slayer of Worlds',
             description: 'Defeat every boss',
-            icon: '👑',
+            icon: '🏆',
             achieved: false,
             progress: 35,
             priority: 'high',
@@ -352,13 +395,13 @@ function loadDemoData() {
             globalPercentage: 5.2,
             rarity: 'epic',
             game: 'Terraria',
-            gameIcon: '🌳'
+            gameIcon: '🏆'
         },
         {
             id: '14',
             name: 'Home Sweet Home',
             description: 'Build a house for every NPC',
-            icon: '🏠',
+            icon: '🏆',
             achieved: false,
             progress: 60,
             priority: 'medium',
@@ -366,7 +409,7 @@ function loadDemoData() {
             globalPercentage: 28.7,
             rarity: 'uncommon',
             game: 'Terraria',
-            gameIcon: '🌳'
+            gameIcon: '🏆'
         },
 
         // Elden Ring (Real Steam Achievements)
@@ -374,7 +417,7 @@ function loadDemoData() {
             id: '15',
             name: 'Elden Lord',
             description: 'Achieve the "Elden Lord" ending',
-            icon: '👑',
+            icon: '🏆',
             achieved: false,
             progress: 0,
             priority: 'high',
@@ -382,13 +425,13 @@ function loadDemoData() {
             globalPercentage: 28.4,
             rarity: 'uncommon',
             game: 'Elden Ring',
-            gameIcon: '⚔️'
+            gameIcon: '🏆'
         },
         {
             id: '16',
             name: 'Shardbearer Godrick',
             description: 'Defeated Shardbearer Godrick',
-            icon: '🛡️',
+            icon: '🏆',
             achieved: true,
             progress: 100,
             priority: 'medium',
@@ -396,13 +439,13 @@ function loadDemoData() {
             globalPercentage: 67.8,
             rarity: 'common',
             game: 'Elden Ring',
-            gameIcon: '⚔️'
+            gameIcon: '🏆'
         },
         {
             id: '17',
             name: 'Shardbearer Malenia',
             description: 'Defeated Shardbearer Malenia',
-            icon: '⚡',
+            icon: '🏆',
             achieved: false,
             progress: 15,
             priority: 'high',
@@ -410,13 +453,13 @@ function loadDemoData() {
             globalPercentage: 34.2,
             rarity: 'uncommon',
             game: 'Elden Ring',
-            gameIcon: '⚔️'
+            gameIcon: '🏆'
         },
         {
             id: '18',
             name: 'Legendary Armaments',
             description: 'Acquired all legendary armaments',
-            icon: '⚔️',
+            icon: '🏆',
             achieved: false,
             progress: 40,
             priority: 'medium',
@@ -424,13 +467,13 @@ function loadDemoData() {
             globalPercentage: 8.9,
             rarity: 'rare',
             game: 'Elden Ring',
-            gameIcon: '⚔️'
+            gameIcon: '🏆'
         },
         {
             id: '19',
             name: 'Legendary Ashen Remains',
             description: 'Acquired all legendary ashen remains',
-            icon: '🔥',
+            icon: '🏆',
             achieved: false,
             progress: 25,
             priority: 'low',
@@ -438,13 +481,13 @@ function loadDemoData() {
             globalPercentage: 6.7,
             rarity: 'rare',
             game: 'Elden Ring',
-            gameIcon: '⚔️'
+            gameIcon: '🏆'
         },
         {
             id: '20',
             name: 'Age of the Stars',
             description: 'Achieved the "Age of the Stars" ending',
-            icon: '⭐',
+            icon: '🏆',
             achieved: false,
             progress: 0,
             priority: 'high',
@@ -452,7 +495,7 @@ function loadDemoData() {
             globalPercentage: 19.3,
             rarity: 'uncommon',
             game: 'Elden Ring',
-            gameIcon: '⚔️'
+            gameIcon: '🏆'
         }
     ];
 
@@ -467,6 +510,11 @@ function loadDemoData() {
 function renderAchievements() {
     const listContainer = document.getElementById('achievementList');
     const emptyState = document.getElementById('emptyState');
+
+    if (!listContainer || !emptyState) {
+        console.error("Achievement list or empty state container not found.");
+        return;
+    }
 
     if (filteredAchievements.length === 0 && achievements.length === 0) {
         listContainer.classList.add('hidden');
@@ -490,6 +538,7 @@ function renderAchievements() {
 function createAchievementCard(ach) {
     const completedClass = ach.achieved ? 'completed' : '';
     const priorityClass = `priority-${ach.priority}`;
+    const displayProgress = ach.achieved ? 100 : ach.progress;
 
     return `
         <div class="achievement-card ${completedClass} ${priorityClass}" onclick="toggleAchievement('${ach.id}')">
@@ -499,18 +548,15 @@ function createAchievementCard(ach) {
                     <span class="achievement-name">${escapeHtml(ach.name)}</span>
                     <div class="achievement-badges">
                         ${ach.favorite ? '<span>⭐</span>' : ''}
-                        ${ach.achieved ? '<span style="color: #4caf50;">✓</span>' : ''}
                     </div>
                 </div>
                 <div class="achievement-description">${escapeHtml(ach.description)}</div>
-                ${!ach.achieved ? `
-                    <div class="achievement-progress">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${ach.progress}%"></div>
-                        </div>
-                        <span class="progress-text">${ach.progress}%</span>
+                <div class="achievement-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${displayProgress}%; background: ${ach.achieved ? 'var(--success-color)' : ''}"></div>
                     </div>
-                ` : ''}
+                    <span class="progress-text" style="${ach.achieved ? 'color: var(--success-color); font-weight: bold;' : ''}">${displayProgress}%</span>
+                </div>
                 <div class="achievement-meta">
                     <span class="meta-item">Game: ${escapeHtml(ach.game)}</span>
                     <span class="meta-item">${ach.globalPercentage}% players</span>
@@ -530,83 +576,174 @@ function escapeHtml(text) {
 
 // Update UI
 function updateUI() {
+    // Ensure data is filtered correctly before rendering
+    const searchInput = document.getElementById('searchInput');
+    const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
+    applyFilters(searchQuery);
+
     renderGameTabs();
     renderAchievements();
     updateStats();
 
-    // Sync delete button visibility
+    // Sync buttons visibility
     const deleteBtn = document.getElementById('deleteGameBtn');
-    if (deleteBtn) {
-        if (currentGame === 'all') {
-            deleteBtn.classList.add('hidden');
-        } else {
-            deleteBtn.classList.remove('hidden');
-        }
-    }
+    const syncBtn = document.getElementById('syncProgressBtn');
+    const isAll = currentGame === 'all';
+
+    if (deleteBtn) deleteBtn.classList.toggle('hidden', isAll);
+    if (syncBtn) syncBtn.classList.toggle('hidden', isAll);
 }
 
-// Update Statistics (based on current game filter)
+// Update Statistics (based on current view/filter)
 function updateStats() {
-    let statsAchievements = achievements;
+    const total = filteredAchievements.length;
+    const completed = filteredAchievements.filter(a => a.achieved).length;
 
-    // Filter by current game if not "all"
-    if (currentGame !== 'all') {
-        statsAchievements = achievements.filter(a => a.game === currentGame);
-    }
+    const totalCountEl = document.getElementById('totalCount');
+    const completedCountEl = document.getElementById('completedCount');
 
-    const total = statsAchievements.length;
-    const completed = statsAchievements.filter(a => a.achieved).length;
-    const priority = statsAchievements.filter(a => a.priority === 'high' || a.priority === 'medium').length;
-    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    document.getElementById('totalCount').textContent = total;
-    document.getElementById('completedCount').textContent = completed;
+    if (totalCountEl) totalCountEl.textContent = total;
+    if (completedCountEl) completedCountEl.textContent = completed;
 }
 
 // Modal Functions
 function showAddGameModal() {
-    document.getElementById('addGameModal').classList.remove('hidden');
-    document.getElementById('appIdInput').value = '';
-    document.getElementById('gameNameInput').value = '';
-    document.getElementById('appIdInput').focus();
+    const modal = document.getElementById('addGameModal');
+    const appIdInput = document.getElementById('appIdInput');
+    const gameNameInput = document.getElementById('gameNameInput');
+
+    if (modal) modal.classList.remove('hidden');
+    if (appIdInput) appIdInput.value = '';
+    if (gameNameInput) gameNameInput.value = '';
+    if (appIdInput) appIdInput.focus();
     hideAddGameError();
     hideAddGameLoading();
 }
 
 function closeAddGameModal() {
-    document.getElementById('addGameModal').classList.add('hidden');
+    const modal = document.getElementById('addGameModal');
+    if (modal) modal.classList.add('hidden');
 }
 
 function showSettingsModal() {
-    document.getElementById('settingsModal').classList.remove('hidden');
+    const modal = document.getElementById('settingsModal');
+    if (modal) modal.classList.remove('hidden');
 }
 
 function closeSettingsModal() {
-    document.getElementById('settingsModal').classList.add('hidden');
+    const modal = document.getElementById('settingsModal');
+    if (modal) modal.classList.add('hidden');
 }
 
 function showAddGameError(message) {
     const errorEl = document.getElementById('addGameError');
-    errorEl.textContent = message;
-    errorEl.classList.remove('hidden');
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.classList.remove('hidden');
+    }
 }
 
 function hideAddGameError() {
-    document.getElementById('addGameError').classList.add('hidden');
+    const errorEl = document.getElementById('addGameError');
+    if (errorEl) errorEl.classList.add('hidden');
 }
 
 function showAddGameLoading() {
-    document.getElementById('addGameLoading').classList.remove('hidden');
+    const loadingEl = document.getElementById('addGameLoading');
+    if (loadingEl) loadingEl.classList.remove('hidden');
 }
 
 function hideAddGameLoading() {
-    document.getElementById('addGameLoading').classList.add('hidden');
+    const loadingEl = document.getElementById('addGameLoading');
+    if (loadingEl) loadingEl.classList.add('hidden');
+}
+
+// Sync Modal Functions
+function showSyncModal(initialText = '') {
+    if (currentGame === 'all') {
+        showNotification('Please select a specific game tab first to sync progress.', 'info');
+        return;
+    }
+    const syncInput = document.getElementById('syncInput');
+    const syncModal = document.getElementById('syncModal');
+
+    if (syncInput) syncInput.value = initialText;
+    if (syncModal) syncModal.classList.remove('hidden');
+
+    if (!initialText && syncInput) {
+        syncInput.focus();
+    }
+}
+
+function closeSyncModal() {
+    const syncModal = document.getElementById('syncModal');
+    if (syncModal) syncModal.classList.add('hidden');
+}
+
+function processBulkSync() {
+    const syncInput = document.getElementById('syncInput');
+    const text = syncInput ? syncInput.value : '';
+    if (!text.trim()) {
+        showNotification('Please paste some text first.', 'warning');
+        return;
+    }
+
+    const gameAchievements = achievements.filter(a => a.game === currentGame);
+    if (gameAchievements.length === 0) {
+        showNotification('No achievements found for the current game.', 'error');
+        return;
+    }
+
+    let syncedCount = 0;
+    const fullText = text.toLowerCase();
+
+    gameAchievements.forEach(ach => {
+        if (ach.achieved) return;
+
+        const achName = ach.name.toLowerCase();
+
+        // Find name in text
+        const nameIdx = fullText.indexOf(achName);
+        if (nameIdx !== -1) {
+            // Steam Community paste format check:
+            // The name is usually followed by the description and then "Unlocked [Date]"
+            // We search in a small window after the name for completion keywords.
+            const excerpt = fullText.substring(nameIdx, nameIdx + 250);
+
+            // Stricter check for Steam's "Unlocked [Date]" or "Earned [Date]" pattern.
+            // This avoids catching generic words or the "once unlocked" text at the bottom.
+            const months = 'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december';
+            const completionRegex = new RegExp(`(unlocked|earned)\\s+(\\d+|${months})\\s+(\\d+|${months})`, 'i');
+
+            // Specifically exclude the "once unlocked" phrase used for hidden achievements
+            const isCompleted = completionRegex.test(excerpt) && !excerpt.includes('once unlocked');
+
+            if (isCompleted) {
+                ach.achieved = true;
+                ach.progress = 100;
+                syncedCount++;
+            }
+        }
+    });
+
+    if (syncedCount > 0) {
+        saveAchievements();
+        updateUI();
+        closeSyncModal();
+        showNotification(`Synced ${syncedCount} achievements!`, 'success');
+    } else {
+        showNotification('No new completed achievements detected. Make sure you copied the "Unlocked" status too.', 'info');
+    }
 }
 
 // Add Game by App ID - Fetch REAL achievements from Steam
 async function addGameByAppId() {
-    const appId = document.getElementById('appIdInput').value.trim();
-    const gameName = document.getElementById('gameNameInput').value.trim();
+    const appIdInput = document.getElementById('appIdInput');
+    const gameNameInput = document.getElementById('gameNameInput');
+    const addGameBtn = document.getElementById('addGameBtn');
+
+    const appId = appIdInput ? appIdInput.value.trim() : '';
+    const gameName = gameNameInput ? gameNameInput.value.trim() : '';
 
     // Validation
     if (!appId) {
@@ -639,7 +776,7 @@ async function addGameByAppId() {
 
     hideAddGameError();
     showAddGameLoading();
-    document.getElementById('addGameBtn').disabled = true;
+    if (addGameBtn) addGameBtn.disabled = true;
 
     try {
         // Try to fetch REAL achievements from Steam
@@ -665,7 +802,7 @@ async function addGameByAppId() {
         showAddGameError(`Error: ${error.message || 'Unknown error occurred'}`);
     } finally {
         hideAddGameLoading();
-        document.getElementById('addGameBtn').disabled = false;
+        if (addGameBtn) addGameBtn.disabled = false;
     }
 }
 
@@ -746,7 +883,7 @@ async function fetchRealSteamAchievements(appId, gameName) {
         else if (globalPercentage < 40) rarity = 'uncommon';
 
         // Set consistent icon
-        const icon = '🏆';
+        const icon = '🏆'; // Generic game controller icon
 
         realAchievements.push({
             id: `${appId}_${index}`,
@@ -760,7 +897,7 @@ async function fetchRealSteamAchievements(appId, gameName) {
             globalPercentage: globalPercentage,
             rarity: rarity,
             game: gameName,
-            gameIcon: '🏆'
+            gameIcon: '🏆' // Generic game controller icon
         });
     });
 
@@ -776,7 +913,7 @@ function createAchievementsFromGameData(gameData, appId) {
         {
             name: 'First Steps',
             description: `Start playing ${gameData.name}`,
-            icon: '🎮',
+            icon: '🏆',
             achieved: false,
             progress: 0,
             priority: 'medium',
@@ -787,7 +924,7 @@ function createAchievementsFromGameData(gameData, appId) {
         {
             name: 'Getting Started',
             description: 'Complete the tutorial or first level',
-            icon: '📚',
+            icon: '🏆',
             achieved: false,
             progress: 0,
             priority: 'medium',
@@ -798,7 +935,7 @@ function createAchievementsFromGameData(gameData, appId) {
         {
             name: 'Dedicated Player',
             description: 'Play for 10 hours',
-            icon: '⏰',
+            icon: '🏆',
             achieved: false,
             progress: 0,
             priority: 'low',
@@ -820,7 +957,7 @@ function createAchievementsFromGameData(gameData, appId) {
         {
             name: 'Perfectionist',
             description: 'Achieve 100% completion',
-            icon: '⭐',
+            icon: '🏆',
             achieved: false,
             progress: 0,
             priority: 'high',
@@ -843,7 +980,7 @@ function createAchievementsFromGameData(gameData, appId) {
         globalPercentage: ach.globalPercentage,
         rarity: ach.rarity,
         game: gameData.name,
-        gameIcon: '🎮'
+        gameIcon: '🏆'
     }));
 }
 
@@ -879,14 +1016,16 @@ function toggleTheme() {
     localStorage.setItem('theme', currentTheme);
 
     const themeNames = { light: '☀️', dark: '🌙', auto: '🔄' };
-    document.getElementById('themeBtn').textContent = themeNames[currentTheme];
+    const themeBtn = document.getElementById('themeBtn');
+    if (themeBtn) themeBtn.textContent = themeNames[currentTheme];
     showNotification(`Theme: ${currentTheme}`, 'info');
 }
 
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     const themeNames = { light: '☀️', dark: '🌙', auto: '🔄' };
-    document.getElementById('themeBtn').textContent = themeNames[theme];
+    const themeBtn = document.getElementById('themeBtn');
+    if (themeBtn) themeBtn.textContent = themeNames[theme];
 }
 
 // Toggle Achievement Completion
@@ -967,24 +1106,43 @@ function saveAchievements() {
 }
 
 function loadAchievements() {
+    console.log('[Cache] Reading data...');
     const saved = localStorage.getItem('achievements');
+    const savedGame = localStorage.getItem('currentGame');
+
     if (saved) {
-        achievements = JSON.parse(saved);
+        try {
+            const parsed = JSON.parse(saved);
 
-        // Deduplicate on load (cleans up any prior pollution)
-        const before = achievements.length;
-        const seen = new Set();
-        achievements = achievements.filter(a => {
-            if (seen.has(a.id)) return false;
-            seen.add(a.id);
-            return true;
-        });
-        if (achievements.length < before) {
-            console.log(`Cleaned ${before - achievements.length} duplicate achievements on load`);
-            localStorage.setItem('achievements', JSON.stringify(achievements));
+            // Critical check: Ensure achievements is always an array
+            if (Array.isArray(parsed)) {
+                achievements = parsed;
+
+                // Deduplicate on load
+                const seen = new Set();
+                achievements = achievements.filter(a => {
+                    if (!a.id || seen.has(a.id)) return false;
+                    seen.add(a.id);
+                    return true;
+                });
+
+                filteredAchievements = [...achievements];
+                console.log(`[Cache] Successfully loaded ${achievements.length} records.`);
+            } else {
+                console.warn('[Cache] Data format invalid, resetting cache.');
+                achievements = [];
+            }
+        } catch (e) {
+            console.error('[Cache] Parse error, resetting cache:', e);
+            achievements = [];
         }
+    }
 
-        filteredAchievements = [...achievements];
+    // Reconcile tab selection
+    if (savedGame && achievements.some(a => a.game === savedGame)) {
+        currentGame = savedGame;
+    } else {
+        currentGame = 'all';
     }
 }
 // Data Management

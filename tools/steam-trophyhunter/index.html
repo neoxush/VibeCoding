@@ -26,7 +26,9 @@
         <div class="nav-controls">
             <button id="deleteGameBtn" class="btn-nav hidden" onclick="confirmDeleteGame()"
                 title="Delete Current Game">🗑️</button>
-            <input type="text" id="searchInput" placeholder="Search...">
+            <button id="syncProgressBtn" class="btn-nav hidden" style="display: none;" onclick="showSyncModal()"
+                title="Pasteboard Sync (Mark Done Achievements)">📋</button>
+            <input type="text" id="searchInput" placeholder="Search a trophy or paste with your Steam trophy list">
             <select id="filterSelect">
                 <option value="all">All</option>
                 <option value="incomplete">Incomplete</option>
@@ -110,6 +112,29 @@
             <p>Track achievements across multiple games</p>
             <p><strong>Click achievements to mark complete</strong></p>
             <button class="btn-primary" onclick="closeAboutModal()">Close</button>
+        </div>
+    </div>
+
+    <!-- Sync Progress Modal -->
+    <div id="syncModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeSyncModal()"></div>
+        <div class="modal-content">
+            <h3>Sync Progress</h3>
+            <p class="modal-subtitle">Sync your achievements by pasting text from your Steam Community profile.</p>
+
+            <div class="field-group">
+                <textarea id="syncInput" placeholder="Paste all achievement text here..."></textarea>
+                <div class="info-box">
+                    <p><strong>How to sync:</strong> Go to your Steam Achievements page, press <code>Ctrl + A</code>
+                        (Select All), <code>Ctrl + C</code> (Copy), and then paste it here. We'll automatically find the
+                        ones you've finished.</p>
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeSyncModal()">Cancel</button>
+                <button class="btn-primary" onclick="processBulkSync()">Sync Now</button>
+            </div>
         </div>
     </div>
 
