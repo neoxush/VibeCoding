@@ -30,6 +30,12 @@ A modern word puzzle game that challenges your vocabulary and problem-solving sk
 
 ## Tools
 
+### [Steam Trophy Hunter](./tools/steam-trophyhunter/)
+A comprehensive tool for tracking and managing Steam achievements, helping players visualize their progress and complete their collection across their entire game library.
+
+<details>
+    <summary>Deprecated Ones</summary>
+
 ### [3D Layout](./tools/3dlayout/)
 A powerful tool for creating 3D blockouts and layouts, perfect for game level design and architectural visualization.
 
@@ -45,6 +51,7 @@ A sketch-to-3D conversion tool that helps transform 2D drawings into 3D models w
 ### Installing Dependencies
 
 Some projects require dependencies to be installed before running. After cloning this repository:
+</details>
 
 **For Node.js projects** (Match3Craft, TypingFeast):
 ```bash
