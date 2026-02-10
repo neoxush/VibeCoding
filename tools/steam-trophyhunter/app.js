@@ -183,17 +183,29 @@ function renderGameTabs() {
                 <span class="game-tab-icon">🏆</span>
                 <span class="game-tab-name">All Games</span>
                 <span class="game-tab-count">${achievements.length}</span>
+                ${currentGame === 'all' ? `
+                    <button class="tab-sync-btn" onclick="event.stopPropagation(); showSyncModal()" title="Sync All Games">
+                        📋
+                    </button>
+                ` : ''}
             </div>
         `;
 
         Object.keys(gameStats).sort().forEach(gameName => {
             const stats = gameStats[gameName];
             const escapedName = gameName.replace(/'/g, "\\'");
+            const isActive = currentGame === gameName;
+
             tabsHTML += `
-                <div class="game-tab ${currentGame === gameName ? 'active' : ''}" onclick="switchGame('${escapedName}', event)">
+                <div class="game-tab ${isActive ? 'active' : ''}" onclick="switchGame('${escapedName}', event)">
                     <span class="game-tab-icon">${stats.icon}</span>
                     <span class="game-tab-name">${gameName}</span>
                     <span class="game-tab-count">${stats.completed}/${stats.total}</span>
+                    ${isActive ? `
+                        <button class="tab-sync-btn" onclick="event.stopPropagation(); showSyncModal()" title="Sync ${gameName}">
+                            📋
+                        </button>
+                    ` : ''}
                 </div>
             `;
         });
@@ -591,7 +603,7 @@ function updateUI() {
     const isAll = currentGame === 'all';
 
     if (deleteBtn) deleteBtn.classList.toggle('hidden', isAll);
-    if (syncBtn) syncBtn.classList.toggle('hidden', isAll);
+    if (syncBtn) syncBtn.classList.toggle('hidden', achievements.length === 0);
 }
 
 // Update Statistics (based on current view/filter)
@@ -660,10 +672,6 @@ function hideAddGameLoading() {
 
 // Sync Modal Functions
 function showSyncModal(initialText = '') {
-    if (currentGame === 'all') {
-        showNotification('Please select a specific game tab first to sync progress.', 'info');
-        return;
-    }
     const syncInput = document.getElementById('syncInput');
     const syncModal = document.getElementById('syncModal');
 
@@ -688,51 +696,71 @@ function processBulkSync() {
         return;
     }
 
-    const gameAchievements = achievements.filter(a => a.game === currentGame);
+    const gameAchievements = currentGame === 'all' ? achievements : achievements.filter(a => a.game === currentGame);
     if (gameAchievements.length === 0) {
-        showNotification('No achievements found for the current game.', 'error');
+        showNotification(currentGame === 'all' ? 'No achievements found.' : 'No achievements found for the current game.', 'error');
         return;
     }
 
     let syncedCount = 0;
+    let progressUpdatedCount = 0;
     const fullText = text.toLowerCase();
+    const months = 'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december';
 
     gameAchievements.forEach(ach => {
-        if (ach.achieved) return;
-
         const achName = ach.name.toLowerCase();
 
         // Find name in text
         const nameIdx = fullText.indexOf(achName);
         if (nameIdx !== -1) {
-            // Steam Community paste format check:
-            // The name is usually followed by the description and then "Unlocked [Date]"
-            // We search in a small window after the name for completion keywords.
-            const excerpt = fullText.substring(nameIdx, nameIdx + 250);
+            // Find in a window after the name
+            const excerpt = fullText.substring(nameIdx, nameIdx + 300);
 
-            // Stricter check for Steam's "Unlocked [Date]" or "Earned [Date]" pattern.
-            // This avoids catching generic words or the "once unlocked" text at the bottom.
-            const months = 'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december';
+            // 1. Check for 100% completion
             const completionRegex = new RegExp(`(unlocked|earned)\\s+(\\d+|${months})\\s+(\\d+|${months})`, 'i');
-
-            // Specifically exclude the "once unlocked" phrase used for hidden achievements
             const isCompleted = completionRegex.test(excerpt) && !excerpt.includes('once unlocked');
 
             if (isCompleted) {
-                ach.achieved = true;
-                ach.progress = 100;
-                syncedCount++;
+                if (!ach.achieved) {
+                    ach.achieved = true;
+                    ach.progress = 100;
+                    syncedCount++;
+                }
+            } else if (!ach.achieved) {
+                // 2. Check for progress (e.g. "5 / 10" or "50%")
+                const progressRegex = /(\d+)\s*\/\s*(\d+)/;
+                const progressMatch = excerpt.match(progressRegex);
+
+                if (progressMatch) {
+                    const current = parseInt(progressMatch[1]);
+                    const target = parseInt(progressMatch[2]);
+                    if (target > 0) {
+                        const newProgress = Math.min(99, Math.round((current / target) * 100)); // Cap at 99% if not 'Unlocked'
+                        if (newProgress > ach.progress) {
+                            ach.progress = newProgress;
+                            progressUpdatedCount++;
+                        }
+                    }
+                }
             }
         }
     });
 
-    if (syncedCount > 0) {
+    if (syncedCount > 0 || progressUpdatedCount > 0) {
         saveAchievements();
         updateUI();
         closeSyncModal();
-        showNotification(`Synced ${syncedCount} achievements!`, 'success');
+        let msg = '';
+        if (syncedCount > 0 && progressUpdatedCount > 0) {
+            msg = `Synced ${syncedCount} completed and updated progress for ${progressUpdatedCount} achievements!`;
+        } else if (syncedCount > 0) {
+            msg = `Synced ${syncedCount} new achievements!`;
+        } else {
+            msg = `Updated progress for ${progressUpdatedCount} achievements!`;
+        }
+        showNotification(msg, 'success');
     } else {
-        showNotification('No new completed achievements detected. Make sure you copied the "Unlocked" status too.', 'info');
+        showNotification('No updates detected. Make sure you copied the "Unlocked" status or progress counters.', 'info');
     }
 }
 
