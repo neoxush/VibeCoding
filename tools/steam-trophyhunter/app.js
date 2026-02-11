@@ -183,11 +183,6 @@ function renderGameTabs() {
                 <span class="game-tab-icon">🏆</span>
                 <span class="game-tab-name">All Games</span>
                 <span class="game-tab-count">${achievements.length}</span>
-                ${currentGame === 'all' ? `
-                    <button class="tab-sync-btn" onclick="event.stopPropagation(); showSyncModal()" title="Sync All Games">
-                        📋
-                    </button>
-                ` : ''}
             </div>
         `;
 
@@ -201,11 +196,6 @@ function renderGameTabs() {
                     <span class="game-tab-icon">${stats.icon}</span>
                     <span class="game-tab-name">${gameName}</span>
                     <span class="game-tab-count">${stats.completed}/${stats.total}</span>
-                    ${isActive ? `
-                        <button class="tab-sync-btn" onclick="event.stopPropagation(); showSyncModal()" title="Sync ${gameName}">
-                            📋
-                        </button>
-                    ` : ''}
                 </div>
             `;
         });
