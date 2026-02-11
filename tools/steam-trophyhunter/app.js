@@ -5,12 +5,14 @@ let achievements = [];
 let filteredAchievements = [];
 let games = [];
 let currentGame = 'all'; // 'all' or specific game name
+let aiPreference = 'gemini'; // Default AI provider
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[App] Initializing sync...');
     try {
         loadAchievements();
+        loadAiPreference(); // Restore AI settings
         setupEventListeners();
         initializeTheme();
 
@@ -565,6 +567,11 @@ function createAchievementCard(ach) {
                     <span class="meta-item">Rarity: ${ach.rarity}</span>
                 </div>
             </div>
+            ${!ach.achieved ? `
+                <button class="btn-guide" onclick="event.stopPropagation(); openGuideModal('${ach.id}')" title="Ask AI for a guide">
+                    🧠 Guide
+                </button>
+            ` : ''}
         </div>
     `;
 }
@@ -1225,12 +1232,96 @@ function showImportError(msg) {
 }
 
 
-function showAboutModal() {
-    document.getElementById('aboutModal').classList.remove('hidden');
+// AI Guide Integration
+function openGuideModal(id) {
+    const achievement = achievements.find(a => a.id === id);
+    if (!achievement) return;
+
+    const game = achievement.game;
+    const name = achievement.name;
+    const desc = achievement.description;
+
+    const prompt = `I need a detailed guide for the "${name}" achievement in the game "${game}". Description: "${desc}". Please provide a step-by-step walkthrough, tips, and any specific requirements to unlock it.`;
+
+    // Set prompt in textarea
+    const textarea = document.getElementById('guidePromptInput');
+    if (textarea) {
+        textarea.value = prompt;
+    }
+
+    // Show modal
+    const modal = document.getElementById('guideModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (textarea) textarea.focus();
+    }
 }
 
-function closeAboutModal() {
-    document.getElementById('aboutModal').classList.add('hidden');
+function closeGuideModal() {
+    const modal = document.getElementById('guideModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function confirmGuideLaunch() {
+    const textarea = document.getElementById('guidePromptInput');
+    const prompt = textarea ? textarea.value : '';
+
+    if (!prompt.trim()) {
+        showNotification('Please enter a prompt first.', 'warning');
+        return;
+    }
+
+    const provider = localStorage.getItem('aiProvider') || 'gemini';
+    let url = '';
+
+    switch (provider) {
+        case 'claude':
+            url = `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
+            break;
+        case 'gemini':
+            url = `https://gemini.google.com/app?q=${encodeURIComponent(prompt)}`;
+            break;
+        case 'perplexity':
+            url = `https://www.perplexity.ai/search?q=${encodeURIComponent(prompt)}`;
+            break;
+        case 'chatgpt':
+        default:
+            url = `https://chatgpt.com/?q=${encodeURIComponent(prompt)}`;
+            break;
+    }
+
+    // Close modal
+    closeGuideModal();
+
+    // Proactively copy to clipboard for reliability
+    navigator.clipboard.writeText(prompt).then(() => {
+        showNotification('Prompt copied! Paste it in the chat if needed.', 'info', 4000);
+    }).catch(() => {
+        // Ignore clipboard errors
+    });
+
+    // Open in new tab
+    window.open(url, '_blank');
+}
+
+function saveAiPreference() {
+    const provider = document.getElementById('aiProviderSelect').value;
+    localStorage.setItem('aiProvider', provider);
+}
+
+function loadAiPreference() {
+    const provider = localStorage.getItem('aiProvider') || 'gemini';
+    const select = document.getElementById('aiProviderSelect');
+    if (select) select.value = provider;
+}
+
+function showSettingsModal() {
+    loadAiPreference(); // Ensure UI matches state
+    document.getElementById('settingsModal').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+    document.getElementById('settingsModal').classList.add('hidden');
 }
 
 // Confirm Delete Game

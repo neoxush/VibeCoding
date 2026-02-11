@@ -1,0 +1,22 @@
+<!-- AI Guide Modal -->
+<div id="guideModal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeGuideModal()"></div>
+    <div class="modal-content">
+        <h3>Ask AI for Help</h3>
+        <p class="modal-subtitle">Customize your prompt below before sending to AI.</p>
+
+        <div class="field-group">
+            <textarea id="guidePromptInput" placeholder="Enter your prompt here..." rows="6"
+                style="width: 100%; padding: 12px; margin-bottom: 16px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); resize: vertical;"></textarea>
+            <div class="info-box" style="font-size: 12px; color: var(--text-secondary);">
+                <p><strong>Tip:</strong> You can edit this text. It will be copied to your clipboard automatically when
+                    you proceed.</p>
+            </div>
+        </div>
+
+        <div class="modal-buttons" style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+            <button class="btn-secondary" onclick="closeGuideModal()">Cancel</button>
+            <button class="btn-primary" onclick="confirmGuideLaunch()">Okay, take me there 🚀</button>
+        </div>
+    </div>
+</div>

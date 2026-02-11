@@ -14,10 +14,10 @@
         <div class="nav-header">
             <h1>Steam Trophy Hunter</h1>
             <div class="nav-buttons">
-                <button class="btn-nav" onclick="toggleTheme()" title="Theme">🌓</button>
-                <button class="btn-nav" onclick="showDataModal()" title="Import / Export Data">💾</button>
                 <button class="btn-nav" onclick="showAddGameModal()" title="Add Game">➕</button>
-                <button class="btn-nav" onclick="showAboutModal()" title="About">ℹ️</button>
+                <button class="btn-nav" onclick="showDataModal()" title="Import / Export Data">💾</button>
+                <button class="btn-nav" onclick="showSettingsModal()" title="Settings">⚙️</button>
+                <button class="btn-nav" onclick="toggleTheme()" title="Theme">🌓</button>
             </div>
         </div>
 
@@ -103,15 +103,30 @@
         </div>
     </div>
 
-    <!-- About Modal -->
-    <div id="aboutModal" class="modal hidden">
-        <div class="modal-overlay" onclick="closeAboutModal()"></div>
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeSettingsModal()"></div>
         <div class="modal-content">
-            <h3>About</h3>
-            <p>Steam Trophy Hunter v1.0</p>
-            <p>Track achievements across multiple games</p>
-            <p><strong>Click achievements to mark complete</strong></p>
-            <button class="btn-primary" onclick="closeAboutModal()">Close</button>
+            <h3>Settings</h3>
+
+            <div class="settings-section">
+                <h4>AI Assistant</h4>
+                <p>Customize which AI service to use for achievement guides.</p>
+                <select id="aiProviderSelect" class="settings-select" onchange="saveAiPreference()">
+                    <option value="gemini">Google Gemini (Default)</option>
+                    <option value="chatgpt">ChatGPT</option>
+                    <option value="claude">Claude</option>
+                    <option value="perplexity">Perplexity</option>
+                </select>
+            </div>
+
+            <div class="settings-section">
+                <h4>About</h4>
+                <p>Steam Trophy Hunter v1.1</p>
+                <p>Track achievements across multiple games</p>
+            </div>
+
+            <button class="btn-primary" onclick="closeSettingsModal()">Close</button>
         </div>
     </div>
 
@@ -134,6 +149,28 @@
             <div class="modal-buttons">
                 <button class="btn-secondary" onclick="closeSyncModal()">Cancel</button>
                 <button class="btn-primary" onclick="processBulkSync()">Sync Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Guide Prompt Modal -->
+    <div id="guideModal" class="modal hidden">
+        <div class="modal-overlay" onclick="closeGuideModal()"></div>
+        <div class="modal-content">
+            <h3>Ask AI for Help 🧠</h3>
+            <p class="modal-subtitle">Customize your prompt below before sending to AI.</p>
+
+            <div class="field-group">
+                <textarea id="guidePromptInput" class="modal-textarea" title="Customize your AI Prompt"></textarea>
+                <div class="info-box">
+                    <p><strong>Tip:</strong> You can edit this text. It will be copied to your clipboard automatically
+                        when you proceed.</p>
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeGuideModal()">Cancel</button>
+                <button class="btn-primary" onclick="confirmGuideLaunch()">Okay, take me there 🚀</button>
             </div>
         </div>
     </div>
