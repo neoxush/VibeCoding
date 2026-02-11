@@ -1158,3 +1158,32 @@ body {
     outline: none;
     border-color: var(--primary-color);
 }
+
+/* Checkbox Styling */
+.checkbox-wrapper {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    width: fit-content;
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+    margin: 0;
+}
+
+.checkbox-wrapper label {
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+    font-weight: 500;
+    line-height: 1;
+    margin-top: 1px;
+    /* Visual tweak for better alignment */
+}

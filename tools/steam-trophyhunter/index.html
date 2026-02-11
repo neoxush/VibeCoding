@@ -158,13 +158,14 @@
         <div class="modal-overlay" onclick="closeGuideModal()"></div>
         <div class="modal-content">
             <h3>Ask AI for Help 🧠</h3>
-            <p class="modal-subtitle">Customize your prompt below before sending to AI.</p>
+            <p>Tip: You can edit this text. It will be copied to your clipboard automatically
+                when you proceed.</p>
 
             <div class="field-group">
                 <textarea id="guidePromptInput" class="modal-textarea" title="Customize your AI Prompt"></textarea>
-                <div class="info-box">
-                    <p><strong>Tip:</strong> You can edit this text. It will be copied to your clipboard automatically
-                        when you proceed.</p>
+                <div class="checkbox-wrapper">
+                    <input type="checkbox" id="includeAllIncomplete">
+                    <label for="includeAllIncomplete">Include all incomplete achievements for this game</label>
                 </div>
             </div>
 

@@ -6,6 +6,7 @@ let filteredAchievements = [];
 let games = [];
 let currentGame = 'all'; // 'all' or specific game name
 let aiPreference = 'gemini'; // Default AI provider
+let selectedAchievementId = null; // Track which achievement opened the modal
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
@@ -1234,26 +1235,50 @@ function showImportError(msg) {
 
 // AI Guide Integration
 function openGuideModal(id) {
-    const achievement = achievements.find(a => a.id === id);
-    if (!achievement) return;
+    selectedAchievementId = id;
+    const checkbox = document.getElementById('includeAllIncomplete');
 
-    const game = achievement.game;
-    const name = achievement.name;
-    const desc = achievement.description;
-
-    const prompt = `I need a detailed guide for the "${name}" achievement in the game "${game}". Description: "${desc}". Please provide a step-by-step walkthrough, tips, and any specific requirements to unlock it.`;
-
-    // Set prompt in textarea
-    const textarea = document.getElementById('guidePromptInput');
-    if (textarea) {
-        textarea.value = prompt;
+    // Reset checkbox
+    if (checkbox) {
+        checkbox.checked = false;
+        // Remove old listener to avoid duplicates, then add new one
+        const newCheckbox = checkbox.cloneNode(true);
+        checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+        newCheckbox.addEventListener('change', updateGuidePrompt);
     }
+
+    updateGuidePrompt();
 
     // Show modal
     const modal = document.getElementById('guideModal');
     if (modal) {
         modal.classList.remove('hidden');
+        const textarea = document.getElementById('guidePromptInput');
         if (textarea) textarea.focus();
+    }
+}
+
+function updateGuidePrompt() {
+    const textarea = document.getElementById('guidePromptInput');
+    const checkbox = document.getElementById('includeAllIncomplete');
+
+    if (!textarea) return;
+
+    if (checkbox && checkbox.checked) {
+        // Bulk Prompt
+        const incomplete = achievements.filter(a => a.game === currentGame && !a.achieved);
+        const list = incomplete.map(a => `- ${a.name}: ${a.description}`).join('\n');
+
+        textarea.value = `I am strictly hunting for achievements in "${currentGame}".\nHere are the ${incomplete.length} tasks I have left:\n\n${list}\n\nPlease generate a prioritized, step-by-step "To-Do List" guide.\nFormat specific requirements:\n- Use checkboxes [ ] for every actionable step.\n- Group achievements that can be done together or in the same area (Efficiency).\n- Keep instructions clear, concise and actionable.`;
+    } else {
+        // Single Prompt
+        const achievement = achievements.find(a => a.id === selectedAchievementId);
+        if (achievement) {
+            const game = achievement.game;
+            const name = achievement.name;
+            const desc = achievement.description;
+            textarea.value = `I need to unlock the "${name}" achievement in "${game}".\nDescription: "${desc}"\n\nPlease provide a step-by-step "To-Do List" guide to unlock this.\n- Use checkboxes [ ] for each step.\n- Mention any prerequisites or missable elements.`;
+        }
     }
 }
 
