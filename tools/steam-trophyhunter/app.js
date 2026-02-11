@@ -6,6 +6,7 @@ let filteredAchievements = [];
 let games = [];
 let currentGame = 'all'; // 'all' or specific game name
 let aiPreference = 'gemini'; // Default AI provider
+let guideLanguage = 'Chinese'; // Default language for AI guides
 let selectedAchievementId = null; // Track which achievement opened the modal
 
 // Initialize App
@@ -1389,15 +1390,16 @@ STRICT OUTPUT RULES:
 3. EXHAUSTIVE FACTORIZATION: You MUST deconstruct every achievement into its FULL technical roadmap. 
 4. NO SUMMARIES: If an achievement needs 5 actions to solve, it MUST occupy 5 separate rows. Do not collapse details into "Step 1".
 5. SORTING: All rows MUST be grouped by Achievement Name. All steps for a single achievement must appear consecutively from Step 1 to Final Step.
-6. TONE: Dry. Professional. Command-line precision. 0% conversational prose.
-7. MISSABLES: Mark critical steps with "!!MISSABLE!!" in the Notes.
+6. NO LISTS: Use only table rows. No checkboxes, no bullets.
+7. MISSABLES: Put "!!MISSABLE!!" in the Notes column for critical steps.
+8. LANGUAGE: Generate the entire response, including headers and descriptions, in ${guideLanguage}.
 
-EXAMPLE DEPTH (How it should look):
+EXAMPLE MASTER SHEET (IN ${guideLanguage}):
 | Achievement | Step | Technical Task | Location/Prerequisite | Optimization Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| Combat Master | 1 | Kill 10 [Enemy X] | [Area 1] | Use [Weapon A] |
 | Treasure Hunter | 1 | Unlock [Skill: Sight] | Skill Menu | Required to see hidden chests |
 | Treasure Hunter | 2 | Secure [Chest A] | [Area 1] | !!MISSABLE!! Before boss fight |
+| Combat Master | 1 | Kill 10 [Enemy X] | [Area 1] | Use [Weapon A] |
 | Treasure Hunter | 3 | Secure [Chest B] | [Area 2] | Use Key from Area 1 |`;
     } else {
         // Single Prompt
@@ -1417,8 +1419,9 @@ STRICT OUTPUT RULES:
 3. EXHAUSTIVE FACTORIZATION: Deconstruct the solution into its full technical roadmap. 
 4. TONE: Command-line style. No intro/outro text.
 5. NO LISTS: Use only the table format for the guide content.
+6. LANGUAGE: Generate the entire response in ${guideLanguage}.
 
-EXAMPLE:
+EXAMPLE (IN ${guideLanguage}):
 | Step | Technical Task | Location/Prerequisite | Optimization Notes |
 | :--- | :--- | :--- | :--- |
 | 1 | Unlock [Skill] | Skill Tree | Required for Step 2 |
@@ -1474,15 +1477,27 @@ function confirmGuideLaunch() {
     window.open(url, '_blank');
 }
 
-function saveAiPreference() {
+// Settings Management
+function saveSettings() {
     const provider = document.getElementById('aiProviderSelect').value;
+    const language = document.getElementById('aiLanguageSelect').value;
+
+    aiPreference = provider;
+    guideLanguage = language;
+
     localStorage.setItem('aiProvider', provider);
+    localStorage.setItem('guideLanguage', language);
 }
 
 function loadAiPreference() {
-    const provider = localStorage.getItem('aiProvider') || 'gemini';
-    const select = document.getElementById('aiProviderSelect');
-    if (select) select.value = provider;
+    aiPreference = localStorage.getItem('aiProvider') || 'gemini';
+    guideLanguage = localStorage.getItem('guideLanguage') || 'Chinese';
+
+    const providerSelect = document.getElementById('aiProviderSelect');
+    const languageSelect = document.getElementById('aiLanguageSelect');
+
+    if (providerSelect) providerSelect.value = aiPreference;
+    if (languageSelect) languageSelect.value = guideLanguage;
 }
 
 function showSettingsModal() {

@@ -112,12 +112,27 @@
             <div class="settings-section">
                 <h4>AI Assistant</h4>
                 <p>Customize which AI service to use for achievement guides.</p>
-                <select id="aiProviderSelect" class="settings-select" onchange="saveAiPreference()">
-                    <option value="gemini">Google Gemini (Default)</option>
-                    <option value="chatgpt">ChatGPT</option>
-                    <option value="claude">Claude</option>
-                    <option value="perplexity">Perplexity</option>
-                </select>
+                <div class="setting-item">
+                    <label for="aiProviderSelect">AI Provider:</label>
+                    <select id="aiProviderSelect" class="settings-select" onchange="saveSettings()">
+                        <option value="gemini">Google Gemini (Default)</option>
+                        <option value="chatgpt">ChatGPT</option>
+                        <option value="claude">Claude</option>
+                        <option value="perplexity">Perplexity</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="aiLanguageSelect">Guide Language:</label>
+                    <select id="aiLanguageSelect" class="settings-select" onchange="saveSettings()">
+                        <option value="Chinese">Chinese (Default)</option>
+                        <option value="English">English</option>
+                        <option value="Japanese">Japanese</option>
+                        <option value="Korean">Korean</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="French">French</option>
+                        <option value="German">German</option>
+                    </select>
+                </div>
             </div>
 
             <div class="settings-section">
