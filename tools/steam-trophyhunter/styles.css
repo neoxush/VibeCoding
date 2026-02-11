@@ -6,54 +6,59 @@
 }
 
 :root {
-    --primary-color: #667eea;
-    --primary-dark: #5568d3;
-    --secondary-color: #764ba2;
-    --success-color: #4caf50;
-    --warning-color: #ff9800;
-    --danger-color: #f44336;
-    --text-primary: #333;
-    --text-secondary: #666;
-    --text-light: #999;
+    --primary-color: #4b6584;
+    /* Slate Blue */
+    --primary-dark: #384d66;
+    --secondary-color: #778ca3;
+    /* Light Slate */
+    --success-color: #26de81;
+    /* Solid Green */
+    --warning-color: #fed330;
+    /* Solid Yellow */
+    --danger-color: #eb3b5a;
+    /* Solid Red */
+    --text-primary: #2f3640;
+    --text-secondary: #718093;
+    --text-light: #a4b0be;
     --bg-primary: #ffffff;
-    --bg-secondary: #f5f5f5;
-    --bg-tertiary: #f9f9f9;
-    --border-color: #e0e0e0;
-    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
-    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
+    --bg-secondary: #f5f6fa;
+    --bg-tertiary: #dcdde1;
+    --border-color: #ced6e0;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
 }
 
 /* Dark Theme */
 [data-theme="dark"] {
-    --text-primary: #ffffff;
-    --text-secondary: #cccccc;
-    --text-light: #999999;
-    --bg-primary: #1a1a1a;
-    --bg-secondary: #2d2d2d;
-    --bg-tertiary: #404040;
-    --border-color: #555555;
-    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --text-primary: #f5f6fa;
+    --text-secondary: #dcdde1;
+    --text-light: #718093;
+    --bg-primary: #1e272e;
+    --bg-secondary: #0f1418;
+    --bg-tertiary: #2f3640;
+    --border-color: #353b48;
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
 /* Auto Theme - follows system preference */
 @media (prefers-color-scheme: dark) {
     [data-theme="auto"] {
-        --text-primary: #ffffff;
-        --text-secondary: #cccccc;
-        --text-light: #999999;
-        --bg-primary: #1a1a1a;
-        --bg-secondary: #2d2d2d;
-        --bg-tertiary: #404040;
-        --border-color: #555555;
-        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
-        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+        --text-primary: #dfe6e9;
+        --text-secondary: #b2bec3;
+        --text-light: #636e72;
+        --bg-primary: #1e272e;
+        --bg-secondary: #161e23;
+        --bg-tertiary: #2e3a44;
+        --border-color: #3d4e5c;
+        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
 }
 
@@ -84,7 +89,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 12px 20px;
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    background: var(--primary-color);
     color: white;
 }
 
@@ -207,7 +212,7 @@ body {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, color 0.2s, transform 0.1s, border-color 0.2s;
     white-space: nowrap;
     display: flex;
     align-items: center;
@@ -215,6 +220,8 @@ body {
     font-weight: 500;
     color: var(--text-secondary);
     font-size: 13px;
+    outline: none;
+    user-select: none;
 }
 
 .game-tab:hover {
@@ -272,17 +279,23 @@ body {
 }
 
 .game-tab-all {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-    color: white;
-    border-color: transparent;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
 }
 
 .game-tab-all:hover {
-    opacity: 0.9;
+    background: var(--bg-secondary);
 }
 
 .game-tab-all.active {
-    opacity: 1;
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.game-tab-all.active:hover {
+    background: var(--primary-dark);
 }
 
 /* Scrollbar for game tabs */
@@ -547,7 +560,7 @@ body {
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    background: var(--primary-color);
     transition: width 0.3s ease;
 }
 
@@ -588,7 +601,7 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    background: var(--primary-color);
     color: white;
 }
 

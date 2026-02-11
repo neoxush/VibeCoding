@@ -57,8 +57,11 @@ function handleFilter(event) {
 function handleSearchPaste(event) {
     const pastedText = (event.clipboardData || window.clipboardData).getData('text');
 
-    // If it looks like a Steam Achievement list (long text with 'Unlocked' or 'Earned')
-    if (pastedText.length > 300 && (pastedText.includes('Unlocked') || pastedText.includes('earned') || pastedText.includes('@'))) {
+    // Detect Steam Achievement list or JSON Data
+    const isSteamText = pastedText.length > 300 && (pastedText.includes('Unlocked') || pastedText.includes('earned') || pastedText.includes('@'));
+    const isJson = (pastedText.trim().startsWith('[') || pastedText.trim().startsWith('{')) && pastedText.length > 50;
+
+    if (isSteamText || isJson) {
         event.preventDefault(); // Don't put the huge text in the search box
         showSyncModal(pastedText);
     }
@@ -601,7 +604,7 @@ function updateUI() {
     const isAll = currentGame === 'all';
 
     if (deleteBtn) deleteBtn.classList.toggle('hidden', isAll);
-    if (syncBtn) syncBtn.classList.toggle('hidden', achievements.length === 0);
+    if (syncBtn) syncBtn.classList.toggle('hidden', isAll || achievements.length === 0);
 }
 
 // Update Statistics (based on current view/filter)
@@ -686,7 +689,7 @@ function closeSyncModal() {
     if (syncModal) syncModal.classList.add('hidden');
 }
 
-function processBulkSync() {
+function processBulkSync(overwrite = false) {
     const syncInput = document.getElementById('syncInput');
     const text = syncInput ? syncInput.value : '';
     if (!text.trim()) {
@@ -694,10 +697,42 @@ function processBulkSync() {
         return;
     }
 
+    // Confirmation for overwrite (Reuse import logic behavior)
+    if (overwrite) {
+        const scope = currentGame === 'all' ? 'ALL games' : `"${currentGame}"`;
+        if (!confirm(`This will OVERWRITE your current progress for ${scope}. All achievements not found as "Unlocked" in your paste will be reset. Are you sure?`)) {
+            return;
+        }
+    }
+
+    // 1. Check if it's JSON (Import-style sync)
+    try {
+        if (text.trim().startsWith('[') || text.trim().startsWith('{')) {
+            const jsonData = JSON.parse(text);
+            const dataToProcess = Array.isArray(jsonData) ? jsonData : (jsonData.achievements || null);
+
+            if (dataToProcess && Array.isArray(dataToProcess)) {
+                handleJsonSync(dataToProcess, overwrite);
+                return;
+            }
+        }
+    } catch (e) {
+        console.log('[Sync] Not JSON, falling back to text parsing');
+    }
+
+    // 2. Text-based Steam Sync
     const gameAchievements = currentGame === 'all' ? achievements : achievements.filter(a => a.game === currentGame);
     if (gameAchievements.length === 0) {
         showNotification(currentGame === 'all' ? 'No achievements found.' : 'No achievements found for the current game.', 'error');
         return;
+    }
+
+    // If overwriting, reset all targeted achievements first
+    if (overwrite) {
+        gameAchievements.forEach(ach => {
+            ach.achieved = false;
+            ach.progress = 0;
+        });
     }
 
     let syncedCount = 0;
@@ -744,12 +779,14 @@ function processBulkSync() {
         }
     });
 
-    if (syncedCount > 0 || progressUpdatedCount > 0) {
+    if (syncedCount > 0 || progressUpdatedCount > 0 || overwrite) {
         saveAchievements();
         updateUI();
         closeSyncModal();
         let msg = '';
-        if (syncedCount > 0 && progressUpdatedCount > 0) {
+        if (overwrite) {
+            msg = `Fresh sync complete for ${currentGame === 'all' ? 'all games' : currentGame}!`;
+        } else if (syncedCount > 0 && progressUpdatedCount > 0) {
             msg = `Synced ${syncedCount} completed and updated progress for ${progressUpdatedCount} achievements!`;
         } else if (syncedCount > 0) {
             msg = `Synced ${syncedCount} new achievements!`;
@@ -760,6 +797,61 @@ function processBulkSync() {
     } else {
         showNotification('No updates detected. Make sure you copied the "Unlocked" status or progress counters.', 'info');
     }
+}
+
+// Help handle JSON-based sync (Import-style)
+function handleJsonSync(jsonData, overwrite) {
+    // Basic validation
+    if (!Array.isArray(jsonData)) {
+        showNotification('Invalid format: Data must be an array of achievements.', 'error');
+        return;
+    }
+
+    if (jsonData.length > 0 && !jsonData[0].name) {
+        showNotification('Invalid data: Achievements must have a name property.', 'error');
+        return;
+    }
+
+    if (currentGame === 'all') {
+        if (overwrite) {
+            achievements = jsonData;
+        } else {
+            // Merge logic
+            jsonData.forEach(newAch => {
+                const existing = achievements.find(a => a.id === newAch.id);
+                if (existing) {
+                    Object.assign(existing, newAch);
+                } else {
+                    achievements.push(newAch);
+                }
+            });
+        }
+    } else {
+        // Scope to current game
+        if (overwrite) {
+            // Remove old ones for this game, add new ones
+            achievements = achievements.filter(a => a.game !== currentGame);
+            jsonData.forEach(a => {
+                const newAch = { ...a, game: currentGame }; // Force current game
+                achievements.push(newAch);
+            });
+        } else {
+            // Merge per achievement
+            jsonData.forEach(newAch => {
+                const existing = achievements.find(a => a.id === newAch.id || (a.name === newAch.name && a.game === currentGame));
+                if (existing) {
+                    Object.assign(existing, newAch);
+                } else {
+                    achievements.push({ ...newAch, game: currentGame });
+                }
+            });
+        }
+    }
+
+    saveAchievements();
+    updateUI();
+    closeSyncModal();
+    showNotification(overwrite ? 'Data overwritten for current view!' : 'Progress updated from JSON!', 'success');
 }
 
 // Add Game by App ID - Fetch REAL achievements from Steam
@@ -1383,10 +1475,10 @@ function showNotification(message, type = 'info', duration = 3000) {
     }
 
     const colors = {
-        success: '#4caf50',
-        error: '#f44336',
-        info: '#2196f3',
-        warning: '#ff9800'
+        success: '#26de81',
+        error: '#eb3b5a',
+        info: '#4b6584',
+        warning: '#fed330'
     };
 
     notification.style.cssText = `
