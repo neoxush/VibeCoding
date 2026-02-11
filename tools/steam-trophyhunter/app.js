@@ -114,36 +114,9 @@ function applyFilters(searchQuery = '') {
 function switchGame(gameName, event) {
     currentGame = gameName;
 
-    // Update active tab
-    document.querySelectorAll('.game-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-
-    // Find and activate the clicked tab
-    if (event && event.target) {
-        const clickedTab = event.target.closest('.game-tab');
-        if (clickedTab) {
-            clickedTab.classList.add('active');
-        }
-    } else {
-        // Fallback: find tab by game name
-        document.querySelectorAll('.game-tab').forEach(tab => {
-            if (tab.textContent.includes(gameName) || (gameName === 'all' && tab.classList.contains('game-tab-all'))) {
-                tab.classList.add('active');
-            }
-        });
-    }
-
-    // Apply filters with current game
-    const searchInput = document.getElementById('searchInput');
-    const query = searchInput ? searchInput.value.toLowerCase() : '';
-    applyFilters(query);
-
-    // Show/Hide delete button
-    const deleteBtn = document.getElementById('deleteGameBtn');
-    if (deleteBtn) {
-        deleteBtn.classList.toggle('hidden', currentGame === 'all');
-    }
+    // Use the centralized UI update function to ensure all elements are consistent
+    // This fixes bugs where some buttons (like Pasteboard Sync) would show/hide inconsistently
+    updateUI();
 
     // Persist current game selection
     if (currentGame) {
@@ -1359,9 +1332,29 @@ function updateGuidePrompt() {
     if (checkbox && checkbox.checked) {
         // Bulk Prompt
         const incomplete = achievements.filter(a => a.game === currentGame && !a.achieved);
-        const list = incomplete.map(a => `- ${a.name}: ${a.description}`).join('\n');
+        const list = incomplete.map(a => `${a.name}: ${a.description}`).join('\n');
 
-        textarea.value = `I am strictly hunting for achievements in "${currentGame}".\nHere are the ${incomplete.length} tasks I have left:\n\n${list}\n\nPlease generate a prioritized, step-by-step "To-Do List" guide.\nFormat specific requirements:\n- Use checkboxes [ ] for every actionable step.\n- Group achievements that can be done together or in the same area (Efficiency).\n- Keep instructions clear, concise and actionable.`;
+        textarea.value = `INSTRUCTION: COMPREHENSIVE ACHIEVEMENT MASTER STRATEGY SHEET
+GAME: "${currentGame}"
+DATASET:
+${list}
+
+STRICT OUTPUT RULES:
+1. FORMAT: A SINGLE unified Markdown Table for all data.
+2. COLUMNS: | Achievement | Step | Technical Task | Location/Prerequisite | Optimization Notes |
+3. EXHAUSTIVE FACTORIZATION: You MUST deconstruct every achievement into its FULL technical roadmap. 
+4. NO SUMMARIES: If an achievement needs 5 actions to solve, it MUST occupy 5 separate rows. Do not collapse details into "Step 1".
+5. SORTING: All rows MUST be grouped by Achievement Name. All steps for a single achievement must appear consecutively from Step 1 to Final Step.
+6. TONE: Dry. Professional. Command-line precision. 0% conversational prose.
+7. MISSABLES: Mark critical steps with "!!MISSABLE!!" in the Notes.
+
+EXAMPLE DEPTH (How it should look):
+| Achievement | Step | Technical Task | Location/Prerequisite | Optimization Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| Combat Master | 1 | Kill 10 [Enemy X] | [Area 1] | Use [Weapon A] |
+| Treasure Hunter | 1 | Unlock [Skill: Sight] | Skill Menu | Required to see hidden chests |
+| Treasure Hunter | 2 | Secure [Chest A] | [Area 1] | !!MISSABLE!! Before boss fight |
+| Treasure Hunter | 3 | Secure [Chest B] | [Area 2] | Use Key from Area 1 |`;
     } else {
         // Single Prompt
         const achievement = achievements.find(a => a.id === selectedAchievementId);
@@ -1369,7 +1362,23 @@ function updateGuidePrompt() {
             const game = achievement.game;
             const name = achievement.name;
             const desc = achievement.description;
-            textarea.value = `I need to unlock the "${name}" achievement in "${game}".\nDescription: "${desc}"\n\nPlease provide a step-by-step "To-Do List" guide to unlock this.\n- Use checkboxes [ ] for each step.\n- Mention any prerequisites or missable elements.`;
+            textarea.value = `INSTRUCTION: SINGLE ACHIEVEMENT DATA SHEET
+GAME: "${game}"
+ACHIEVEMENT: "${name}"
+DESCRIPTION: "${desc}"
+
+STRICT OUTPUT RULES:
+1. FORMAT: A single Markdown Table.
+2. COLUMNS: | Step | Technical Task | Location/Prerequisite | Optimization Notes |
+3. EXHAUSTIVE FACTORIZATION: Deconstruct the solution into its full technical roadmap. 
+4. TONE: Command-line style. No intro/outro text.
+5. NO LISTS: Use only the table format for the guide content.
+
+EXAMPLE:
+| Step | Technical Task | Location/Prerequisite | Optimization Notes |
+| :--- | :--- | :--- | :--- |
+| 1 | Unlock [Skill] | Skill Tree | Required for Step 2 |
+| 2 | Execute [Action] | [Specific Location] | Must be done during Night |`;
         }
     }
 }
