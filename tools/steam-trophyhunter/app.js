@@ -1088,6 +1088,48 @@ function clearData() {
     }
 }
 
+// Data Compression for Export
+function compressAchievements(data) {
+    const COMPACT_KEYS = ['id', 'game', 'name', 'description', 'icon', 'achieved', 'progress', 'priority', 'favorite', 'globalPercentage', 'rarity', 'gameIcon'];
+
+    // Map to a strict array format to eliminate repeated keys
+    const compact = data.map(ach => COMPACT_KEYS.map(key => {
+        if (key === 'achieved' || key === 'favorite') return ach[key] ? 1 : 0;
+        return ach[key] ?? '';
+    }));
+
+    // Encode to Base64 with a version prefix
+    // unescape(encodeURIComponent) makes it safe for UTF-8 (emojis etc)
+    return 'STH1:' + btoa(unescape(encodeURIComponent(JSON.stringify(compact))));
+}
+
+// Data Decompression for Import
+function decompressAchievements(code) {
+    const COMPACT_KEYS = ['id', 'game', 'name', 'description', 'icon', 'achieved', 'progress', 'priority', 'favorite', 'globalPercentage', 'rarity', 'gameIcon'];
+
+    // Support legacy JSON format
+    if (!code.startsWith('STH1:')) {
+        return JSON.parse(code);
+    }
+
+    try {
+        const raw = JSON.parse(decodeURIComponent(escape(atob(code.substring(5)))));
+        if (!Array.isArray(raw)) return [];
+
+        return raw.map(arr => {
+            const obj = {};
+            COMPACT_KEYS.forEach((key, i) => {
+                if (key === 'achieved' || key === 'favorite') obj[key] = arr[i] === 1;
+                else obj[key] = arr[i];
+            });
+            return obj;
+        });
+    } catch (e) {
+        console.error('[Import] Decompression failed:', e);
+        throw new Error('Invalid code format');
+    }
+}
+
 // Theme Management
 let currentTheme = 'light';
 
@@ -1238,7 +1280,8 @@ function loadAchievements() {
 }
 // Data Management
 function showDataModal() {
-    const data = JSON.stringify(achievements);
+    // Generate a compact code instead of raw JSON
+    const data = compressAchievements(achievements);
     document.getElementById('exportInput').value = data;
     document.getElementById('importInput').value = '';
     document.getElementById('importError').classList.add('hidden');
@@ -1269,7 +1312,8 @@ function importData() {
     }
 
     try {
-        const data = JSON.parse(input);
+        // Automatically detect and decompress code or parse legacy JSON
+        const data = decompressAchievements(input);
 
         // Basic validation
         if (!Array.isArray(data)) {
@@ -1287,7 +1331,7 @@ function importData() {
 
     } catch (e) {
         console.error(e);
-        showImportError('Invalid data format');
+        showImportError('Invalid or corrupted data code');
     }
 }
 
