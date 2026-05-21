@@ -52,17 +52,20 @@ class PCG_OT_CreateDefaultSpline(bpy.types.Operator):
         curve_obj = context.active_object
         curve_obj.name = "PCG_Path"
         
-        # Modify the curve to create an S-curve shape
+        # Modify the curve to create a straight line along the X axis
         curve_data = curve_obj.data
         if curve_data.splines:
             spline = curve_data.splines[0]
             if len(spline.bezier_points) >= 2:
-                # Adjust points to create a more interesting path
+                # Set coordinates flat along the X axis
                 spline.bezier_points[0].co = (-10, 0, 0)
-                spline.bezier_points[0].handle_right = (-5, 5, 0)
-                
                 spline.bezier_points[1].co = (10, 0, 0)
-                spline.bezier_points[1].handle_left = (5, -5, 0)
+                
+                # Set handle types to AUTO (Blender computes perfect handles + scales them to prevent loops)
+                spline.bezier_points[0].handle_left_type = 'AUTO'
+                spline.bezier_points[0].handle_right_type = 'AUTO'
+                spline.bezier_points[1].handle_left_type = 'AUTO'
+                spline.bezier_points[1].handle_right_type = 'AUTO'
         
         # Set the created spline as the selected spline in properties
         context.scene.pcg_props.spline_object = curve_obj
