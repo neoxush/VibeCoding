@@ -6,6 +6,7 @@
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
+// @noframes
 // @run-at       document-start
 // @grant        GM_registerMenuCommand
 // @grant        GM_setValue
@@ -1740,9 +1741,9 @@
             ui.dot.addEventListener('dblclick', () => {
                 if (_dotClickTimer) { clearTimeout(_dotClickTimer); _dotClickTimer = null; }
                 if (myRole === 'target') {
-                    setRole('playlist', myId);
+                    setRole('playlist', myId, false, myLastTs);
                 } else if (myRole === 'playlist') {
-                    setRole('target', myId);
+                    setRole('target', myId, false, myLastTs);
                 }
             });
             ui.dot.addEventListener('dragstart', handleRoleDragStart);
@@ -2905,7 +2906,7 @@
         GM_setValue(getRoleNotificationKey(groupId), notification);
     }
 
-    function setRole(role, id = null, joinExisting = false) {
+    function setRole(role, id = null, joinExisting = false, lastTs = 0) {
         if (role === 'source') {
             let groupId;
             if (joinExisting && id) {
@@ -2930,12 +2931,12 @@
             }
         } else if (role === 'target') {
             if (!id) { Notify.error('Cannot become Target without a Source ID.'); return; }
-            saveState('target', id);
+            saveState('target', id, lastTs);
             // Broadcast notification when target joins
             broadcastRoleNotification(id, 'target', myInstanceId);
         } else if (role === 'playlist') {
             if (!id) { Notify.error('Cannot become Playlist without a Source ID.'); return; }
-            saveState('playlist', id);
+            saveState('playlist', id, lastTs);
             // Broadcast notification when playlist joins
             broadcastRoleNotification(id, 'playlist', myInstanceId);
         }
