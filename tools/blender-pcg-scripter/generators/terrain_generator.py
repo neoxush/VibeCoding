@@ -348,17 +348,9 @@ class TerrainGenerator:
         # Convert to mesh
         terrain_obj = self.create_terrain_mesh(heightmap, bounds)
         
-        # Create road mesh if in road mode
-        if self.params.road_mode_enabled and terrain_obj:
-            road_mesh = self._create_road_mesh()
-            if road_mesh:
-                # Parent road to terrain or return both
-                # For now, just create it separately
-                pass
-        
         return terrain_obj
     
-    def _create_road_mesh(self) -> Optional[bpy.types.Object]:
+    def generate_road_mesh(self) -> Optional[bpy.types.Object]:
         """
         Create a simple road mesh along the spline path.
         
@@ -372,6 +364,7 @@ class TerrainGenerator:
         vertices = []
         faces = []
         road_width = self.params.road_width
+        offset_z = mathutils.Vector((0, 0, self.params.road_height_offset))
         
         for i, point in enumerate(self.spline_points):
             # Calculate perpendicular direction
@@ -379,9 +372,9 @@ class TerrainGenerator:
             up = point.normal.normalized()
             right = tangent.cross(up).normalized()
             
-            # Create vertices on left and right edges
-            left_pos = point.position - right * (road_width / 2)
-            right_pos = point.position + right * (road_width / 2)
+            # Create vertices on left and right edges with vertical offset
+            left_pos = point.position - right * (road_width / 2) + offset_z
+            right_pos = point.position + right * (road_width / 2) + offset_z
             
             vertices.append(left_pos)
             vertices.append(right_pos)
@@ -416,8 +409,14 @@ class TerrainGenerator:
             nodes = mat.node_tree.nodes
             bsdf = nodes.get("Principled BSDF")
             if bsdf:
-                bsdf.inputs["Base Color"].default_value = (0.2, 0.2, 0.2, 1.0)  # Dark gray
+                bsdf.inputs["Base Color"].default_value = self.params.road_material_color
                 bsdf.inputs["Roughness"].default_value = 0.8
+        else:
+            # Update color in case preset changed it
+            mat.use_nodes = True
+            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+            if bsdf:
+                bsdf.inputs["Base Color"].default_value = self.params.road_material_color
         
         # Assign material
         if obj.data.materials:

@@ -200,6 +200,14 @@ class PCG_OT_Generate(bpy.types.Operator):
                     scene_manager.organize_objects([terrain_obj], terrain_coll.name)
                     self.report({'INFO'}, "Terrain generated")
             
+            # Generate road mesh independently if enabled
+            if params.road_mesh_enabled:
+                terrain_gen = TerrainGenerator(seed, params, spline_points)
+                road_obj = terrain_gen.generate_road_mesh()
+                if road_obj:
+                    scene_manager.organize_objects([road_obj], terrain_coll.name)
+                    self.report({'INFO'}, "Road mesh generated")
+            
             wm.progress_update(90)
             
             # Store metadata
@@ -422,9 +430,6 @@ class PCG_OT_MoveLayer(bpy.types.Operator):
             props.active_layer_index += 1
             
         return {'FINISHED'}
-
-
-        row.operator("pcg.load_preset", text="Load", icon='FILE_FOLDER')
 
 
 class PCG_OT_RestoreHistory(bpy.types.Operator):
@@ -690,6 +695,18 @@ class PCG_PT_MainPanel(bpy.types.Panel):
             box.prop(props, "smoothness")
             box.prop(props, "terrain_width")
         
+        layout.separator()
+        
+        # Road Mesh Section
+        box = layout.box()
+        box.label(text="Road Mesh", icon='MESH_PLANE')
+        box.prop(props, "road_mesh_enabled")
+        
+        if props.road_mesh_enabled:
+            box.prop(props, "road_width")
+            box.prop(props, "road_height_offset")
+            box.prop(props, "road_material_color")
+            
         layout.separator()
         
         # Generation Buttons
