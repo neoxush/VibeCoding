@@ -6,217 +6,238 @@ from typing import Any, Dict, List, Optional
 
 import bpy
 
-from .parameters import GenerationParams
+from .parameters import (
+    PIECE_DOORWAY,
+    PIECE_FLOOR,
+    PIECE_PILLAR,
+    PIECE_RAMP,
+    PIECE_STAIRS,
+    PIECE_WALL,
+    PIECE_WALL_HALF,
+    GenerationParams,
+)
 
 
 def get_preset_directory() -> str:
-    """
-    Get the directory path for storing presets.
-    
-    Returns:
-        Path to the presets directory
-    """
-    # Get the addon directory
+    """Get the directory path for storing presets."""
     addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     preset_dir = os.path.join(addon_dir, "presets")
-
-    # Create directory if it doesn't exist
     if not os.path.exists(preset_dir):
         os.makedirs(preset_dir)
-
     return preset_dir
 
 
 def save_preset(name: str, parameters: GenerationParams, overwrite: bool = False) -> tuple:
-    """
-    Save a parameter preset to a JSON file.
-
-    Args:
-        name: Name for the preset
-        parameters: Generation parameters to save
-        overwrite: If True, overwrite existing preset without warning
-
-    Returns:
-        (True, "") if saved successfully, (False, reason) otherwise
-    """
+    """Save a parameter preset to a JSON file."""
     try:
         preset_dir = get_preset_directory()
         filepath = os.path.join(preset_dir, f"{name}.json")
-
         if not overwrite and os.path.exists(filepath):
             return False, f"Preset '{name}' already exists"
 
         preset_data = {
             "name": name,
-            "version": "1.0",
-            "parameters": parameters.to_dict()
+            "version": "2.0",
+            "schema_version": 2,
+            "parameters": parameters.to_dict(),
         }
-
         with open(filepath, 'w') as f:
             json.dump(preset_data, f, indent=2)
-
         return True, ""
-
     except Exception as e:
         print(f"Error saving preset: {e}")
         return False, str(e)
 
 
 def load_preset(name: str) -> Optional[Dict[str, Any]]:
-    """
-    Load a parameter preset from a JSON file.
-    
-    Args:
-        name: Name of the preset to load
-    
-    Returns:
-        Dictionary of parameters, or None if loading failed
-    """
+    """Load a parameter preset; returns the migrated parameter dict."""
     try:
         preset_dir = get_preset_directory()
         filepath = os.path.join(preset_dir, f"{name}.json")
-
         if not os.path.exists(filepath):
             print(f"Preset file not found: {filepath}")
             return None
 
-        # Read from file
         with open(filepath) as f:
             preset_data = json.load(f)
 
-        return preset_data.get("parameters", {})
+        # Accept both top-level params (v2) and the v1 schema where the
+        # parameters lived inline at the root or under "parameters".
+        if "parameters" in preset_data:
+            params = preset_data["parameters"]
+        else:
+            params = preset_data
 
+        return _migrate_to_v2(params)
     except Exception as e:
         print(f"Error loading preset: {e}")
         return None
 
 
+def _migrate_to_v2(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Best-effort upgrade of a v1 preset dict to the v2 schema.
+
+    v1 had: spacing, path_width, lateral_density, space_size_variation, seed,
+             grid_size, wall_height, block_types (legacy 4), road_*, terrain_*.
+
+    v2 adds: blockout_style, path_width_cells, lateral_depth_cells,
+             elevation_*, step_height, cover_density, ramp_slope_cells,
+             use_stairs, generate_pillars, piece_overrides, and a new
+             block_types vocabulary.
+    """
+    if params.get("schema_version") == 2:
+        return params
+
+    out = dict(params)
+    out.setdefault("schema_version", 2)
+
+    # Top-level style default: outdoor for the legacy "urban street" feel.
+    out.setdefault("blockout_style", "OUTDOOR")
+
+    # Grid model defaults derived from legacy continuous values.
+    out.setdefault("grid_size", float(out.get("grid_size", 4.0)) or 4.0)
+    legacy_pw = float(out.get("path_width", 16.0))
+    gs = float(out["grid_size"])
+    out.setdefault("path_width_cells", max(1, int(round(legacy_pw / max(gs * 2, 1.0)))))
+    out.setdefault("lateral_depth_cells", 1)
+
+    # Elevation defaults
+    out.setdefault("elevation_source", "SPLINE_Z")
+    out.setdefault("step_height", 1.5)
+    out.setdefault("max_elevation_steps", 2)
+    out.setdefault("elevation_smoothing", 2)
+
+    # Piece library defaults
+    out.setdefault("cover_density", 0.6)
+    out.setdefault("ramp_slope_cells", 1)
+    out.setdefault("use_stairs", False)
+    out.setdefault("generate_pillars", False)
+    out.setdefault("piece_overrides", {})
+
+    # Map legacy block_types ({wall, floor, platform, ramp}) onto v2 set
+    legacy_bt = set(out.get("block_types", ["wall", "floor", "ramp"]))
+    new_bt = set()
+    if "floor" in legacy_bt: new_bt.add(PIECE_FLOOR)
+    if "wall" in legacy_bt: new_bt.add(PIECE_WALL)
+    if "ramp" in legacy_bt: new_bt.add(PIECE_RAMP)
+    # 'platform' (legacy elevated floor) -> closest analog: WALL_HALF (cover)
+    if "platform" in legacy_bt: new_bt.add(PIECE_WALL_HALF)
+    # Ensure at least one piece survives migration
+    if not new_bt:
+        new_bt = {PIECE_FLOOR, PIECE_WALL, PIECE_RAMP}
+    # Indoor presets need doorways to remain traversable
+    if out["blockout_style"] == "INDOOR":
+        new_bt.add(PIECE_DOORWAY)
+    out["block_types"] = sorted(new_bt)
+
+    return out
+
+
 def get_preset_list() -> List[str]:
-    """
-    Get a list of available preset names.
-    
-    Returns:
-        List of preset names (without .json extension)
-    """
     try:
         preset_dir = get_preset_directory()
-
         if not os.path.exists(preset_dir):
             return []
-
-        # Get all .json files in the preset directory
-        presets = []
-        for filename in os.listdir(preset_dir):
-            if filename.endswith(".json"):
-                preset_name = filename[:-5]  # Remove .json extension
-                presets.append(preset_name)
-
-        return sorted(presets)
-
+        return sorted(f[:-5] for f in os.listdir(preset_dir) if f.endswith(".json"))
     except Exception as e:
         print(f"Error getting preset list: {e}")
         return []
 
 
 def delete_preset(name: str) -> bool:
-    """
-    Delete a preset file.
-    
-    Args:
-        name: Name of the preset to delete
-    
-    Returns:
-        True if successful, False otherwise
-    """
     try:
         preset_dir = get_preset_directory()
         filepath = os.path.join(preset_dir, f"{name}.json")
-
         if os.path.exists(filepath):
             os.remove(filepath)
             return True
-        else:
-            print(f"Preset file not found: {filepath}")
-            return False
-
+        return False
     except Exception as e:
         print(f"Error deleting preset: {e}")
         return False
 
 
+# Field name -> per-piece override prop name on PG.
+_PIECE_OVERRIDE_PROPS = {
+    PIECE_FLOOR:     "piece_override_floor",
+    PIECE_WALL:      "piece_override_wall",
+    PIECE_WALL_HALF: "piece_override_wall_half",
+    PIECE_DOORWAY:   "piece_override_doorway",
+    PIECE_RAMP:      "piece_override_ramp",
+    PIECE_STAIRS:    "piece_override_stairs",
+    PIECE_PILLAR:    "piece_override_pillar",
+}
+
+
+# Direct scalar/string fields that map 1:1 to PG props.
+_DIRECT_PROPS = (
+    "spacing", "path_width", "blockout_style",
+    "lateral_density", "space_size_variation",
+    "grid_size", "wall_height", "path_width_cells", "lateral_depth_cells",
+    "elevation_source", "step_height", "max_elevation_steps", "elevation_smoothing",
+    "cover_density", "ramp_slope_cells", "use_stairs", "generate_pillars",
+    "terrain_enabled", "height_variation", "smoothness", "terrain_width",
+    "road_mode_enabled", "road_width",
+    "road_mesh_enabled", "road_mesh_width", "road_height_offset",
+    "randomize_params_with_seed",
+)
+
+
 def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene):
-    """
-    Apply preset parameters to the scene properties.
-    
-    Args:
-        preset_params: Dictionary of preset parameters
-        scene: Blender scene to apply parameters to
-    """
+    """Apply preset parameters to the scene properties."""
     props = scene.pcg_props
 
-    # Apply parameters
-    if "spacing" in preset_params:
-        props.spacing = preset_params["spacing"]
-    if "path_width" in preset_params:
-        props.path_width = preset_params["path_width"]
-    if "lateral_density" in preset_params:
-        props.lateral_density = preset_params["lateral_density"]
-    if "space_size_variation" in preset_params:
-        props.space_size_variation = preset_params["space_size_variation"]
+    # Direct fields
+    for key in _DIRECT_PROPS:
+        if key in preset_params and hasattr(props, key):
+            try:
+                setattr(props, key, preset_params[key])
+            except Exception as e:
+                print(f"PCG: failed to apply preset key '{key}': {e}")
+
+    # Seed (None -> 0)
     if "seed" in preset_params:
-        props.seed = preset_params["seed"] if preset_params["seed"] is not None else 0
-    if "grid_size" in preset_params:
-        props.grid_size = preset_params["grid_size"]
-    if "wall_height" in preset_params:
-        props.wall_height = preset_params["wall_height"]
-    if "randomize_params_with_seed" in preset_params:
-        props.randomize_params_with_seed = preset_params["randomize_params_with_seed"]
+        seed = preset_params["seed"]
+        props.seed = seed if seed is not None else 0
 
-    # Apply road mode parameters
-    if "road_mode_enabled" in preset_params:
-        props.road_mode_enabled = preset_params["road_mode_enabled"]
-    if "road_width" in preset_params:
-        props.road_width = preset_params["road_width"]
+    # side_placement (enum, upper-case)
     if "side_placement" in preset_params:
-        props.side_placement = preset_params["side_placement"]
+        sp = str(preset_params["side_placement"]).upper()
+        if sp in ("LEFT", "RIGHT", "BOTH", "ALTERNATING"):
+            props.side_placement = sp
 
-    # Apply block types
+    # Block types
     if "block_types" in preset_params:
-        block_types = preset_params["block_types"]
-        props.block_type_wall = "wall" in block_types
-        props.block_type_floor = "floor" in block_types
-        props.block_type_platform = "platform" in block_types
-        props.block_type_ramp = "ramp" in block_types
+        bt = set(preset_params["block_types"])
+        props.block_type_floor = PIECE_FLOOR in bt
+        props.block_type_wall = PIECE_WALL in bt
+        props.block_type_wall_half = PIECE_WALL_HALF in bt
+        props.block_type_doorway = PIECE_DOORWAY in bt
+        props.block_type_ramp = PIECE_RAMP in bt
+        props.block_type_stairs = PIECE_STAIRS in bt
+        props.block_type_pillar = PIECE_PILLAR in bt
 
-    # Apply terrain parameters
-    if "terrain_enabled" in preset_params:
-        props.terrain_enabled = preset_params["terrain_enabled"]
-    if "height_variation" in preset_params:
-        props.height_variation = preset_params["height_variation"]
-    if "smoothness" in preset_params:
-        props.smoothness = preset_params["smoothness"]
-    if "terrain_width" in preset_params:
-        props.terrain_width = preset_params["terrain_width"]
+    # Per-piece overrides
+    overrides = preset_params.get("piece_overrides", {}) or {}
+    for piece_id, prop_name in _PIECE_OVERRIDE_PROPS.items():
+        if hasattr(props, prop_name):
+            setattr(props, prop_name, str(overrides.get(piece_id, "")))
 
-    # Apply road mesh parameters
-    if "road_mesh_enabled" in preset_params:
-        props.road_mesh_enabled = preset_params["road_mesh_enabled"]
-    if "road_mesh_width" in preset_params:
-        props.road_mesh_width = preset_params["road_mesh_width"]
-    if "road_height_offset" in preset_params:
-        props.road_height_offset = preset_params["road_height_offset"]
+    # Road color
+    if "road_material_color" in preset_params:
+        try:
+            props.road_material_color = tuple(preset_params["road_material_color"])
+        except Exception:
+            pass
 
-    # Apply layers
+    # Layers
     if "layers" in preset_params:
-        # Clear existing layers
         props.layers.clear()
-
-        # Add new layers
         for layer_data in preset_params["layers"]:
             layer = props.layers.add()
             layer.name = layer_data.get("name", "Layer")
             layer.enabled = layer_data.get("enabled", True)
-            layer.rule = layer_data.get("rule", "edge_loop")
+            layer.rule = layer_data.get("rule", "EDGE_LOOP")
             layer.collection_name = layer_data.get("collection_name", "")
             layer.density = layer_data.get("density", 1.0)
             layer.offset = layer_data.get("offset", 0.0)
@@ -225,6 +246,4 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
             layer.random_scale = layer_data.get("random_scale", False)
             layer.scale_min = layer_data.get("scale_min", 0.8)
             layer.scale_max = layer_data.get("scale_max", 1.2)
-
-        # Reset active index
         props.active_layer_index = 0 if len(props.layers) > 0 else -1

@@ -1,66 +1,121 @@
 # PCG Level Blockout Toolkit for Blender
 
-A procedural level blockout generator for game development. This spline-based tool helps level designers and developers rapidly iterate and build gray-box level layouts, modular buildings, roads, and landscape terrain.
+A procedural **blockout map generator** for game development. The addon turns a
+single spline into a grid-aligned blockout populated with **floors, walls,
+half-walls (cover), doorways, ramps, stairs and pillars** — the same vocabulary
+used by Unreal modular kits, Houdini Labs Level Blockout, Synty POLYGON
+Prototype packs and Unity ProBuilder. Designers iterate level flow by editing
+the spline; the addon rebuilds the geometry in a deterministic multi-pass
+pipeline.
+
+---
+
+## How a blockout is built
+
+Every `Generate` produces output by running six passes in order:
+
+| Pass | Stage | What it does |
+|---|---|---|
+| P1 | **Layout — Rasterize** | Snap each spline sample to the global grid → centerline cells |
+| P2 | **Layout — Corridor** | Expand the corridor sideways by `Path Width (cells)`; in Road Mode the centre row becomes the road |
+| P3 | **Layout — Laterals** | Spawn lateral pockets controlled by `Lateral Density` & `Lateral Depth (cells)` |
+| P4 | **Elevation** | Assign integer elevation steps per cell from the chosen source, smooth across neighbours |
+| P5 | **Blockout — Floor / Wall / Traversal** | Place a floor tile per cell; wall, half-wall or doorway on every edge; ramp/stairs across elevation breaks |
+| P6 | **Decoration** | Run the user-defined Layer system (Edge Loop / Fill Grid / Scatter / Center Line) on top of the blockout |
+
+The pipeline is driven by one master switch — **Blockout Style** — which changes
+how every later pass interprets its parameters.
+
+---
+
+## Blockout Styles
+
+### Outdoor / Open (default)
+- Cells become **open platforms**, not enclosed rooms
+- Walls only appear at world boundaries; elevation drops get **cover half-walls** (`Cover Density`)
+- Doorways are not emitted (open boundaries between connected cells)
+- Best for **parkour, urban streets, outdoor combat zones**
+- Default elevation source: **Follow Spline Z** — terrain follows the curve you draw
+
+### Indoor / Dungeon
+- Cells become **enclosed rooms** with **full perimeter walls**
+- Where two connected cells share elevation, the wall is replaced by a **Doorway** piece
+- Where elevation differs, a **Ramp** (or **Stairs** if enabled) spans the gap
+- `Lateral Density` controls how many neighbour pairs stay sealed
+- Best for **dungeons, interiors, base layouts**
+- Default elevation source: **Random + Smooth** — produces varied vertical interiors
+
+---
+
+## Placeholder piece library
+
+| Piece | Role | Default primitive |
+|---|---|---|
+| `FLOOR` | One per cell, sits at the cell's elevated Z | Thin tile, `grid_size × grid_size` |
+| `WALL` | Full-height solid on a missing or sealed edge | `grid_size` long × thin × `wall_height` |
+| `WALL_HALF` | Cover / parapet on drop edges (Outdoor) | ~45% wall height |
+| `DOORWAY` | Frame with cut-out opening (Indoor connections) | Two posts + lintel |
+| `RAMP` | Wedge across an elevation step | Width = `grid_size`, run = `ramp_slope_cells × grid_size`, rise = step delta |
+| `STAIRS` | Stepped variant of ramp | Configurable step count |
+| `PILLAR` | Optional corner column | Slim square column |
+
+Each piece type has a **Collection override** slot in the *Blockout Pieces*
+panel — drop a Blender Collection containing your custom modular assets and
+the addon spawns those instead of the primitive. Mix and match: override walls
+with your modular wall kit while keeping primitive floors, etc.
 
 ---
 
 ## Viewport Panel Guide
 
-The main controls are located in the 3D Viewport sidebar under the **PCG Blockout** tab (`N` panel).
+All controls live in `View3D > Sidebar > PCG Blockout` (`N` panel).
 
 ### 1. Spline Path
-Defines the main route/corridor for the level generation.
-* **Spline**: Select a Curve object in the scene.
-* **Create Default Spline**: Spawns a straight, flat 2-point Bezier curve with `'AUTO'` handles lying flat along the X-axis. This is optimized for linear layouts and is fully protected against twisted handle loops ("bowties") when extruding in Edit Mode.
+Defines the level's path. Use **Create Default Spline** for a flat, twist-protected 2-point Bezier optimised for linear layouts.
 
-### 2. Road Mode
-Determines how building spaces are layed out relative to the spline.
-* **Road Mode (ON/OFF)**:
-  * **OFF (Standard Mode)**: Generates spatial structures centered directly on the spline curve.
-  * **ON (Road Mode)**: Clears the center path to act as a roadway and places buildings/spaces on the sides of the path.
-* **Side**: Choose which side to place buildings on:
-  * `Left` / `Right`: Restricts building placement strictly to one side of the road.
-  * `Both`: Places buildings on both sides of the road.
-  * `Alternating`: Alternates placing buildings left and right as the road progresses.
+### 2. Blockout Style
+The top-level switch between **Outdoor / Open** and **Indoor / Dungeon** styles described above. Every downstream pass branches on this value.
 
-### 3. Layout Parameters
-Tweaks the spatial density and size variation of generated rooms and spaces.
-* **Spacing**: Distance (in meters) between consecutive space nodes along the spline.
-* **Path Width**: The base width of the level generation corridor around the spline.
-* **Lateral Density**: The density ($0.0$ to $1.0$) of branching lateral rooms that fork off the main road.
-* **Space Size Variation**: Size variance ($0.0$ to $1.0$) of rooms. Higher values create organic, asymmetrical structures, while lower values keep rooms uniform.
+### 3. Layout Grid
+* **Grid Size**: footprint of a single cell (default 4m). All pieces snap to this grid.
+* **Spacing**: spline sample interval (smaller = denser corridor).
+* **Path Width (cells)** / **Lateral Depth (cells)**: integer cell counts that control corridor breadth and how far lateral pockets reach.
+* **Lateral Density** / **Size Variation**: control random pocket spawn frequency and depth variance.
+* **Road Mode**: clears the centerline so the spline becomes a road and cells appear only on the sides (`Left`/`Right`/`Both`/`Alternating`).
 
-### 4. Generation Layers
-A flexible, rule-based layer system to populate room nodes with modular assets or blockout primitives.
-* **Layer List**: Manage layers (Add, Remove, Move Up/Down).
-* **Layer Properties**:
-  * **Enabled**: Toggle spawning on/off for the active layer.
-  * **Rule**: Choose the placement algorithm:
-    * `Edge Loop`: Places assets along the outer perimeter walls.
-    * `Fill Grid`: Fills the interior room space using a aligned grid layout.
-    * `Scatter`: Scatters assets randomly inside the room boundaries.
-    * `Center Line`: Places assets along the center spline segment.
-  * **Asset Collection**: Name of the target Blender collection containing custom modular meshes. If left blank, spawns fallback prototyping cubes.
-  * **Density**: Density multiplier for spawned assets.
-  * **Offset / Z Offset**: Locational offsets to lift or shift spawned meshes.
-  * **Random Rotation / Scale**: Transform randomizers with customizable min/max scale limits.
+### 4. Elevation
+* **Source**: `Flat`, `Random + Smooth`, or `Follow Spline Z`.
+* **Step Height**: vertical size of one step.
+* **Max Steps**: cap on how many steps a cell can rise.
+* **Smoothing Passes**: neighbour-averaging iterations (0 = jagged).
+* Where neighbouring cells differ by ≥ 1 step a **Ramp / Stairs** is automatically inserted.
 
-### 5. Terrain
-Generates procedural landscape grid geometry surrounding your level.
-* **Enable Terrain**: Toggles terrain mesh generation.
-* **Height Variation**: Maximum vertical elevation variance of hills and valleys.
-* **Smoothness**: Iterations of smoothing filters applied to heightmap (higher values = rolling hills, lower = rugged peaks).
-* **Terrain Width**: Overall boundary width of terrain generated on both sides of the spline.
+### 5. Blockout Pieces
+* **Wall Height**, **Ramp Length**, **Cover Density** sliders.
+* **Use Stairs Instead of Ramps**, **Generate Pillars** toggles.
+* **Piece Library** grid: per-piece **enable toggle + asset collection override** slot.
 
-### 6. Road Mesh
-Generates actual road geometry independently of terrain options.
-* **Enable Road Mesh**: Toggles standalone road geometry generation.
-* **Road Width**: Total width of the generated road surface.
-* **Road Z Offset**: Shifts the road mesh vertically (default `0.05m`) above spline/terrain to prevent Z-fighting.
-* **Road Color**: Base color applied to the road's procedural material.
+### 6. Decoration Layers (post-blockout)
+The classic layer system from v1 — runs **after** the blockout is built so user-supplied props are layered on top of the structural pieces.
+* **Rule**: `Edge Loop` / `Fill Grid` / `Scatter` / `Center Line`.
+* **Asset Collection**: where to source mesh instances (falls back to cubes).
+* **Density / Offset / Random Rotation / Random Scale**: per-layer randomisers.
 
-### 7. Controls & Utilities
-* **Generate**: Deletes old geometry and generates new level layout, buildings, terrain, and roads.
-* **History Popover (Clock Icon)**: Stores up to 10 previous generations. Save Snapshots to bookmark nice seeds, and restore them instantly.
-* **Remix Parameters**: Randomizes selected configurations (configured in configuration popover) to easily iterate design variations.
-* **Presets**: Save current settings as custom JSON presets in the `presets/` folder, or load existing presets.
+### 7. Terrain
+Procedural ground mesh under and around the level. Reads each cell's elevated Z so the terrain plates correctly under multi-tier blockouts.
+
+### 8. Road Mesh
+Standalone road geometry, generated independently of the terrain.
+
+### 9. Controls & Utilities
+* **Generate**: clears old output and runs the full pipeline.
+* **Preview**: spawns wireframe cell tiles + edge dots (red=wall, green=open/doorway, yellow=ramp) so you can see the planned blockout before committing.
+* **Remix Parameters**: randomizes the subset of parameters configured via the gear popover.
+* **History popover**: stores up to 10 previous generations + named snapshots.
+
+### 10. Presets
+Save/load configurations as JSON in `presets/`. Two presets ship out of the box:
+* `outdoor_street.json` — open street blockout (Outdoor style, road mode, cover walls)
+* `indoor_dungeon.json` — enclosed dungeon (Indoor style, doorways + stairs + pillars)
+
+Legacy v1 presets are auto-migrated to the v2 schema on load.

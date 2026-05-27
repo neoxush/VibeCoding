@@ -84,10 +84,17 @@ def store_metadata(collection: bpy.types.Collection, params: GenerationParams):
     collection["pcg_seed"] = params.seed if params.seed is not None else 0
     collection["pcg_spacing"] = params.spacing
     collection["pcg_path_width"] = params.path_width
+    collection["pcg_blockout_style"] = params.blockout_style
     collection["pcg_lateral_density"] = params.lateral_density
     collection["pcg_space_size_variation"] = params.space_size_variation
     collection["pcg_grid_size"] = params.grid_size
     collection["pcg_wall_height"] = params.wall_height
+    collection["pcg_path_width_cells"] = params.path_width_cells
+    collection["pcg_lateral_depth_cells"] = params.lateral_depth_cells
+    collection["pcg_elevation_source"] = params.elevation_source
+    collection["pcg_step_height"] = params.step_height
+    collection["pcg_max_elevation_steps"] = params.max_elevation_steps
+    collection["pcg_cover_density"] = params.cover_density
     collection["pcg_terrain_enabled"] = params.terrain_enabled
     collection["pcg_height_variation"] = params.height_variation
     collection["pcg_smoothness"] = params.smoothness
@@ -98,7 +105,7 @@ def store_metadata(collection: bpy.types.Collection, params: GenerationParams):
         collection["pcg_spline_name"] = params.spline_object.name
 
     # Store block types as a string
-    collection["pcg_block_types"] = ",".join(params.block_types)
+    collection["pcg_block_types"] = ",".join(sorted(params.block_types))
 
     # Store generation timestamp
     collection["pcg_timestamp"] = datetime.now().isoformat()

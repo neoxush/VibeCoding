@@ -272,12 +272,13 @@ class TerrainGenerator:
                          bounds: Tuple[float, float, float, float]) -> List[List[float]]:
         """
         Flatten designated areas in the heightmap.
-        
+
         Args:
             heightmap: The heightmap to modify
-            zones: List of (center_position, radius) tuples for flat zones
+            zones: List of (center_position, radius) tuples for flat zones.
+                   ``center_position.z`` is taken as the target ground level.
             bounds: (min_x, max_x, min_y, max_y) terrain boundaries
-        
+
         Returns:
             Modified heightmap with flat zones
         """
@@ -353,9 +354,17 @@ class TerrainGenerator:
 
         if spaces:
             flat_zones = []
+            gs = self.params.grid_size
+            sh = self.params.step_height
             for space in spaces:
-                zone_radius = max(space.size.x, space.size.y) * 0.7
-                flat_zones.append((space.position, zone_radius))
+                # Cells expose world_position(); legacy Space objects expose .position.
+                if hasattr(space, "world_position") and callable(space.world_position):
+                    center = space.world_position(gs, sh)
+                    zone_radius = gs * 0.7
+                else:
+                    center = space.position
+                    zone_radius = max(space.size.x, space.size.y) * 0.7
+                flat_zones.append((center, zone_radius))
             heightmap = self.create_flat_zones(heightmap, flat_zones, bounds)
             if wm.progress_is_cancel:
                 wm.progress_end()
