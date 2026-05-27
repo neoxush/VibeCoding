@@ -1,9 +1,11 @@
 """Layout generator.
 
-Produces a grid of `Cell` objects from a spline and the generation parameters.
-Each Cell knows its cardinal neighbours, elevation step, and which edges are
-passable (connections). This is the foundation for the multi-pass blockout
-pipeline run by ``BuildingBlockGenerator.build_blockout``.
+Produces a ribbon of `Cell` objects from a spline and the generation parameters.
+Path cells (the road) are placed in continuous world space along the spline's
+local tangent/normal frame; each cell carries an `orientation` yaw so the wall
+and floor passes can rotate pieces along the road instead of snapping to world
+cardinals. Lateral pockets branch off ribbon cells in the road's local frame
+so side rooms inherit the road's orientation.
 
 A legacy ``Space`` view is also exposed so older consumers (preview, terrain)
 keep working with minimal change.
@@ -11,6 +13,7 @@ keep working with minimal change.
 
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple
@@ -28,7 +31,10 @@ DIR_E = "E"
 DIR_W = "W"
 CARDINALS = (DIR_N, DIR_S, DIR_E, DIR_W)
 
-# (di, dj) offsets in grid space for each cardinal.
+# (di, dj) offsets in *local* cell-frame coords (i = side, j = sample).
+# For a ribbon cell, local +Y (j+1) is "forward along the road" and local +X
+# (i+1) is "right of the road"; a cell's `orientation` yaw rotates that
+# local frame into world space.
 DIR_OFFSETS: Dict[str, Tuple[int, int]] = {
     DIR_N: (0, 1),
     DIR_S: (0, -1),
@@ -39,19 +45,35 @@ DIR_OFFSETS: Dict[str, Tuple[int, int]] = {
 OPPOSITE: Dict[str, str] = {DIR_N: DIR_S, DIR_S: DIR_N, DIR_E: DIR_W, DIR_W: DIR_E}
 
 
+def _rotate_xy(x: float, y: float, theta: float) -> Tuple[float, float]:
+    """Rotate a 2D vector by ``theta`` radians (CCW)."""
+    cos_t = math.cos(theta)
+    sin_t = math.sin(theta)
+    return (x * cos_t - y * sin_t, x * sin_t + y * cos_t)
+
+
+def _orientation_for_tangent(tangent: mathutils.Vector) -> float:
+    """Z-yaw such that the cell's local +Y aligns with ``tangent``.
+
+    Pieces in our library face +Y by convention, so this yaw makes the cell's
+    'forward' direction track the spline tangent.
+    """
+    tx, ty = float(tangent.x), float(tangent.y)
+    if abs(tx) < 1e-6 and abs(ty) < 1e-6:
+        return 0.0
+    return math.atan2(-tx, ty)
+
+
 def _snap_to_cardinal(vec: mathutils.Vector) -> str:
-    """Return the cardinal closest to the given 2D-ish vector."""
+    """Return the cardinal closest to the given 2D-ish vector.
+
+    Kept for backward compat with any external caller; the ribbon builder
+    no longer relies on cardinal snapping for placement.
+    """
     x, y = vec.x, vec.y
     if abs(x) >= abs(y):
         return DIR_E if x >= 0 else DIR_W
     return DIR_N if y >= 0 else DIR_S
-
-
-def _perpendiculars(cardinal: str) -> Tuple[str, str]:
-    """Two cardinals perpendicular to `cardinal` (left & right)."""
-    if cardinal in (DIR_N, DIR_S):
-        return DIR_W, DIR_E
-    return DIR_S, DIR_N
 
 
 # ---------------------------------------------------------------- Data model
@@ -59,13 +81,22 @@ def _perpendiculars(cardinal: str) -> Tuple[str, str]:
 
 @dataclass
 class Cell:
-    """A grid-aligned blockout cell."""
+    """A blockout cell.
 
-    grid_coord: Tuple[int, int]            # (i, j)
+    For ribbon (path) cells, ``grid_coord`` is a synthetic
+    ``(side_offset, sample_index)`` key rather than a global grid coord, and
+    ``orientation`` rotates the cell's local frame so its forward axis tracks
+    the spline tangent. Lateral pockets inherit the parent ribbon cell's
+    orientation so they extend perpendicular to the road, not the world axes.
+    """
+
+    grid_coord: Tuple[int, int]            # ribbon: (side_offset, sample_idx); legacy: (i, j)
     world_xy: Tuple[float, float]          # cell-center world X, Y
     base_z: float                          # ground reference (e.g. spline z)
     elevation: int = 0                     # integer steps above base_z
     role: str = "path"                     # "path" | "lateral" | "room"
+    orientation: float = 0.0               # Z-yaw applied to the cell's local frame
+    is_ribbon: bool = False                # True for tangent-aligned road cells
     connections: Set[str] = field(default_factory=set)  # cardinals that are passable
     neighbors: Dict[str, Cell] = field(default_factory=dict)
     # Stable id for naming; assigned by generator.
@@ -99,10 +130,6 @@ class Cell:
     def type(self) -> str:
         return self.role
 
-    @property
-    def orientation(self) -> mathutils.Quaternion:
-        return mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
-
 
 # Legacy alias - some modules still reference "Space".
 Space = Cell
@@ -112,15 +139,21 @@ Space = Cell
 
 
 class LayoutGenerator:
-    """Build a grid of `Cell`s along a spline.
+    """Build a tangent-aligned ribbon of `Cell`s along a spline.
 
     Pipeline (all internal to ``generate``):
-        P1  Rasterize spline samples onto a global axis-aligned grid.
-        P2  Expand each centerline cell sideways by ``path_width_cells``.
-        P3  Add lateral pockets controlled by ``lateral_density``.
-        P4  Resolve neighbours; assign elevation via ``elevation_source``.
-        P5  Smooth elevation across neighbours.
-        P6  Decide which edges are connections (doorways/open) per style.
+        P1  Build the ribbon: at every spline sample place a column of
+            ``path_width_cells`` cells perpendicular to the local tangent.
+            In road-mode the centerline is skipped so the spline becomes
+            the actual drivable road and only side/shoulder cells exist.
+        P2  Add lateral pockets controlled by ``lateral_density``; each
+            pocket extends perpendicular to the road, in the parent ribbon
+            cell's local frame.
+        P3  Resolve neighbours; assign elevation via ``elevation_source``.
+        P4  Smooth elevation across neighbours.
+        P5  Decide which edges are connections (doorways/open) per style.
+            Path-to-path edges are always forced open so the road never
+            gets fenced off.
     """
 
     def __init__(self, seed: int, params: GenerationParams,
@@ -131,19 +164,12 @@ class LayoutGenerator:
         self.rng = random.Random(seed)
         self._cells: Dict[Tuple[int, int], Cell] = {}
         self._next_id = 0
-        # Origin around which we rasterize the grid (use first sample if any).
-        if spline_points:
-            origin = spline_points[0].position
-            self._origin_xy = (float(origin.x), float(origin.y))
-        else:
-            self._origin_xy = (0.0, 0.0)
 
     # ---------------- Public API ------------------------------------------
 
     def generate(self) -> List[Cell]:
         """Run the full pipeline and return the cell list."""
-        self._rasterize_path()
-        self._expand_path_width()
+        self._build_ribbon()
         self._add_lateral_cells()
         self._resolve_neighbors()
         self._assign_elevation()
@@ -157,19 +183,17 @@ class LayoutGenerator:
             c._step_height = self.params.step_height    # type: ignore[attr-defined]
         return cells
 
-    # ---------------- P1 path rasterization -------------------------------
+    # ---------------- Cell factory ----------------------------------------
 
-    def _grid_coord(self, x: float, y: float) -> Tuple[int, int]:
-        gs = self.params.grid_size
-        ox, oy = self._origin_xy
-        return (int(round((x - ox) / gs)), int(round((y - oy) / gs)))
-
-    def _world_xy(self, coord: Tuple[int, int]) -> Tuple[float, float]:
-        gs = self.params.grid_size
-        ox, oy = self._origin_xy
-        return (ox + coord[0] * gs, oy + coord[1] * gs)
-
-    def _make_cell(self, coord: Tuple[int, int], base_z: float, role: str) -> Cell:
+    def _make_cell(
+        self,
+        coord: Tuple[int, int],
+        world_xy: Tuple[float, float],
+        base_z: float,
+        role: str,
+        orientation: float = 0.0,
+        is_ribbon: bool = False,
+    ) -> Cell:
         existing = self._cells.get(coord)
         if existing is not None:
             # Prefer 'path' role over 'lateral' for shared cells.
@@ -178,86 +202,85 @@ class LayoutGenerator:
             return existing
         cell = Cell(
             grid_coord=coord,
-            world_xy=self._world_xy(coord),
+            world_xy=world_xy,
             base_z=base_z,
             role=role,
+            orientation=orientation,
+            is_ribbon=is_ribbon,
             id=self._next_id,
         )
         self._next_id += 1
         self._cells[coord] = cell
         return cell
 
-    def _rasterize_path(self) -> None:
-        """Convert spline samples into a chain of unique grid cells."""
+    # ---------------- P1 ribbon builder -----------------------------------
+
+    def _build_ribbon(self) -> None:
+        """Rasterize the spline as a tangent-aligned ribbon of cells.
+
+        At every spline sample we lay down a column of cells perpendicular
+        to the local tangent, spaced by ``grid_size`` and oriented so that
+        the cell's local +Y points along the road. Cells store the local
+        tangent yaw as ``orientation`` so the wall pass can rotate pieces
+        along the road instead of snapping to world cardinals.
+        """
         if not self.spline_points:
             return
 
-        for point in self.spline_points:
-            coord = self._grid_coord(point.position.x, point.position.y)
-            self._make_cell(coord, float(point.position.z), role="path")
-
-    # ---------------- P2 corridor width -----------------------------------
-
-    def _expand_path_width(self) -> None:
-        """Widen the corridor sideways by ``path_width_cells``.
-
-        ``path_width_cells`` of 1 keeps just the centre line. Higher values
-        add cells on each side, snapped to the nearest cardinal perpendicular
-        of the local spline tangent.
-        """
+        gs = self.params.grid_size
         width = max(1, int(self.params.path_width_cells))
-        if width <= 1 and not self.params.road_mode_enabled:
-            return
+        half_extra = width - 1
+        road_mode = self.params.road_mode_enabled
+        # Precompute the side-offset list per side-placement choice; the road
+        # mode case still picks per-sample via _sides_for_index for the
+        # 'alternating' placement.
+        if road_mode:
+            base_left = list(range(-half_extra - 1, 0))
+            base_right = list(range(1, half_extra + 2))
+        else:
+            ribbon_offsets = list(range(-half_extra, half_extra + 1))
 
-        # Use the spline points to know the local tangent for each path cell.
-        # Build a quick map from coord -> last-seen tangent.
-        coord_tangent: Dict[Tuple[int, int], mathutils.Vector] = {}
-        coord_base_z: Dict[Tuple[int, int], float] = {}
-        for point in self.spline_points:
-            c = self._grid_coord(point.position.x, point.position.y)
-            coord_tangent[c] = point.tangent
-            coord_base_z[c] = float(point.position.z)
-
-        sides_per_index: Dict[Tuple[int, int], List[str]] = {}
-        i = 0
-        for coord, _ in coord_tangent.items():
-            sides_per_index[coord] = self._sides_for_index(i)
-            i += 1
-
-        # In road mode, the centerline is the road -- drop those cells.
-        cells_to_remove: List[Tuple[int, int]] = []
-
-        for coord, tangent in coord_tangent.items():
-            cardinal = _snap_to_cardinal(tangent)
-            left, right = _perpendiculars(cardinal)
-            base_z = coord_base_z[coord]
-
-            half_extra = (width - 1)  # cells per side beyond the centre
-            if self.params.road_mode_enabled:
-                # Centre row becomes the road; build only on selected side(s).
-                allowed = sides_per_index[coord]
-                if "left" in allowed:
-                    for n in range(1, half_extra + 2):
-                        nc = self._neighbor_coord(coord, left, n)
-                        self._make_cell(nc, base_z, role="path")
-                if "right" in allowed:
-                    for n in range(1, half_extra + 2):
-                        nc = self._neighbor_coord(coord, right, n)
-                        self._make_cell(nc, base_z, role="path")
-                cells_to_remove.append(coord)
+        for i, point in enumerate(self.spline_points):
+            # Inline tangent normalization to avoid Vector allocation per sample.
+            tangent = point.tangent
+            tx = float(tangent.x)
+            ty = float(tangent.y)
+            tlen_sq = tx * tx + ty * ty
+            if tlen_sq < 1e-12:
+                tx, ty = 0.0, 1.0
             else:
-                # Standard corridor: keep the centerline plus extra on both sides.
-                for n in range(1, half_extra + 1):
-                    self._make_cell(self._neighbor_coord(coord, left, n), base_z, role="path")
-                    self._make_cell(self._neighbor_coord(coord, right, n), base_z, role="path")
+                inv = 1.0 / math.sqrt(tlen_sq)
+                tx *= inv
+                ty *= inv
+            orientation = math.atan2(-tx, ty)
+            # Local +X (right of road) in world coords. Local +X is local +Y
+            # rotated -90 deg, i.e. (tangent.y, -tangent.x).
+            right_x = ty
+            right_y = -tx
+            base_z = float(point.position.z)
+            cx = float(point.position.x)
+            cy = float(point.position.y)
 
-        for c in cells_to_remove:
-            self._cells.pop(c, None)
+            if road_mode:
+                allowed = self._sides_for_index(i)
+                offsets: List[int] = []
+                if "left" in allowed:
+                    offsets.extend(base_left)
+                if "right" in allowed:
+                    offsets.extend(base_right)
+            else:
+                offsets = ribbon_offsets
 
-    @staticmethod
-    def _neighbor_coord(coord: Tuple[int, int], cardinal: str, n: int = 1) -> Tuple[int, int]:
-        di, dj = DIR_OFFSETS[cardinal]
-        return (coord[0] + di * n, coord[1] + dj * n)
+            for side in offsets:
+                step = side * gs
+                self._make_cell(
+                    coord=(side, i),
+                    world_xy=(cx + right_x * step, cy + right_y * step),
+                    base_z=base_z,
+                    role="path",
+                    orientation=orientation,
+                    is_ribbon=True,
+                )
 
     def _sides_for_index(self, index: int) -> List[str]:
         placement = self.params.side_placement
@@ -267,10 +290,17 @@ class LayoutGenerator:
         if placement == "alternating":  return ["left"] if index % 2 == 0 else ["right"]
         return ["left", "right"]
 
-    # ---------------- P3 lateral pockets ----------------------------------
+    # ---------------- P2 lateral pockets ----------------------------------
 
     def _add_lateral_cells(self) -> None:
-        """Branch ``lateral_density`` extra clusters off the corridor."""
+        """Branch ``lateral_density`` extra clusters off the road.
+
+        Each lateral pocket extends perpendicular to its parent road cell
+        (E or W in the cell's *local* frame), inheriting the parent's
+        orientation so the pocket aligns with the road instead of the
+        world axes. Pockets always extend outward from the centerline so
+        they never encroach on the road's drivable surface.
+        """
         density = max(0.0, min(1.0, self.params.lateral_density))
         if density <= 0.0:
             return
@@ -286,22 +316,51 @@ class LayoutGenerator:
         chosen = self.rng.sample(path_cells, min(n_branches, len(path_cells)))
 
         variation = max(0.0, min(1.0, self.params.space_size_variation))
+        gs = self.params.grid_size
 
         for src in chosen:
-            cardinal = self.rng.choice(CARDINALS)
-            # Skip into open ground if the chosen side already has a path cell.
+            src_side = src.grid_coord[0]
+            # Pick an *outward* perpendicular so pockets never cut into the road.
+            if src_side > 0:
+                cardinal = DIR_E
+            elif src_side < 0:
+                cardinal = DIR_W
+            else:
+                cardinal = self.rng.choice([DIR_E, DIR_W])
+            di, dj = DIR_OFFSETS[cardinal]
+
+            # Skip past any existing cell in the chosen direction.
             n = 1
-            cur = src.grid_coord
-            while self._cells.get(self._neighbor_coord(cur, cardinal, n)) and n <= depth:
+            while self._cells.get((src.grid_coord[0] + di * n,
+                                   src.grid_coord[1] + dj * n)) and n <= depth:
                 n += 1
 
-            # Random depth between 1 and ``depth``, biased by size variation.
-            this_depth = max(1, min(depth, depth - int(self.rng.random() * variation * depth)))
+            this_depth = max(1, min(depth,
+                                    depth - int(self.rng.random() * variation * depth)))
+            cos_o = math.cos(src.orientation)
+            sin_o = math.sin(src.orientation)
             for step in range(n, n + this_depth):
-                coord = self._neighbor_coord(src.grid_coord, cardinal, step)
-                self._make_cell(coord, src.base_z, role="lateral")
+                coord = (src.grid_coord[0] + di * step,
+                         src.grid_coord[1] + dj * step)
+                if coord in self._cells:
+                    continue
+                # World displacement: local (di, dj) * gs, rotated by src.orientation.
+                local_dx = di * step * gs
+                local_dy = dj * step * gs
+                world_dx = local_dx * cos_o - local_dy * sin_o
+                world_dy = local_dx * sin_o + local_dy * cos_o
+                world_xy = (src.world_xy[0] + world_dx,
+                            src.world_xy[1] + world_dy)
+                self._make_cell(
+                    coord=coord,
+                    world_xy=world_xy,
+                    base_z=src.base_z,
+                    role="lateral",
+                    orientation=src.orientation,
+                    is_ribbon=False,
+                )
 
-    # ---------------- P4 neighbour resolution -----------------------------
+    # ---------------- P3 neighbour resolution -----------------------------
 
     def _resolve_neighbors(self) -> None:
         for coord, cell in self._cells.items():
@@ -311,7 +370,7 @@ class LayoutGenerator:
                 if nb is not None:
                     cell.neighbors[cardinal] = nb
 
-    # ---------------- P4 elevation assignment -----------------------------
+    # ---------------- P3 elevation assignment -----------------------------
 
     def _assign_elevation(self) -> None:
         source = self.params.elevation_source
@@ -323,14 +382,11 @@ class LayoutGenerator:
             return
 
         if source == ElevationSource.SPLINE_Z.value:
-            # Use cell.base_z (already set from spline at rasterize time).
-            # Normalize to integer steps relative to the lowest cell.
             min_base = min(c.base_z for c in self._cells.values())
             sh = self.params.step_height if self.params.step_height > 0 else 1.0
             for c in self._cells.values():
                 steps = int(round((c.base_z - min_base) / sh))
                 c.elevation = max(0, min(max_steps, steps))
-            # Reset base_z so world_position math is consistent.
             for c in self._cells.values():
                 c.base_z = min_base
             return
@@ -339,7 +395,7 @@ class LayoutGenerator:
         for c in self._cells.values():
             c.elevation = self.rng.randint(0, max_steps)
 
-    # ---------------- P5 elevation smoothing ------------------------------
+    # ---------------- P4 elevation smoothing ------------------------------
 
     def _smooth_elevation(self) -> None:
         passes = max(0, int(self.params.elevation_smoothing))
@@ -359,18 +415,16 @@ class LayoutGenerator:
             for coord, value in new_values.items():
                 self._cells[coord].elevation = value
 
-        # Final safety: clamp neighbour deltas to at most ``max_steps`` step
-        # difference so ramps remain buildable. Single pass over each pair.
+        # Final safety: clamp neighbour deltas so ramps remain buildable.
         for coord, cell in self._cells.items():
             for cardinal, nb in cell.neighbors.items():
                 if abs(cell.elevation - nb.elevation) > max(1, max_steps):
-                    # Pull the higher one down toward the lower.
                     if cell.elevation > nb.elevation:
                         cell.elevation = nb.elevation + max(1, max_steps)
                     else:
                         nb.elevation = cell.elevation + max(1, max_steps)
 
-    # ---------------- P6 connection assignment ----------------------------
+    # ---------------- P5 connection assignment ----------------------------
 
     def _compute_connections(self) -> None:
         """Decide which edges are passable.
@@ -382,6 +436,11 @@ class LayoutGenerator:
 
         Outdoor: all neighbour pairs are open; the wall pass decides whether
         a cover wall / drop edge / ramp is placed based on elevation deltas.
+
+        Road continuity rule (applied in both styles):
+            Edges between two ``role == "path"`` cells are ALWAYS forced open
+            so the spline corridor / road is never fenced off by a random
+            seal. The wall pass relies on this to keep the road walkable.
         """
         indoor = self.params.is_indoor()
         seal_chance = 0.0 if not indoor else max(0.0, 1.0 - self.params.lateral_density)
@@ -390,8 +449,11 @@ class LayoutGenerator:
             for cardinal, nb in cell.neighbors.items():
                 if cardinal in cell.connections:
                     continue
+                # Road continuity: never seal a path<->path edge.
+                path_to_path = (cell.role == "path" and nb.role == "path")
                 connect = True
-                if indoor and seal_chance > 0.0 and self.rng.random() < seal_chance:
+                if not path_to_path and indoor and seal_chance > 0.0 \
+                        and self.rng.random() < seal_chance:
                     connect = False
                 if connect:
                     cell.connections.add(cardinal)

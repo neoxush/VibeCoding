@@ -9,7 +9,7 @@ Panel layout (top-to-bottom in the N-panel):
     4.  Elevation                (source, step_height, max_steps, smoothing)
     5.  Blockout Pieces          (per-piece toggles + collection overrides)
     6.  Decoration Layers        (existing layer system; runs AFTER blockout)
-    7.  Terrain
+    7.  Terrain                  (DISABLED -- feature parked)
     8.  Road Mesh
     9.  Controls & Utilities
     10. Presets
@@ -154,48 +154,49 @@ class PCG_OT_Generate(bpy.types.Operator):
 
             # ---- Blockout (Floor/Wall/Traversal) ----
             building_gen = BuildingBlockGenerator(seed, params)
-            blockout_by_piece = building_gen.build_blockout(cells)
-
             blockout_root = bpy.data.collections.new("Blockout")
             struct_coll.children.link(blockout_root)
-            for piece_id, objs in blockout_by_piece.items():
-                if not objs:
-                    continue
-                pcoll = bpy.data.collections.new(piece_id.capitalize())
-                blockout_root.children.link(pcoll)
-                scene_manager.organize_objects(objs, pcoll.name)
+            # Pieces are linked directly into per-piece sub-collections under
+            # blockout_root -- avoids the unlink/relink round-trip and the
+            # bpy.ops overhead of the legacy primitive_cube_add path.
+            blockout_by_piece = building_gen.build_blockout(
+                cells, parent_collection=blockout_root)
 
             total_blockout = sum(len(o) for o in blockout_by_piece.values())
             self.report({'INFO'}, f"Placed {total_blockout} blockout pieces")
             wm.progress_update(75)
 
             # ---- Decoration layers (legacy layer system) ----
+            decor_root: dict[str, list] = {}
+            decor_parent: bpy.types.Collection | None = None
+            if any(layer.enabled for layer in params.layers):
+                decor_parent = bpy.data.collections.new("Decoration")
+                struct_coll.children.link(decor_parent)
+
             decor_blocks: dict[str, list] = {}
             for cell in cells:
-                cell_blocks = building_gen.populate_cell(cell)
+                cell_blocks = building_gen.populate_cell(
+                    cell, parent_collection=decor_parent)
                 for layer_name, blocks in cell_blocks.items():
                     decor_blocks.setdefault(layer_name, []).extend(blocks)
 
             if decor_blocks:
-                decor_root = bpy.data.collections.new("Decoration")
-                struct_coll.children.link(decor_root)
-                for layer_name, blocks in decor_blocks.items():
-                    if blocks:
-                        lc = bpy.data.collections.new(layer_name)
-                        decor_root.children.link(lc)
-                        scene_manager.organize_objects(blocks, lc.name)
+                # Decoration props were already linked into per-layer
+                # sub-collections under decor_parent by populate_cell, so we
+                # don't need to organize them again here.
+                pass
 
             total_decor = sum(len(b) for b in decor_blocks.values())
             self.report({'INFO'}, f"Placed {total_decor} decoration blocks")
             wm.progress_update(85)
 
-            # ---- Terrain ----
-            if params.terrain_enabled:
-                terrain_gen = TerrainGenerator(seed, params, spline_points)
-                terrain_obj = terrain_gen.generate(cells)  # cells expose .position/.size
-                if terrain_obj:
-                    scene_manager.organize_objects([terrain_obj], terrain_coll.name)
-                    self.report({'INFO'}, "Terrain generated")
+            # ---- Terrain (disabled, see ui panel comment) ----
+            # if params.terrain_enabled:
+            #     terrain_gen = TerrainGenerator(seed, params, spline_points)
+            #     terrain_obj = terrain_gen.generate(cells)
+            #     if terrain_obj:
+            #         scene_manager.organize_objects([terrain_obj], terrain_coll.name)
+            #         self.report({'INFO'}, "Terrain generated")
 
             if params.road_mesh_enabled:
                 terrain_gen = TerrainGenerator(seed, params, spline_points)
@@ -255,10 +256,11 @@ class PCG_OT_RandomizeSeed(bpy.types.Operator):
         if props.random_include_elevation:
             props.max_elevation_steps = random.randint(0, 3)
             props.step_height = random.uniform(1.0, 2.5)
-        if props.terrain_enabled and props.random_include_terrain:
-            props.height_variation = random.uniform(5.0, 20.0)
-            props.smoothness = random.uniform(0.3, 0.9)
-            props.terrain_width = random.uniform(30.0, 80.0)
+        # Terrain remix disabled while the feature is parked.
+        # if props.terrain_enabled and props.random_include_terrain:
+        #     props.height_variation = random.uniform(5.0, 20.0)
+        #     props.smoothness = random.uniform(0.3, 0.9)
+        #     props.terrain_width = random.uniform(30.0, 80.0)
         if props.road_mode_enabled and props.random_include_road:
             props.road_width = random.uniform(6.0, 15.0)
 
@@ -366,10 +368,11 @@ class PCG_OT_ResetParameters(bpy.types.Operator):
         props.block_type_ramp = True
         props.block_type_stairs = False
         props.block_type_pillar = False
-        props.terrain_enabled = d.TERRAIN_ENABLED
-        props.height_variation = d.HEIGHT_VARIATION
-        props.smoothness = d.SMOOTHNESS
-        props.terrain_width = d.TERRAIN_WIDTH
+        # Terrain feature parked; force-disable so old scenes stop spawning it.
+        props.terrain_enabled = False
+        # props.height_variation = d.HEIGHT_VARIATION
+        # props.smoothness = d.SMOOTHNESS
+        # props.terrain_width = d.TERRAIN_WIDTH
         self.report({'INFO'}, "Parameters reset to defaults")
         return {'FINISHED'}
 
@@ -453,7 +456,8 @@ class PCG_OT_DuplicateLayer(bpy.types.Operator):
         source = props.layers[idx]
         new_layer = props.layers.add()
         for attr in ("name", "enabled", "rule", "collection_name", "density",
-                     "offset", "z_offset", "random_rotation", "random_scale",
+                     "offset", "z_offset", "cell_target",
+                     "random_rotation", "random_scale",
                      "scale_min", "scale_max"):
             setattr(new_layer, attr, getattr(source, attr))
         new_layer.name = f"{source.name} Copy"
@@ -579,7 +583,7 @@ class PCG_PT_RandomizeConfigPopover(bpy.types.Panel):
         col.prop(props, "random_include_height")
         col.prop(props, "random_include_elevation")
         col.separator()
-        col.prop(props, "random_include_terrain")
+        # col.prop(props, "random_include_terrain")  # terrain feature parked
         col.prop(props, "random_include_road")
 
 
@@ -732,6 +736,7 @@ class PCG_PT_MainPanel(bpy.types.Panel):
             sub_box.label(text=f"Properties: {active_layer.name}")
             sub_box.prop(active_layer, "name")
             sub_box.prop(active_layer, "rule")
+            sub_box.prop(active_layer, "cell_target")
             sub_box.prop_search(active_layer, "collection_name", bpy.data, "collections")
             col = sub_box.column(align=True)
             col.prop(active_layer, "density")
@@ -746,13 +751,16 @@ class PCG_PT_MainPanel(bpy.types.Panel):
                 row.prop(active_layer, "scale_max")
 
         # 7. Terrain ----------------------------------------------------
-        box = layout.box()
-        box.label(text="Terrain", icon='MESH_GRID')
-        box.prop(props, "terrain_enabled")
-        if props.terrain_enabled:
-            box.prop(props, "height_variation")
-            box.prop(props, "smoothness")
-            box.prop(props, "terrain_width")
+        # Disabled for now -- the procedural ground mesh idea didn't pan out
+        # in practice. Keeping the property group entries + TerrainGenerator
+        # class around so we can revive this with a different design later.
+        # box = layout.box()
+        # box.label(text="Terrain", icon='MESH_GRID')
+        # box.prop(props, "terrain_enabled")
+        # if props.terrain_enabled:
+        #     box.prop(props, "height_variation")
+        #     box.prop(props, "smoothness")
+        #     box.prop(props, "terrain_width")
 
         # 8. Road Mesh --------------------------------------------------
         box = layout.box()

@@ -242,6 +242,9 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
             layer.density = layer_data.get("density", 1.0)
             layer.offset = layer_data.get("offset", 0.0)
             layer.z_offset = layer_data.get("z_offset", 0.0)
+            # Legacy presets (no cell_target) default to OFF_ROAD so the
+            # spline corridor stays clear after a re-generate.
+            layer.cell_target = layer_data.get("cell_target", "OFF_ROAD")
             layer.random_rotation = layer_data.get("random_rotation", False)
             layer.random_scale = layer_data.get("random_scale", False)
             layer.scale_min = layer_data.get("scale_min", 0.8)

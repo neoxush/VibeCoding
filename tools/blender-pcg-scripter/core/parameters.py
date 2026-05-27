@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import bpy
 
-from .layer_system import LayerConfig, PlacementRule
+from .layer_system import CellTarget, LayerConfig, PlacementRule
 
 
 class BlockoutStyle(str, Enum):
@@ -238,6 +238,24 @@ class PCG_LayerProperty(bpy.types.PropertyGroup):
             (PlacementRule.CENTER_LINE.value, "Center Line", "Place along center"),
         ],
         default=PlacementRule.EDGE_LOOP.value
+    )
+
+    cell_target: bpy.props.EnumProperty(
+        name="Target Cells",
+        description="Which cells this layer is allowed to populate. "
+                    "Default 'Off-Road' keeps the spline corridor clear of "
+                    "decoration props so the road stays walkable.",
+        items=[
+            (CellTarget.OFF_ROAD.value, "Off-Road",
+             "Skip path/road cells, decorate side & lateral cells only"),
+            (CellTarget.ALL.value, "All Cells",
+             "Decorate every cell (legacy behaviour)"),
+            (CellTarget.ROAD_ONLY.value, "Road Only",
+             "Only decorate path/road cells (lane markings, manholes, debris)"),
+            (CellTarget.LATERAL_ONLY.value, "Lateral Only",
+             "Only decorate lateral pockets (side rooms / alcoves)"),
+        ],
+        default=CellTarget.OFF_ROAD.value,
     )
 
     collection_name: bpy.props.StringProperty(
@@ -565,6 +583,10 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
     def _get_layer_configs(self) -> List[LayerConfig]:
         configs = []
         for layer in self.layers:
+            try:
+                target = CellTarget(layer.cell_target)
+            except (ValueError, AttributeError):
+                target = CellTarget.OFF_ROAD
             configs.append(LayerConfig(
                 name=layer.name,
                 enabled=layer.enabled,
@@ -573,6 +595,7 @@ class PCG_PropertyGroup(bpy.types.PropertyGroup):
                 density=layer.density,
                 offset=layer.offset,
                 z_offset=layer.z_offset,
+                cell_target=target,
                 random_rotation=layer.random_rotation,
                 random_scale=layer.random_scale,
                 scale_min=layer.scale_min,

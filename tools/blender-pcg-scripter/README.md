@@ -12,16 +12,15 @@ pipeline.
 
 ## How a blockout is built
 
-Every `Generate` produces output by running six passes in order:
+Every `Generate` produces output by running five passes in order:
 
 | Pass | Stage | What it does |
 |---|---|---|
-| P1 | **Layout — Rasterize** | Snap each spline sample to the global grid → centerline cells |
-| P2 | **Layout — Corridor** | Expand the corridor sideways by `Path Width (cells)`; in Road Mode the centre row becomes the road |
-| P3 | **Layout — Laterals** | Spawn lateral pockets controlled by `Lateral Density` & `Lateral Depth (cells)` |
-| P4 | **Elevation** | Assign integer elevation steps per cell from the chosen source, smooth across neighbours |
-| P5 | **Blockout — Floor / Wall / Traversal** | Place a floor tile per cell; wall, half-wall or doorway on every edge; ramp/stairs across elevation breaks |
-| P6 | **Decoration** | Run the user-defined Layer system (Edge Loop / Fill Grid / Scatter / Center Line) on top of the blockout |
+| P1 | **Layout — Ribbon** | Place a column of cells perpendicular to the local spline tangent at every sample; each cell records its tangent yaw so it stays aligned with the road. In Road Mode the centerline column is skipped so the spline becomes the actual drivable road and only side / shoulder cells exist. |
+| P2 | **Layout — Laterals** | Spawn lateral pockets controlled by `Lateral Density` & `Lateral Depth (cells)`; pockets always extend outward (away from the centerline) in the parent road cell's local frame so they inherit the road's orientation. |
+| P3 | **Elevation** | Assign integer elevation steps per cell from the chosen source, smooth across neighbours |
+| P4 | **Blockout — Floor / Wall / Traversal** | Place a floor tile per cell; wall, half-wall or doorway on every edge; ramp/stairs across elevation breaks. Every piece is rotated by the cell's `orientation` yaw so floors and walls follow the road tangent instead of snapping to the world axes. Edges between two corridor (`path`) cells are always kept open so the road never gets fenced in, regardless of style. |
+| P5 | **Decoration** | Run the user-defined Layer system (Edge Loop / Fill Grid / Scatter / Center Line) on top of the blockout. Each layer has a `Target Cells` filter (default `Off-Road`) so decoration props skip the spline corridor by default. |
 
 The pipeline is driven by one master switch — **Blockout Style** — which changes
 how every later pass interprets its parameters.
@@ -83,6 +82,10 @@ The top-level switch between **Outdoor / Open** and **Indoor / Dungeon** styles 
 * **Lateral Density** / **Size Variation**: control random pocket spawn frequency and depth variance.
 * **Road Mode**: clears the centerline so the spline becomes a road and cells appear only on the sides (`Left`/`Right`/`Both`/`Alternating`).
 
+> **Road continuity guarantee.** Every edge between two corridor cells (cells flagged `role=path`) is forced open by the layout pass and skipped by the wall pass. That means walls, half-walls, doorways and cover parapets will never be dropped in the middle of the spline corridor, even at elevation breaks (ramps/stairs still spawn) or in indoor mode where neighbour pairs may otherwise be sealed by `Lateral Density`. Side / lateral cells are still decorated normally, so the road can have walled rooms or cover walls flanking it without blocking through-traffic.
+
+> **Tangent-aligned ribbon.** Path cells are placed in continuous world space along the spline's local tangent / normal frame -- not on the global grid -- and every floor, wall, doorway, ramp and pillar is rotated by the cell's tangent yaw. A diagonal or curved spline produces a clean diagonal/curved road instead of a stair-stepped staircase of axis-aligned blocks.
+
 ### 4. Elevation
 * **Source**: `Flat`, `Random + Smooth`, or `Follow Spline Z`.
 * **Step Height**: vertical size of one step.
@@ -98,11 +101,12 @@ The top-level switch between **Outdoor / Open** and **Indoor / Dungeon** styles 
 ### 6. Decoration Layers (post-blockout)
 The classic layer system from v1 — runs **after** the blockout is built so user-supplied props are layered on top of the structural pieces.
 * **Rule**: `Edge Loop` / `Fill Grid` / `Scatter` / `Center Line`.
+* **Target Cells**: which cells the layer is allowed to populate. Defaults to `Off-Road` so decoration props never end up obstructing the spline corridor; switch to `Road Only` for lane markings / manholes / road decals, `Lateral Only` for side-pocket dressing, or `All Cells` for the legacy behaviour. Existing presets without this field migrate to `Off-Road` automatically.
 * **Asset Collection**: where to source mesh instances (falls back to cubes).
 * **Density / Offset / Random Rotation / Random Scale**: per-layer randomisers.
 
-### 7. Terrain
-Procedural ground mesh under and around the level. Reads each cell's elevated Z so the terrain plates correctly under multi-tier blockouts.
+### 7. Terrain *(disabled)*
+The procedural ground-mesh feature has been parked: in practice it didn't reliably "hold up" the blockout the way it was originally intended, so the panel section, the generation step and the Remix toggle are all commented out. The `TerrainGenerator` class and `terrain_*` parameters remain on disk so the feature can be revived (or re-designed) later. Existing scenes load with `terrain_enabled = false` after the next regenerate.
 
 ### 8. Road Mesh
 Standalone road geometry, generated independently of the terrain.

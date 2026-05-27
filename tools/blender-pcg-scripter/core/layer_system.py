@@ -14,6 +14,21 @@ class PlacementRule(Enum):
     SCATTER = "SCATTER"      # Randomly scatter objects
     CENTER_LINE = "CENTER_LINE" # Place along the center spline
 
+
+class CellTarget(Enum):
+    """Which cell roles a decoration layer is allowed to populate.
+
+    Path cells form the spline corridor (the "road"). Lateral cells are
+    side pockets branched off the corridor. ``OFF_ROAD`` is the default so
+    decoration props never end up obstructing the through-path; explicitly
+    pick ``ROAD_ONLY`` for things like lane markings.
+    """
+    ALL = "ALL"
+    OFF_ROAD = "OFF_ROAD"
+    ROAD_ONLY = "ROAD_ONLY"
+    LATERAL_ONLY = "LATERAL_ONLY"
+
+
 @dataclass
 class LayerConfig:
     """Configuration for a single generation layer."""
@@ -28,6 +43,10 @@ class LayerConfig:
     density: float = 1.0
     offset: float = 0.0
     z_offset: float = 0.0
+
+    # Cell-role filter: which cells this layer is allowed to populate.
+    # Defaults to OFF_ROAD so the spline corridor stays unobstructed.
+    cell_target: CellTarget = CellTarget.OFF_ROAD
 
     # Randomization
     random_rotation: bool = False
@@ -44,6 +63,7 @@ class LayerConfig:
             "density": self.density,
             "offset": self.offset,
             "z_offset": self.z_offset,
+            "cell_target": self.cell_target.value,
             "random_rotation": self.random_rotation,
             "random_scale": self.random_scale,
             "scale_min": self.scale_min,
@@ -60,6 +80,12 @@ class LayerConfig:
         layer.density = data.get("density", 1.0)
         layer.offset = data.get("offset", 0.0)
         layer.z_offset = data.get("z_offset", 0.0)
+        # Legacy presets without cell_target default to OFF_ROAD so previously
+        # placed scenes that fenced the road get cleaned up automatically.
+        try:
+            layer.cell_target = CellTarget(data.get("cell_target", "OFF_ROAD"))
+        except ValueError:
+            layer.cell_target = CellTarget.OFF_ROAD
         layer.random_rotation = data.get("random_rotation", False)
         layer.random_scale = data.get("random_scale", False)
         layer.scale_min = data.get("scale_min", 0.8)
