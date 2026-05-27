@@ -1,0 +1,29 @@
+[project]
+name = "blender-pcg-scripter"
+version = "1.0.0"
+description = "PCG Level Blockout Toolkit for Blender - A spline-based procedural level blockout generator for game development"
+requires-python = ">=3.9"
+readme = "README.md"
+license = {text = "MIT"}
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+exclude = ["__pycache__", ".pytest_cache"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["N801", "N802", "N803", "N806"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

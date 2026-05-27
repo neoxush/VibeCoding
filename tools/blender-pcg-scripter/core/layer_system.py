@@ -3,10 +3,9 @@ Core data structures for the V2 Layer System.
 Defines Layers, Rules, and their configuration.
 """
 
-import bpy
+from dataclasses import dataclass
 from enum import Enum
-from dataclasses import dataclass, field
-from typing import List, Optional, Any
+
 
 class PlacementRule(Enum):
     """Defines how objects are placed in a layer."""
@@ -21,15 +20,15 @@ class LayerConfig:
     name: str = "New Layer"
     enabled: bool = True
     rule: PlacementRule = PlacementRule.EDGE_LOOP
-    
+
     # Asset settings
     collection_name: str = ""  # Name of the collection to use as asset source
-    
+
     # Placement settings
     density: float = 1.0
     offset: float = 0.0
     z_offset: float = 0.0
-    
+
     # Randomization
     random_rotation: bool = False
     random_scale: bool = False

@@ -1,9 +1,11 @@
 """Preset management system for saving and loading parameter configurations."""
 
-import bpy
 import json
 import os
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
+import bpy
+
 from .parameters import GenerationParams
 
 
@@ -17,45 +19,47 @@ def get_preset_directory() -> str:
     # Get the addon directory
     addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     preset_dir = os.path.join(addon_dir, "presets")
-    
+
     # Create directory if it doesn't exist
     if not os.path.exists(preset_dir):
         os.makedirs(preset_dir)
-    
+
     return preset_dir
 
 
-def save_preset(name: str, parameters: GenerationParams) -> bool:
+def save_preset(name: str, parameters: GenerationParams, overwrite: bool = False) -> tuple:
     """
     Save a parameter preset to a JSON file.
-    
+
     Args:
         name: Name for the preset
         parameters: Generation parameters to save
-    
+        overwrite: If True, overwrite existing preset without warning
+
     Returns:
-        True if successful, False otherwise
+        (True, "") if saved successfully, (False, reason) otherwise
     """
     try:
         preset_dir = get_preset_directory()
         filepath = os.path.join(preset_dir, f"{name}.json")
-        
-        # Convert parameters to dictionary
+
+        if not overwrite and os.path.exists(filepath):
+            return False, f"Preset '{name}' already exists"
+
         preset_data = {
             "name": name,
             "version": "1.0",
             "parameters": parameters.to_dict()
         }
-        
-        # Write to file
+
         with open(filepath, 'w') as f:
             json.dump(preset_data, f, indent=2)
-        
-        return True
-    
+
+        return True, ""
+
     except Exception as e:
         print(f"Error saving preset: {e}")
-        return False
+        return False, str(e)
 
 
 def load_preset(name: str) -> Optional[Dict[str, Any]]:
@@ -71,17 +75,17 @@ def load_preset(name: str) -> Optional[Dict[str, Any]]:
     try:
         preset_dir = get_preset_directory()
         filepath = os.path.join(preset_dir, f"{name}.json")
-        
+
         if not os.path.exists(filepath):
             print(f"Preset file not found: {filepath}")
             return None
-        
+
         # Read from file
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             preset_data = json.load(f)
-        
+
         return preset_data.get("parameters", {})
-    
+
     except Exception as e:
         print(f"Error loading preset: {e}")
         return None
@@ -96,19 +100,19 @@ def get_preset_list() -> List[str]:
     """
     try:
         preset_dir = get_preset_directory()
-        
+
         if not os.path.exists(preset_dir):
             return []
-        
+
         # Get all .json files in the preset directory
         presets = []
         for filename in os.listdir(preset_dir):
             if filename.endswith(".json"):
                 preset_name = filename[:-5]  # Remove .json extension
                 presets.append(preset_name)
-        
+
         return sorted(presets)
-    
+
     except Exception as e:
         print(f"Error getting preset list: {e}")
         return []
@@ -127,14 +131,14 @@ def delete_preset(name: str) -> bool:
     try:
         preset_dir = get_preset_directory()
         filepath = os.path.join(preset_dir, f"{name}.json")
-        
+
         if os.path.exists(filepath):
             os.remove(filepath)
             return True
         else:
             print(f"Preset file not found: {filepath}")
             return False
-    
+
     except Exception as e:
         print(f"Error deleting preset: {e}")
         return False
@@ -149,7 +153,7 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
         scene: Blender scene to apply parameters to
     """
     props = scene.pcg_props
-    
+
     # Apply parameters
     if "spacing" in preset_params:
         props.spacing = preset_params["spacing"]
@@ -167,7 +171,7 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
         props.wall_height = preset_params["wall_height"]
     if "randomize_params_with_seed" in preset_params:
         props.randomize_params_with_seed = preset_params["randomize_params_with_seed"]
-        
+
     # Apply road mode parameters
     if "road_mode_enabled" in preset_params:
         props.road_mode_enabled = preset_params["road_mode_enabled"]
@@ -175,7 +179,7 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
         props.road_width = preset_params["road_width"]
     if "side_placement" in preset_params:
         props.side_placement = preset_params["side_placement"]
-    
+
     # Apply block types
     if "block_types" in preset_params:
         block_types = preset_params["block_types"]
@@ -183,7 +187,7 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
         props.block_type_floor = "floor" in block_types
         props.block_type_platform = "platform" in block_types
         props.block_type_ramp = "ramp" in block_types
-    
+
     # Apply terrain parameters
     if "terrain_enabled" in preset_params:
         props.terrain_enabled = preset_params["terrain_enabled"]
@@ -193,12 +197,20 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
         props.smoothness = preset_params["smoothness"]
     if "terrain_width" in preset_params:
         props.terrain_width = preset_params["terrain_width"]
-        
+
+    # Apply road mesh parameters
+    if "road_mesh_enabled" in preset_params:
+        props.road_mesh_enabled = preset_params["road_mesh_enabled"]
+    if "road_mesh_width" in preset_params:
+        props.road_mesh_width = preset_params["road_mesh_width"]
+    if "road_height_offset" in preset_params:
+        props.road_height_offset = preset_params["road_height_offset"]
+
     # Apply layers
     if "layers" in preset_params:
         # Clear existing layers
         props.layers.clear()
-        
+
         # Add new layers
         for layer_data in preset_params["layers"]:
             layer = props.layers.add()
@@ -213,6 +225,6 @@ def apply_preset_to_scene(preset_params: Dict[str, Any], scene: bpy.types.Scene)
             layer.random_scale = layer_data.get("random_scale", False)
             layer.scale_min = layer_data.get("scale_min", 0.8)
             layer.scale_max = layer_data.get("scale_max", 1.2)
-            
+
         # Reset active index
         props.active_layer_index = 0 if len(props.layers) > 0 else -1

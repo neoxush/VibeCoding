@@ -1,17 +1,19 @@
 """Terrain generator for creating ground meshes with elevation variation."""
 
+import math
+import random
+from typing import List, Optional, Tuple
+
 import bpy
 import mathutils
-import random
-import math
-from typing import List, Tuple, Optional
+
 from ..core.parameters import GenerationParams
 from ..core.spline_sampler import SplinePoint
 
 
 class TerrainGenerator:
     """Generates terrain with elevation variation along spline paths."""
-    
+
     def __init__(self, seed: int, params: GenerationParams, spline_points: List[SplinePoint]):
         """
         Initialize the terrain generator.
@@ -25,47 +27,49 @@ class TerrainGenerator:
         self.params = params
         self.spline_points = spline_points
         random.seed(seed)
-    
-    def generate_heightmap(self, bounds: Tuple[float, float, float, float]) -> List[List[float]]:
+
+    def generate_heightmap(self, bounds: Tuple[float, float, float, float],
+                           rows: int = None, cols: int = None) -> List[List[float]]:
         """
         Generate a 2D heightmap using Perlin-like noise.
-        
+
         Args:
             bounds: (min_x, max_x, min_y, max_y) terrain boundaries
-        
+            rows: Pre-computed row count (optional, auto-calculated if None)
+            cols: Pre-computed column count (optional, auto-calculated if None)
+
         Returns:
             2D list of height values
         """
         min_x, max_x, min_y, max_y = bounds
-        
-        # Calculate grid resolution based on terrain size
-        width = max_x - min_x
-        height = max_y - min_y
-        resolution = 2.0  # meters per grid cell
-        
-        cols = int(width / resolution) + 1
-        rows = int(height / resolution) + 1
-        
+
+        if rows is None or cols is None:
+            width = max_x - min_x
+            height = max_y - min_y
+            resolution = 2.0
+            cols = int(width / resolution) + 1
+            rows = int(height / resolution) + 1
+
         # Initialize heightmap
         heightmap = [[0.0 for _ in range(cols)] for _ in range(rows)]
-        
+
         # Generate noise-based terrain
         # Using simple random variation for now (can be replaced with proper Perlin noise)
         smoothness_factor = self.params.smoothness
         height_var = self.params.height_variation
-        
+
         for i in range(rows):
             for j in range(cols):
                 # Simple noise generation
                 noise_value = random.random() * 2.0 - 1.0  # -1 to 1
                 heightmap[i][j] = noise_value * height_var * (1.0 - smoothness_factor)
-        
+
         # Apply smoothing based on smoothness parameter
         if smoothness_factor > 0.1:
             heightmap = self._smooth_heightmap(heightmap, int(smoothness_factor * 5))
-        
+
         return heightmap
-    
+
     def _smooth_heightmap(self, heightmap: List[List[float]], iterations: int) -> List[List[float]]:
         """
         Apply smoothing to the heightmap.
@@ -79,16 +83,16 @@ class TerrainGenerator:
         """
         rows = len(heightmap)
         cols = len(heightmap[0]) if rows > 0 else 0
-        
+
         for _ in range(iterations):
             new_heightmap = [[0.0 for _ in range(cols)] for _ in range(rows)]
-            
+
             for i in range(rows):
                 for j in range(cols):
                     # Average with neighbors
                     total = heightmap[i][j]
                     count = 1
-                    
+
                     for di in [-1, 0, 1]:
                         for dj in [-1, 0, 1]:
                             if di == 0 and dj == 0:
@@ -97,61 +101,115 @@ class TerrainGenerator:
                             if 0 <= ni < rows and 0 <= nj < cols:
                                 total += heightmap[ni][nj]
                                 count += 1
-                    
+
                     new_heightmap[i][j] = total / count
-            
+
             heightmap = new_heightmap
-        
+
         return heightmap
 
-    
-    def align_to_spline_path(self, heightmap: List[List[float]], bounds: Tuple[float, float, float, float]) -> List[List[float]]:
+
+    def _precompute_spline_distance(self, bounds: Tuple[float, float, float, float],
+                                     rows: int, cols: int) -> Tuple[List[List[float]], List[List[float]]]:
         """
-        Blend heightmap with spline elevation data for smooth transitions.
-        
-        Args:
-            heightmap: The heightmap to modify
-            bounds: (min_x, max_x, min_y, max_y) terrain boundaries
-        
-        Returns:
-            Modified heightmap with spline elevation blended in
+        Precompute nearest spline-point Z and distance for every terrain cell.
+
+        Called once per generation run. All terrain methods read from this cache
+        instead of re-scanning every spline point for every cell.
         """
         min_x, max_x, min_y, max_y = bounds
-        resolution = 2.0
-        
-        rows = len(heightmap)
-        cols = len(heightmap[0]) if rows > 0 else 0
-        
-        # For each heightmap cell, check distance to spline path
+        nearest_z = [[0.0 for _ in range(cols)] for _ in range(rows)]
+        nearest_dist = [[float('inf') for _ in range(cols)] for _ in range(rows)]
+
         for i in range(rows):
             for j in range(cols):
-                # Calculate world position of this cell
                 world_x = min_x + (j / (cols - 1)) * (max_x - min_x) if cols > 1 else min_x
                 world_y = min_y + (i / (rows - 1)) * (max_y - min_y) if rows > 1 else min_y
-                cell_pos = mathutils.Vector((world_x, world_y, 0))
-                
-                # Find nearest spline point
-                min_dist = float('inf')
-                nearest_height = 0.0
-                
+
+                min_d = float('inf')
+                near_z = 0.0
                 for point in self.spline_points:
-                    dist_2d = (mathutils.Vector((point.position.x, point.position.y, 0)) - 
-                              mathutils.Vector((cell_pos.x, cell_pos.y, 0))).length
-                    
-                    if dist_2d < min_dist:
-                        min_dist = dist_2d
-                        nearest_height = point.position.z
-                
-                # Blend based on distance to path
-                blend_distance = self.params.path_width
-                if min_dist < blend_distance:
-                    # Close to path - blend with spline elevation
-                    blend_factor = 1.0 - (min_dist / blend_distance)
-                    heightmap[i][j] = heightmap[i][j] * (1.0 - blend_factor) + nearest_height * blend_factor
-        
+                    dx = point.position.x - world_x
+                    dy = point.position.y - world_y
+                    d2 = dx * dx + dy * dy
+                    if d2 < min_d:
+                        min_d = d2
+                        near_z = point.position.z
+
+                nearest_dist[i][j] = math.sqrt(min_d) if min_d < float('inf') else float('inf')
+                nearest_z[i][j] = near_z
+
+        return nearest_z, nearest_dist
+
+    def align_to_spline_path(self, heightmap: List[List[float]],
+                             bounds: Tuple[float, float, float, float],
+                             nearest_z: List[List[float]],
+                             nearest_dist: List[List[float]]) -> List[List[float]]:
+        """Blend heightmap with spline elevation using precomputed distance cache."""
+        rows = len(heightmap)
+        cols = len(heightmap[0]) if rows > 0 else 0
+        blend_distance = self.params.path_width
+
+        for i in range(rows):
+            for j in range(cols):
+                dist = nearest_dist[i][j]
+                if dist < blend_distance:
+                    blend_factor = 1.0 - (dist / blend_distance)
+                    heightmap[i][j] = heightmap[i][j] * (1.0 - blend_factor) + nearest_z[i][j] * blend_factor
+
         return heightmap
 
-    
+    def create_road_surface(self, heightmap: List[List[float]],
+                           bounds: Tuple[float, float, float, float],
+                           nearest_z: List[List[float]],
+                           nearest_dist: List[List[float]]) -> List[List[float]]:
+        """Flatten road surface using precomputed distance cache."""
+        if not self.params.road_mode_enabled:
+            return heightmap
+
+        rows = len(heightmap)
+        cols = len(heightmap[0]) if rows > 0 else 0
+        road_width = self.params.road_width
+
+        for i in range(rows):
+            for j in range(cols):
+                dist = nearest_dist[i][j]
+                if dist < road_width / 2:
+                    heightmap[i][j] = nearest_z[i][j]
+                elif dist < road_width:
+                    blend_factor = (dist - road_width / 2) / (road_width / 2)
+                    heightmap[i][j] = nearest_z[i][j] * (1 - blend_factor) + heightmap[i][j] * blend_factor
+
+        return heightmap
+
+    def carve_road_trench(self, heightmap: List[List[float]],
+                         bounds: Tuple[float, float, float, float],
+                         nearest_z: List[List[float]],
+                         nearest_dist: List[List[float]]) -> List[List[float]]:
+        """Lower terrain under road mesh using precomputed distance cache."""
+        if not self.spline_points or len(self.spline_points) < 2:
+            return heightmap
+
+        rows = len(heightmap)
+        cols = len(heightmap[0]) if rows > 0 else 0
+        road_width = getattr(self.params, 'road_mesh_width', self.params.road_width)
+        trench_half_width = road_width / 2 + 0.5
+        trench_depth = self.params.road_height_offset + 0.2
+        blend_margin = 1.5
+
+        for i in range(rows):
+            for j in range(cols):
+                dist = nearest_dist[i][j]
+                if dist < trench_half_width:
+                    heightmap[i][j] = nearest_z[i][j] - trench_depth
+                elif dist < trench_half_width + blend_margin:
+                    t = (dist - trench_half_width) / blend_margin
+                    lowered = nearest_z[i][j] - trench_depth
+                    heightmap[i][j] = lowered * (1 - t) + heightmap[i][j] * t
+
+        return heightmap
+
+
     def create_terrain_mesh(self, heightmap: List[List[float]], bounds: Tuple[float, float, float, float]) -> bpy.types.Object:
         """
         Convert 2D heightmap to Blender mesh.
@@ -166,17 +224,17 @@ class TerrainGenerator:
         min_x, max_x, min_y, max_y = bounds
         rows = len(heightmap)
         cols = len(heightmap[0]) if rows > 0 else 0
-        
+
         if rows == 0 or cols == 0:
             return None
-        
+
         # Create mesh and object
         mesh = bpy.data.meshes.new("TerrainMesh")
         obj = bpy.data.objects.new("Terrain", mesh)
-        
+
         # Link to scene
         bpy.context.collection.objects.link(obj)
-        
+
         # Create vertices
         vertices = []
         for i in range(rows):
@@ -185,7 +243,7 @@ class TerrainGenerator:
                 y = min_y + (i / (rows - 1)) * (max_y - min_y) if rows > 1 else min_y
                 z = heightmap[i][j]
                 vertices.append((x, y, z))
-        
+
         # Create faces (quads)
         faces = []
         for i in range(rows - 1):
@@ -196,21 +254,21 @@ class TerrainGenerator:
                 v3 = (i + 1) * cols + (j + 1)
                 v4 = (i + 1) * cols + j
                 faces.append((v1, v2, v3, v4))
-        
+
         # Create mesh from data
         mesh.from_pydata(vertices, [], faces)
         mesh.update()
-        
+
         # Apply subdivision modifier for smoothness
         if self.params.smoothness > 0.3:
             modifier = obj.modifiers.new(name="Subdivision", type='SUBSURF')
             modifier.levels = 1
             modifier.render_levels = 2
-        
+
         return obj
 
-    
-    def create_flat_zones(self, heightmap: List[List[float]], zones: List[Tuple[mathutils.Vector, float]], 
+
+    def create_flat_zones(self, heightmap: List[List[float]], zones: List[Tuple[mathutils.Vector, float]],
                          bounds: Tuple[float, float, float, float]) -> List[List[float]]:
         """
         Flatten designated areas in the heightmap.
@@ -226,183 +284,187 @@ class TerrainGenerator:
         min_x, max_x, min_y, max_y = bounds
         rows = len(heightmap)
         cols = len(heightmap[0]) if rows > 0 else 0
-        
+
         for zone_center, zone_radius in zones:
             target_height = zone_center.z
-            
+
             for i in range(rows):
                 for j in range(cols):
                     # Calculate world position
                     world_x = min_x + (j / (cols - 1)) * (max_x - min_x) if cols > 1 else min_x
                     world_y = min_y + (i / (rows - 1)) * (max_y - min_y) if rows > 1 else min_y
-                    
+
                     # Check distance to zone center
                     dist = math.sqrt((world_x - zone_center.x)**2 + (world_y - zone_center.y)**2)
-                    
+
                     if dist < zone_radius:
                         # Inside zone - flatten
                         blend_factor = 1.0 - (dist / zone_radius)
                         heightmap[i][j] = heightmap[i][j] * (1.0 - blend_factor) + target_height * blend_factor
-        
+
         return heightmap
-    
-    def create_road_surface(self, heightmap: List[List[float]], 
-                           bounds: Tuple[float, float, float, float]) -> List[List[float]]:
-        """
-        Create a flat road surface along the spline path (for road mode).
-        
-        Args:
-            heightmap: The heightmap to modify
-            bounds: (min_x, max_x, min_y, max_y) terrain boundaries
-        
-        Returns:
-            Modified heightmap with flat road surface
-        """
-        if not self.params.road_mode_enabled:
-            return heightmap
-        
-        min_x, max_x, min_y, max_y = bounds
-        rows = len(heightmap)
-        cols = len(heightmap[0]) if rows > 0 else 0
-        
-        road_width = self.params.road_width
-        
-        for i in range(rows):
-            for j in range(cols):
-                # Calculate world position of this cell
-                world_x = min_x + (j / (cols - 1)) * (max_x - min_x) if cols > 1 else min_x
-                world_y = min_y + (i / (rows - 1)) * (max_y - min_y) if rows > 1 else min_y
-                cell_pos = mathutils.Vector((world_x, world_y, 0))
-                
-                # Find nearest spline point and distance
-                min_dist = float('inf')
-                nearest_height = 0.0
-                
-                for point in self.spline_points:
-                    # Calculate 2D distance (ignore Z)
-                    dist_2d = math.sqrt(
-                        (point.position.x - cell_pos.x)**2 + 
-                        (point.position.y - cell_pos.y)**2
-                    )
-                    
-                    if dist_2d < min_dist:
-                        min_dist = dist_2d
-                        nearest_height = point.position.z
-                
-                # Flatten road surface
-                if min_dist < road_width / 2:
-                    # Inside road - completely flat at spline elevation
-                    heightmap[i][j] = nearest_height
-                elif min_dist < road_width:
-                    # Road edge - blend smoothly to terrain
-                    blend_factor = (min_dist - road_width / 2) / (road_width / 2)
-                    heightmap[i][j] = nearest_height * (1 - blend_factor) + heightmap[i][j] * blend_factor
-        
-        return heightmap
-    
+
     def generate(self, spaces: List = None) -> Optional[bpy.types.Object]:
-        """
-        Orchestrate the full terrain generation process.
-        
-        Args:
-            spaces: Optional list of spaces to create flat zones around
-        
-        Returns:
-            Created terrain mesh object, or None if terrain is disabled
-        """
         if not self.params.terrain_enabled:
             return None
-        
-        # Calculate terrain bounds based on spline points
         if not self.spline_points:
             return None
-        
-        # Find bounding box of spline path
+
+        wm = bpy.context.window_manager
+        wm.progress_begin(0, 100)
+
         min_x = min(p.position.x for p in self.spline_points) - self.params.terrain_width
         max_x = max(p.position.x for p in self.spline_points) + self.params.terrain_width
         min_y = min(p.position.y for p in self.spline_points) - self.params.terrain_width
         max_y = max(p.position.y for p in self.spline_points) + self.params.terrain_width
-        
+
+        width = max_x - min_x
+        height = max_y - min_y
+        resolution = max(2.0, min(width, height) / 200.0)
+        cols = min(int(width / resolution) + 1, 200)
+        rows = min(int(height / resolution) + 1, 200)
+
         bounds = (min_x, max_x, min_y, max_y)
-        
-        # Generate base heightmap
-        heightmap = self.generate_heightmap(bounds)
-        
-        # Blend with spline elevation
-        heightmap = self.align_to_spline_path(heightmap, bounds)
-        
-        # Create road surface if in road mode
+
+        heightmap = self.generate_heightmap(bounds, rows, cols)
+        if wm.progress_is_cancel:
+            wm.progress_end()
+            return None
+        wm.progress_update(20)
+
+        nearest_z, nearest_dist = self._precompute_spline_distance(bounds, rows, cols)
+        if wm.progress_is_cancel:
+            wm.progress_end()
+            return None
+        wm.progress_update(40)
+
+        heightmap = self.align_to_spline_path(heightmap, bounds, nearest_z, nearest_dist)
+        if wm.progress_is_cancel:
+            wm.progress_end()
+            return None
+        wm.progress_update(55)
+
         if self.params.road_mode_enabled:
-            heightmap = self.create_road_surface(heightmap, bounds)
-        
-        # Create flat zones around spaces if provided
+            heightmap = self.create_road_surface(heightmap, bounds, nearest_z, nearest_dist)
+            if wm.progress_is_cancel:
+                wm.progress_end()
+                return None
+        wm.progress_update(70)
+
         if spaces:
             flat_zones = []
             for space in spaces:
-                # Create flat zone at each space location
                 zone_radius = max(space.size.x, space.size.y) * 0.7
                 flat_zones.append((space.position, zone_radius))
-            
             heightmap = self.create_flat_zones(heightmap, flat_zones, bounds)
-        
-        # Convert to mesh
+            if wm.progress_is_cancel:
+                wm.progress_end()
+                return None
+        wm.progress_update(85)
+
+        if self.params.road_mesh_enabled:
+            heightmap = self.carve_road_trench(heightmap, bounds, nearest_z, nearest_dist)
+            if wm.progress_is_cancel:
+                wm.progress_end()
+                return None
+        wm.progress_update(95)
+
         terrain_obj = self.create_terrain_mesh(heightmap, bounds)
-        
+        wm.progress_update(100)
+        wm.progress_end()
+
         return terrain_obj
-    
+
     def generate_road_mesh(self) -> Optional[bpy.types.Object]:
         """
-        Create a simple road mesh along the spline path.
-        
+        Create a road mesh along the spline path with mitered corner joins.
+
         Returns:
             Road mesh object or None
         """
-        if not self.spline_points or len(self.spline_points) < 2:
+        n = len(self.spline_points)
+        if n < 2:
             return None
-        
-        # Create vertices along both edges of the road
+
+        road_width = getattr(self.params, 'road_mesh_width', self.params.road_width)
+        half_width = road_width / 2
+        offset_z = mathutils.Vector((0, 0, self.params.road_height_offset))
+        miter_limit = 2.0
+
+        left_edge = [None] * n
+        right_edge = [None] * n
+        center_pt = [None] * n
+
+        for i in range(n):
+            point = self.spline_points[i]
+            up = point.normal.normalized()
+            center_pt[i] = point.position + offset_z
+
+            if i == 0:
+                tangent = point.tangent.normalized()
+            elif i == n - 1:
+                tangent = point.tangent.normalized()
+            else:
+                dir_prev = (point.position - self.spline_points[i - 1].position)
+                dir_next = (self.spline_points[i + 1].position - point.position)
+                if dir_prev.length > 0.0001 and dir_next.length > 0.0001:
+                    bisector = dir_prev.normalized() + dir_next.normalized()
+                    if bisector.length > 0.001:
+                        tangent = bisector.normalized()
+                    else:
+                        tangent = point.tangent.normalized()
+                else:
+                    tangent = point.tangent.normalized()
+
+            right = tangent.cross(up).normalized()
+            left_edge[i] = center_pt[i] - right * half_width
+            right_edge[i] = center_pt[i] + right * half_width
+
+        for i in range(1, n - 1):
+            center = center_pt[i]
+            tangent = (self.spline_points[i + 1].position - self.spline_points[i - 1].position)
+            if tangent.length < 0.0001:
+                continue
+            tangent = tangent.normalized()
+            up = self.spline_points[i].normal.normalized()
+            right = tangent.cross(up).normalized()
+
+            inner_pt = center - right * half_width
+            outer_pt = center + right * half_width
+
+            dist_inner = (inner_pt - center).length
+            dist_outer = (outer_pt - center).length
+
+            if dist_inner > half_width * miter_limit:
+                inner_pt = center + (inner_pt - center).normalized() * half_width * miter_limit
+            if dist_outer > half_width * miter_limit:
+                outer_pt = center + (outer_pt - center).normalized() * half_width * miter_limit
+
+            left_edge[i] = inner_pt
+            right_edge[i] = outer_pt
+
         vertices = []
         faces = []
-        road_width = self.params.road_width
-        offset_z = mathutils.Vector((0, 0, self.params.road_height_offset))
-        
-        for i, point in enumerate(self.spline_points):
-            # Calculate perpendicular direction
-            tangent = point.tangent.normalized()
-            up = point.normal.normalized()
-            right = tangent.cross(up).normalized()
-            
-            # Create vertices on left and right edges with vertical offset
-            left_pos = point.position - right * (road_width / 2) + offset_z
-            right_pos = point.position + right * (road_width / 2) + offset_z
-            
-            vertices.append(left_pos)
-            vertices.append(right_pos)
-            
-            # Create face connecting to previous segment
-            if i > 0:
-                # Quad face indices
-                v0 = (i - 1) * 2      # Previous left
-                v1 = (i - 1) * 2 + 1  # Previous right
-                v2 = i * 2 + 1        # Current right
-                v3 = i * 2            # Current left
-                faces.append((v0, v1, v2, v3))
-        
-        # Create mesh
+
+        for i in range(n):
+            vertices.append(left_edge[i])
+            vertices.append(right_edge[i])
+
+        for i in range(n - 1):
+            v0 = i * 2
+            v1 = i * 2 + 1
+            v2 = (i + 1) * 2 + 1
+            v3 = (i + 1) * 2
+            faces.append((v0, v1, v2, v3))
+
         mesh = bpy.data.meshes.new("RoadSurface")
         obj = bpy.data.objects.new("Road", mesh)
-        
-        # Link to scene
         bpy.context.collection.objects.link(obj)
-        
-        # Create mesh from data
         mesh.from_pydata(vertices, [], faces)
         mesh.update()
-        
-        # Create material for road
+
         mat_name = "PCG_Road_Material"
         mat = bpy.data.materials.get(mat_name)
-        
         if mat is None:
             mat = bpy.data.materials.new(name=mat_name)
             mat.use_nodes = True
@@ -412,16 +474,14 @@ class TerrainGenerator:
                 bsdf.inputs["Base Color"].default_value = self.params.road_material_color
                 bsdf.inputs["Roughness"].default_value = 0.8
         else:
-            # Update color in case preset changed it
             mat.use_nodes = True
             bsdf = mat.node_tree.nodes.get("Principled BSDF")
             if bsdf:
                 bsdf.inputs["Base Color"].default_value = self.params.road_material_color
-        
-        # Assign material
+
         if obj.data.materials:
             obj.data.materials[0] = mat
         else:
             obj.data.materials.append(mat)
-        
+
         return obj
