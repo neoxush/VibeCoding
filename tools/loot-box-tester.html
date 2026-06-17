@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Loot Box Tester</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    min-height: 100vh;
+    color: #eee;
+  }
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 24px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+  }
+  .panel {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  h2 { margin-top: 0; font-size: 18px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+  }
+  th, td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  th { font-size: 13px; opacity: 0.8; font-weight: 500; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.25);
+    color: #fff;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  input:focus { outline: none; border-color: #ffd700; }
+  button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: transform 0.1s, box-shadow 0.2s;
+  }
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  .btn-add { background: #4caf50; color: white; }
+  .btn-remove { background: #f44336; color: white; padding: 4px 10px; font-size: 12px; }
+  .btn-draw {
+    background: linear-gradient(135deg, #ffd700, #ff8c00);
+    color: #222;
+    font-size: 18px;
+    padding: 14px 32px;
+    width: 100%;
+    box-shadow: 0 4px 14px rgba(255,140,0,0.4);
+  }
+  .btn-clear { background: #607d8b; color: white; }
+  .btn-reset { background: #9c27b0; color: white; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .total-row {
+    margin-top: 8px;
+    font-size: 13px;
+    opacity: 0.85;
+  }
+  .total-row.warn { color: #ffb74d; }
+
+  .result-display {
+    text-align: center;
+    padding: 30px;
+    font-size: 32px;
+    font-weight: bold;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.3);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    transition: transform 0.2s;
+  }
+  .result-display.pulse { animation: pulse 0.4s ease; }
+  @keyframes pulse {
+    0% { transform: scale(0.8); opacity: 0.3; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+  }
+  .stat-item .actual { color: #81c784; }
+  .stat-item .actual.off { color: #ffb74d; }
+  .col-item { width: 50%; }
+  .col-odds { width: 25%; }
+  .col-action { width: 80px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Loot Box Tester</h1>
+
+  <div class="panel">
+    <h2>Items & Odds</h2>
+    <table id="itemTable">
+      <thead>
+        <tr>
+          <th class="col-item">Item Name</th>
+          <th class="col-odds">Weight / Odds</th>
+          <th>Probability</th>
+          <th class="col-action"></th>
+        </tr>
+      </thead>
+      <tbody id="itemBody"></tbody>
+    </table>
+    <div class="controls">
+      <button class="btn-add" onclick="addRow()">+ Add Item</button>
+      <button class="btn-clear" onclick="clearAll()">Clear All</button>
+    </div>
+    <div id="totalRow" class="total-row"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Draw</h2>
+    <div id="result" class="result-display">Click "Draw" to test!</div>
+    <button class="btn-draw" onclick="draw()">DRAW LOOT</button>
+    <div class="controls">
+      <button onclick="drawN(10)">Draw x10</button>
+      <button onclick="drawN(100)">Draw x100</button>
+      <button onclick="drawN(1000)">Draw x1000</button>
+      <button class="btn-reset" onclick="resetStats()">Reset Stats</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Statistics (Total Draws: <span id="totalDraws">0</span>)</h2>
+    <div id="stats" class="stats-grid"></div>
+  </div>
+</div>
+
+<script>
+  let items = [];
+  let stats = {};
+  let totalDraws = 0;
+
+  // Safe arithmetic evaluator: allows digits, . , + - * / % ( ) and whitespace
+  function evalWeight(expr) {
+    if (expr === null || expr === undefined) return 0;
+    const s = String(expr).trim();
+    if (s === '') return 0;
+    // Reject anything other than allowed chars
+    if (!/^[\d.+\-*/%()\s]+$/.test(s)) return NaN;
+    try {
+      // Function constructor in strict mode; input is whitelisted above
+      const v = Function('"use strict";return (' + s + ');')();
+      return (typeof v === 'number' && isFinite(v)) ? v : NaN;
+    } catch (e) {
+      return NaN;
+    }
+  }
+
+  function addRow(name = '', weight = '') {
+    items.push({ name, weight });
+    render();
+  }
+
+  function removeRow(idx) {
+    items.splice(idx, 1);
+    render();
+  }
+
+  function updateItem(idx, field, value) {
+    items[idx][field] = value;
+    updateProbabilities();
+  }
+
+  function clearAll() {
+    if (!confirm('Clear all items?')) return;
+    items = [];
+    stats = {};
+    totalDraws = 0;
+    render();
+    renderStats();
+  }
+
+  function render() {
+    const tbody = document.getElementById('itemBody');
+    tbody.innerHTML = '';
+    items.forEach((item, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" value="${escapeHtml(item.name)}" placeholder="Item name"
+            oninput="updateItem(${idx}, 'name', this.value)"></td>
+        <td><input type="text" value="${escapeHtml(item.weight)}" placeholder="e.g. 10  or  1+2*3"
+            oninput="updateItem(${idx}, 'weight', this.value)"
+            title="Supports +, -, *, /, %, ( ), e.g. (1+2)*3"></td>
+        <td class="prob-cell">-</td>
+        <td><button class="btn-remove" onclick="removeRow(${idx})">Remove</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    updateProbabilities();
+  }
+
+  function updateProbabilities() {
+    const weights = items.map(i => evalWeight(i.weight));
+    const total = weights.reduce((s, w) => s + (isFinite(w) && w > 0 ? w : 0), 0);
+    const cells = document.querySelectorAll('.prob-cell');
+    items.forEach((item, idx) => {
+      const w = weights[idx];
+      let text;
+      if (isNaN(w)) {
+        text = '<span style="color:#ff8080;">invalid</span>';
+      } else if (w <= 0) {
+        text = '0.00%';
+      } else {
+        const pct = total > 0 ? (w / total * 100).toFixed(2) : '0.00';
+        text = `${pct}% <span style="opacity:0.55;">(=${formatNum(w)})</span>`;
+      }
+      if (cells[idx]) cells[idx].innerHTML = text;
+    });
+    const totalRow = document.getElementById('totalRow');
+    totalRow.textContent = `Total weight: ${formatNum(total)} (${items.length} item${items.length !== 1 ? 's' : ''})`;
+    totalRow.classList.toggle('warn', total <= 0 && items.length > 0);
+  }
+
+  function formatNum(n) {
+    if (!isFinite(n)) return String(n);
+    return Number.isInteger(n) ? String(n) : (Math.round(n * 1e6) / 1e6).toString();
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  function pickOne() {
+    const valid = items
+      .map(i => ({ name: i.name, w: evalWeight(i.weight) }))
+      .filter(i => i.name.trim() && isFinite(i.w) && i.w > 0);
+    if (valid.length === 0) return null;
+    const total = valid.reduce((s, i) => s + i.w, 0);
+    let r = Math.random() * total;
+    for (const item of valid) {
+      r -= item.w;
+      if (r <= 0) return item.name;
+    }
+    return valid[valid.length - 1].name;
+  }
+
+  function draw() {
+    const result = pickOne();
+    const display = document.getElementById('result');
+    if (!result) {
+      display.textContent = 'Add items with weight > 0 first!';
+      return;
+    }
+    stats[result] = (stats[result] || 0) + 1;
+    totalDraws++;
+    display.textContent = '🎁 ' + result;
+    display.classList.remove('pulse');
+    void display.offsetWidth;
+    display.classList.add('pulse');
+    renderStats();
+  }
+
+  function drawN(n) {
+    const valid = items.filter(i => i.name.trim() && evalWeight(i.weight) > 0);
+    if (valid.length === 0) {
+      document.getElementById('result').textContent = 'Add items with weight > 0 first!';
+      return;
+    }
+    let last = '';
+    for (let i = 0; i < n; i++) {
+      last = pickOne();
+      stats[last] = (stats[last] || 0) + 1;
+      totalDraws++;
+    }
+    document.getElementById('result').textContent = `Drew ${n} times. Last: ${last}`;
+    renderStats();
+  }
+
+  function resetStats() {
+    stats = {};
+    totalDraws = 0;
+    renderStats();
+    document.getElementById('result').textContent = 'Click "Draw" to test!';
+  }
+
+  function renderStats() {
+    document.getElementById('totalDraws').textContent = totalDraws;
+    const container = document.getElementById('stats');
+    container.innerHTML = '';
+    if (totalDraws === 0) {
+      container.innerHTML = '<div style="opacity:0.6;">No draws yet.</div>';
+      return;
+    }
+    const totalWeight = items.reduce((s, i) => {
+      const w = evalWeight(i.weight);
+      return s + (isFinite(w) && w > 0 ? w : 0);
+    }, 0);
+    const sorted = Object.entries(stats).sort((a, b) => b[1] - a[1]);
+    sorted.forEach(([name, count]) => {
+      const actual = (count / totalDraws * 100);
+      const item = items.find(i => i.name === name);
+      const itemW = item ? evalWeight(item.weight) : 0;
+      const expected = (totalWeight > 0 && isFinite(itemW) && itemW > 0) ? (itemW / totalWeight * 100) : 0;
+      const diff = Math.abs(actual - expected);
+      const off = expected > 0 && diff > Math.max(2, expected * 0.2);
+      const div = document.createElement('div');
+      div.className = 'stat-item';
+      div.innerHTML = `
+        <span><strong>${escapeHtml(name)}</strong> &times;${count}</span>
+        <span class="actual ${off ? 'off' : ''}">${actual.toFixed(2)}% <span style="opacity:0.6;">(exp ${expected.toFixed(2)}%)</span></span>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  // Seed with example data
+  items = [
+    { name: 'Common Sword', weight: 60 },
+    { name: 'Rare Shield', weight: 30 },
+    { name: 'Epic Bow', weight: 9 },
+    { name: 'Legendary Crown', weight: 1 }
+  ];
+  render();
+  renderStats();
+</script>
+</body>
+</html>
