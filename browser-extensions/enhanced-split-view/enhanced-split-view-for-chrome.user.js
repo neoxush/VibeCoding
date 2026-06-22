@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
-// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side.
+// @version      1.2.0
+// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side. v1.2.0: pair-drag now works on AI chat sites (ChatGPT, Gemini, Claude, Perplexity) via event isolation; perf + health pass.
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
@@ -25,9 +25,12 @@
     'use strict';
 
     // --- Debug logging gate ---
-    const DEBUG = false;
-    const log = DEBUG ? console.log.bind(console, '[ESV]') : () => { };
-    const warn = DEBUG ? console.warn.bind(console, '[ESV]') : () => { };
+    // Runtime-toggleable via Tampermonkey menu (see initialize()).
+    // GM_getValue is sync in TM, so reading at boot is fine.
+    let DEBUG = false;
+    try { DEBUG = !!GM_getValue('esv_debug', false); } catch (e) { /* GM not ready */ }
+    const log = (...args) => { if (DEBUG) console.log('[ESV]', ...args); };
+    const warn = (...args) => { if (DEBUG) console.warn('[ESV]', ...args); };
 
     // HTML-escape helper for safe string interpolation
     const escapeHtml = (s) => String(s == null ? '' : s)
@@ -1805,6 +1808,9 @@
             }, true);
 
             // Global Drop Support (for pairing)
+            // dragenter is registered FIRST so we pre-empt host overlays (ChatGPT,
+            // Gemini, Claude, etc.) that mount their file-upload overlay on dragenter.
+            window.addEventListener('dragenter', handleGlobalDragEnter, true);
             window.addEventListener('dragover', handleGlobalDragOver, true);
             window.addEventListener('dragleave', handleGlobalDragLeave, true);
             window.addEventListener('drop', handleGlobalDrop, true);
@@ -1814,13 +1820,9 @@
             window.addEventListener('blur', _esvClearDragVisuals);
             window.addEventListener('focus', _esvClearDragVisuals);
             // First mousemove or pointerdown AFTER a drag is the clearest signal that
-            // the drag is over from the user's POV. If we're still flagged "in flight"
-            // and the user is moving the mouse without holding a button, the drag ended.
-            window.addEventListener('mousemove', (mv) => {
-                if (_esvDragInFlight && mv.buttons === 0) {
-                    _esvClearDragVisuals();
-                }
-            }, true);
+            // the drag is over from the user's POV. The hot-path mousemove listener is
+            // attached lazily in handleRoleDragStart (WI-5) — only while a drag is in
+            // flight — to avoid a global capture-phase mousemove handler at steady state.
             window.addEventListener('pointerdown', () => {
                 if (_esvDragInFlight) _esvClearDragVisuals();
             }, true);
@@ -3055,9 +3057,47 @@
     //
     // FIX: explicit `_esvDragInFlight` boolean + 7 redundant clear paths +
     //      synthetic `mouseup` dispatch on `dragend` to unfreeze any waiting page logic.
+    //
+    // v1.2.0 — AI-chat-site freeze fix (ChatGPT, Gemini, Claude, Perplexity, etc.)
+    // -----------------------------------------------------------------------------
+    // Those apps install global `dragenter`/`dragover`/`drop` listeners on window/document
+    // to support "drop-anywhere file upload". When our role-request drag entered/dropped on
+    // their page, their full-viewport overlay mounted but never unmounted (their close path
+    // requires `dataTransfer.files.length > 0`). Result: invisible `pointer-events:auto`
+    // overlay blocked all clicks → "front freeze". The fix is event isolation: our role-
+    // request handlers now call `stopPropagation` + `stopImmediatePropagation` so the host
+    // page never sees our private protocol. We also add a `dragenter` capture handler to
+    // pre-empt overlay mount (overlays mount on `dragenter`, before our first `dragover`).
     let _esvDragInFlight = false;
     let _esvDragWatchdog = null;
     let _esvDragStartedAt = 0;
+    let _esvMouseMoveAttached = false;
+
+    // Centralized payload detection. Single source of truth for our role-request MIME.
+    // Strict MIME check is cheap and safe in every drag event. `text/plain` fallback is
+    // kept for cross-process drag compatibility (rare) but is sniffed only on `drop`
+    // where `getData` is permitted.
+    function _isRoleDragEvent(e) {
+        const dt = e && e.dataTransfer;
+        if (!dt || !dt.types || !dt.types.includes) return false;
+        if (dt.types.includes('application/stm-role-request')) return true;
+        // text/plain fallback — only detectable via getData on `drop` (browsers redact
+        // values on dragover/dragenter for security). On non-drop events we can only
+        // see the presence of the type, which alone is too ambiguous to act on.
+        if (e.type === 'drop' && dt.types.includes('text/plain')) {
+            try {
+                const v = dt.getData('text/plain');
+                return typeof v === 'string' && v.startsWith('STM_ROLE:');
+            } catch (err) { /* ignore */ }
+        }
+        return false;
+    }
+
+    function _esvIsolateEvent(e) {
+        e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    }
 
     function _esvClearDragVisuals() {
         if (ui && ui.dot) {
@@ -3072,6 +3112,11 @@
             _esvDragInFlight = false;
             _esvDispatchSyntheticMouseUp();
         }
+        // Detach the hot-path mousemove listener attached during in-flight drag (WI-5).
+        if (_esvMouseMoveAttached) {
+            try { window.removeEventListener('mousemove', _esvOnInFlightMouseMove, true); } catch (e) { /* ignore */ }
+            _esvMouseMoveAttached = false;
+        }
     }
 
     function _esvArmDragWatchdog() {
@@ -3080,23 +3125,36 @@
         _esvDragWatchdog = setTimeout(_esvClearDragVisuals, 250);
     }
 
-    // Synthesize a `mouseup` on the document so any page logic waiting for the
+    // Synthesize a `mouseup` on `document.body` so any page logic waiting for the
     // mouseup that was consumed by the OTHER window gets unfrozen.
+    // v1.2.0: targets `document.body` (not `activeElement`) to avoid corrupting
+    // pointer-capture state in ProseMirror / Radix UI / dnd-kit on AI chat sites.
     function _esvDispatchSyntheticMouseUp() {
         try {
+            const target = document.body || document.documentElement;
+            if (!target) return;
             const evt = new MouseEvent('mouseup', {
                 bubbles: true, cancelable: true, view: window, button: 0
             });
-            (document.activeElement || document.body || document.documentElement).dispatchEvent(evt);
+            target.dispatchEvent(evt);
             // Also a pointerup for modern stacks (React DnD, dnd-kit, Framer Motion).
             if (typeof PointerEvent !== 'undefined') {
                 const pevt = new PointerEvent('pointerup', {
                     bubbles: true, cancelable: true, view: window,
                     button: 0, pointerType: 'mouse', isPrimary: true
                 });
-                (document.activeElement || document.body || document.documentElement).dispatchEvent(pevt);
+                target.dispatchEvent(pevt);
             }
         } catch (e) { /* best-effort */ }
+    }
+
+    // WI-5: lazy mousemove handler — only attached while a drag is in flight.
+    // Avoids a global capture-phase mousemove listener firing on every cursor pixel
+    // when no drag is happening (measurable cost on React-heavy SPAs like ChatGPT).
+    function _esvOnInFlightMouseMove(mv) {
+        if (_esvDragInFlight && mv.buttons === 0) {
+            _esvClearDragVisuals();
+        }
     }
 
     function handleRoleDragStart(e) {
@@ -3112,9 +3170,15 @@
             timestamp: _esvDragStartedAt
         };
         e.dataTransfer.setData('application/stm-role-request', JSON.stringify(payload));
-        // Fallback for cross-browser/process compatibility
+        // Fallback for cross-browser/process compatibility. Kept for legacy paths;
+        // host-page interference is now mitigated by stopPropagation in the global handlers.
         e.dataTransfer.setData('text/plain', `STM_ROLE:${JSON.stringify(payload)}`);
         e.dataTransfer.effectAllowed = 'copyMove';
+        // Attach hot-path mousemove listener for the duration of this drag only.
+        if (!_esvMouseMoveAttached) {
+            window.addEventListener('mousemove', _esvOnInFlightMouseMove, true);
+            _esvMouseMoveAttached = true;
+        }
         // Hard upper bound: no drag should ever take longer than 30s. If we're still
         // "in flight" after that, force-clear regardless of what events did or didn't fire.
         setTimeout(() => {
@@ -3124,11 +3188,23 @@
         }, 30000);
     }
 
+    // WI-1: Pre-empt host-page overlays that mount on `dragenter` before our first
+    // `dragover` fires. Strict MIME-only check (text/plain is unreadable here).
+    function handleGlobalDragEnter(e) {
+        if (_isRoleDragEvent(e)) {
+            _esvIsolateEvent(e);
+        }
+    }
+
     function handleGlobalDragOver(e) {
-        if (e.dataTransfer.types.includes('application/stm-role-request') ||
-            (e.dataTransfer.types.includes('text/plain') && e.dataTransfer.getData('text/plain').startsWith('STM_ROLE:'))) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
+        if (_isRoleDragEvent(e) ||
+            // Heuristic: during an in-flight role drag, treat any drag tick as ours
+            // (drop in another window may leave dragover firing here without MIME
+            // being read; safe because we only suppress while WE are dragging).
+            (_esvDragInFlight && e.dataTransfer && e.dataTransfer.types &&
+                e.dataTransfer.types.includes && e.dataTransfer.types.includes('application/stm-role-request'))) {
+            _esvIsolateEvent(e);
+            try { e.dataTransfer.dropEffect = 'copy'; } catch (err) { /* ignore */ }
             if (ui && ui.dot) ui.dot.classList.add('stm-global-drag-over');
             _esvArmDragWatchdog();
         }
@@ -3150,7 +3226,17 @@
     }
 
     function handleGlobalDrop(e) {
+        // Isolate FIRST — before any work, before reading payload, before clearing visuals.
+        // This is the critical fix for AI-chat-site freeze: the drop event must never
+        // bubble to the host page, which would react with stuck overlays / editor inserts.
+        const isOurs = _isRoleDragEvent(e);
+        if (isOurs) {
+            _esvIsolateEvent(e);
+        }
         _esvClearDragVisuals();
+
+        if (!isOurs) return;
+
         let dataStr = e.dataTransfer.getData('application/stm-role-request');
         if (!dataStr) {
             const plain = e.dataTransfer.getData('text/plain');
@@ -3164,7 +3250,6 @@
                 const data = JSON.parse(dataStr);
                 if (data.instanceId === myInstanceId) return; // Don't drop on self
 
-                e.preventDefault();
                 if (data.role === 'source') {
                     if (myRole === 'playlist') {
                         setRole('playlist', data.sourceId);
@@ -3394,6 +3479,15 @@
         if (!/(?:^|\.)youtube\.com$/.test(host) && !/(?:^|\.)youtube-nocookie\.com$/.test(host)) {
             return;
         }
+        // WI-6: poll as a backup to MutationObserver, but stop once the player is
+        // detected once. Saves a perpetual 2s tick on every YouTube tab for the
+        // entire session.
+        let pollId = null;
+        let observer = null;
+        const stopPolling = () => {
+            if (pollId !== null) { clearInterval(pollId); pollId = null; }
+            if (observer) { try { observer.disconnect(); } catch (e) { /* ignore */ } observer = null; }
+        };
         const checkPlayer = () => {
             const player = document.querySelector('#shorts-player') ||
                 document.querySelector('video[is-shorts]') ||
@@ -3406,17 +3500,20 @@
                     log('Player detected – refreshing UI');
                     updateUI();
                 }
+                stopPolling();
             }
         };
 
         const appRoot = document.querySelector('ytd-app') || document.body;
         if (appRoot) {
-            const observer = new MutationObserver(checkPlayer);
+            observer = new MutationObserver(checkPlayer);
             observer.observe(appRoot, { childList: true, subtree: true });
         }
 
         checkPlayer();
-        setInterval(checkPlayer, 2000);
+        pollId = setInterval(checkPlayer, 2000);
+        // Hard cap: stop polling after 60s even if no player found (e.g. non-video page).
+        setTimeout(stopPolling, 60000);
     }
 
     function initialize() {
@@ -3464,7 +3561,15 @@
                 const menuCommands = [
                     { name: "Create Source", func: () => setRole('source') },
                     { name: "Reset Roles", func: resetAllRoles },
-                    { name: "Preference", func: showConfigPanel }
+                    { name: "Preference", func: showConfigPanel },
+                    {
+                        name: `ESV debug logs: ${DEBUG ? 'ON' : 'OFF'} (toggle)`,
+                        func: () => {
+                            DEBUG = !DEBUG;
+                            try { GM_setValue('esv_debug', DEBUG); } catch (e) { /* ignore */ }
+                            Notify.info(`ESV debug logs ${DEBUG ? 'enabled' : 'disabled'}. Reload to update menu label.`);
+                        }
+                    }
                 ];
                 menuCommands.forEach(cmd => GM_registerMenuCommand(cmd.name, cmd.func));
 
