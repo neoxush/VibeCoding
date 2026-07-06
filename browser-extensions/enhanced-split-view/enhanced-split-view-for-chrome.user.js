@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.2.0
-// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side. v1.2.0: pair-drag now works on AI chat sites (ChatGPT, Gemini, Claude, Perplexity) via event isolation; perf + health pass.
+// @version      1.2.1
+// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side. v1.2.1: fix TrustedHTML violation in updateVolumeButton sleep-mode icon so the volume/mute-control button renders reliably on CSP-enforced sites (e.g. play.google.com). v1.2.0: pair-drag now works on AI chat sites (ChatGPT, Gemini, Claude, Perplexity) via event isolation; perf + health pass.
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
@@ -2218,7 +2218,7 @@
 
             if (!muteLazyloadActivated) {
                 // Sleep mode - show activation icon with visual indicator
-                ui.volume.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`;
+                ui.volume.innerHTML = ttPolicy.createHTML(`<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`);
                 ui.volume.style.background = 'rgba(255, 193, 7, 0.2)'; // Amber background for sleep mode
                 ui.volume.title = 'Click to activate mute control (currently in sleep mode)';
             } else {
