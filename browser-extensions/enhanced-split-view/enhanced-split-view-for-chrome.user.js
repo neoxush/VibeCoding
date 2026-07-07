@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.3.1
+// @version      1.3.2
 // @description  Extra control over Chrome's native split view: pin a source tab so links open on the side, with playlist, per-tab mute, and cross-tab sync.
-// @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
+// @author       https://github.com/neoxush
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
 // @noframes
@@ -23,6 +23,17 @@
 
 /* =========================================================================
  * CHANGELOG
+ *
+ * v1.3.2 — Perf: role-churn & data-transmission
+ *   • saveState() now skips the GM_addValueChangeListener rewire when
+ *     role/id are unchanged. Kills wasted churn on every mute toggle
+ *     and every target-tab nav (which reloads anyway).
+ *   • saveState() skips KEY_UI_POS write when position is unchanged.
+ *     Under heavy pairing/disbanding, this was a per-call GM_setValue
+ *     that also notified every listening tab.
+ *   • updatePlaylistUI() render-skip hash changed from O(N)
+ *     JSON.stringify(playlist.map(i=>i.url)) to an O(1) version-counter
+ *     string. Version bumped only on array-mutating operations.
  *
  * v1.3.1 — Bugfix
  *   • Playlist panel could leak into non-playlist roles after cycling
@@ -381,6 +392,16 @@
     }
 
     function saveState(role, id, lastTs = 0, sourceTabId = null, isMuted = null) {
+        // P1: capture the previous role/id BEFORE we overwrite the module-level
+        // vars, so we can decide whether the listener wire actually needs to be
+        // rebuilt. saveState is called for many reasons (mute toggle, target-
+        // received nav that immediately reloads the page, etc.) where the
+        // GM_addValueChangeListener set is unchanged. Skipping the tear-down/
+        // re-attach in those cases eliminates the majority of wasted listener
+        // churn under heavy pairing/disbanding.
+        const _prevRole = myRole;
+        const _prevId = myId;
+
         myRole = role; myId = id; myLastTs = lastTs; mySourceTabId = sourceTabId;
 
         // If we are becoming idle, we must unmute.
@@ -407,7 +428,7 @@
         // Save current UI position when establishing a new role
         if (role !== 'idle' && ui && ui.container) {
             const currentPos = GM_getValue(KEY_UI_POS, {});
-            currentPos[role] = {
+            const nextPos = {
                 top: ui.container.style.top || '85px',
                 left: ui.container.style.left || 'auto',
                 right: ui.container.style.right || 'auto',
@@ -415,7 +436,20 @@
                     ui.container.classList.contains('stm-side-right') ? 'right' :
                         (role === 'target' ? 'left' : 'right')
             };
-            GM_setValue(KEY_UI_POS, currentPos);
+            // P6: only persist when something actually changed. Under heavy
+            // pairing/disbanding, saveState is called many times per second
+            // with an unchanged UI position; the GM_setValue was pure I/O
+            // waste (and, worse, notified every listening tab).
+            const prev = currentPos[role];
+            const changed = !prev ||
+                prev.top !== nextPos.top ||
+                prev.left !== nextPos.left ||
+                prev.right !== nextPos.right ||
+                prev.side !== nextPos.side;
+            if (changed) {
+                currentPos[role] = nextPos;
+                GM_setValue(KEY_UI_POS, currentPos);
+            }
         }
 
         // Simplified Logic: Save directly to the Tab Object
@@ -455,7 +489,12 @@
         } catch (err) { /* ignore */ }
 
         updateUI();
-        attachRoleSpecificListeners();
+        // P1: only rewire GM listeners when role/id actually changed. Mute
+        // toggles and target-received-nav calls hit this function too, but the
+        // listener set they need is identical to the current one.
+        if (_prevRole !== myRole || _prevId !== myId) {
+            attachRoleSpecificListeners();
+        }
         if (typeof mediaManager !== 'undefined' && mediaManager && mediaManager.initialized) mediaManager.applyRoleState();
     }
 
@@ -2446,6 +2485,11 @@
     // --- Playlist Management ---
     let playlistFilterText = '';
     let lastPlaylistRenderHash = '';
+    // P2: monotonic version bumped by every playlist mutation. Replaces the
+    // old JSON.stringify(playlist.map(i => i.url)) hash, which allocated
+    // O(N) bytes on every render check just to detect changes.
+    let playlistVersion = 0;
+    const bumpPlaylistVersion = () => { playlistVersion++; };
 
     function getPlaylistMaxItems() {
         return (config && config.playlistMaxItems) || DEFAULT_CONFIG.playlistMaxItems;
@@ -2489,6 +2533,7 @@
         }
 
         GM_setValue(key, playlist);
+        bumpPlaylistVersion();
         if (dropped > 0) {
             Notify.warning(`Added; oldest ${dropped} item(s) dropped (cap ${maxItems})`);
         } else {
@@ -2507,6 +2552,7 @@
 
         playlist.splice(index, 1);
         GM_setValue(key, playlist);
+        bumpPlaylistVersion();
 
         // Adjust current index if needed
         if (currentIndex === index) {
@@ -2530,6 +2576,7 @@
         const insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx;
         playlist.splice(insertAt, 0, moved);
         GM_setValue(key, playlist);
+        bumpPlaylistVersion();
 
         // Update playing index to follow the moved item if needed
         let currentIndex = GM_getValue(indexKey, -1);
@@ -2630,6 +2677,7 @@
 
         const newId = generateId();
         GM_setValue(getPlaylistKey(newId), playlist);
+        bumpPlaylistVersion();
         setRole('playlist', newId);
         Notify.success(`Imported ${playlist.length} items to playlist`);
     }
@@ -2642,8 +2690,12 @@
         const playingIndex = GM_getValue(indexKey, -1);
         const currentUrl = window.location.href;
 
-        // B5: skip render if data + filter unchanged
-        const hash = JSON.stringify([playlist.length, playingIndex, currentUrl, playlistFilterText, playlist.map(i => i.url)]);
+        // P2: O(1) render-skip check. The old hash serialized every URL in
+        // the playlist on every render call (O(N) allocation, ~20 KB of JSON
+        // for a 200-item list — just to detect changes). The version counter
+        // is bumped by every content-mutating operation, so a scalar compare
+        // is sufficient.
+        const hash = `${playlist.length}|${playingIndex}|${currentUrl}|${playlistFilterText}|${playlistVersion}`;
         if (!force && hash === lastPlaylistRenderHash) return;
         lastPlaylistRenderHash = hash;
 
@@ -2689,6 +2741,7 @@
             if (window.confirm('Clear playlist?')) {
                 GM_setValue(getPlaylistKey(myId), []);
                 GM_setValue(indexKey, -1);
+                bumpPlaylistVersion();
                 updatePlaylistUI(true);
             }
         });
