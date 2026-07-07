@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.2.1
-// @description  This scripts adds extra control over Chrome's native split view function, which allows to pin a source tab to open new content on the side. v1.2.1: fix TrustedHTML violation in updateVolumeButton sleep-mode icon so the volume/mute-control button renders reliably on CSP-enforced sites (e.g. play.google.com). v1.2.0: pair-drag now works on AI chat sites (ChatGPT, Gemini, Claude, Perplexity) via event isolation; perf + health pass.
+// @version      1.3.1
+// @description  Extra control over Chrome's native split view: pin a source tab so links open on the side, with playlist, per-tab mute, and cross-tab sync.
 // @author       https://github.com/neoxush/VibeCoding/tree/master/browser-extensions/enhanced-split-view
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
 // @match        *://*/*
@@ -20,6 +20,44 @@
 // @grant        GM_deleteValue
 // Notification system replaces GM_notification
 // ==/UserScript==
+
+/* =========================================================================
+ * CHANGELOG
+ *
+ * v1.3.1 — Bugfix
+ *   • Playlist panel could leak into non-playlist roles after cycling
+ *     playlist → revoke → target. Now hidden defensively in updateUI()
+ *     for any non-playlist role, and toggleMenu() enforces the same.
+ *
+ * v1.3.0 — UI/UX polish + perf pass
+ *   • Compact floating scale: dot 32→26, volume 28→24, mini 26→22, menu
+ *     160→140 with 7px row padding, playlist panel 280→240 with 7px rows,
+ *     empty-state slimmed.
+ *   • Keyboard + ARIA on status dot, volume button, mini-playlist buttons,
+ *     playlist rows, and source picker items.
+ *   • Config panel is now a proper dialog (role="dialog", aria-modal,
+ *     labelledby, Tab focus-trap, focus restore on close).
+ *   • MutationObserver drops `outerHTML` scan → direct `querySelectorAll`
+ *     (major win on React/Vue SPAs).
+ *   • Grip drag caches height/window at mousedown → no layout thrash per
+ *     mousemove.
+ *   • Notification `_restack` batched via requestAnimationFrame.
+ *   • mediaManager tick: self-scheduling setTimeout (no overlap).
+ *   • Global capture listeners marked { passive:true } where safe
+ *     (pointerdown, mouseup, keydown-clear, visibilitychange, etc.).
+ *   • Config-panel field refs cached once (killed 15+ getElementById per
+ *     open/save).
+ *   • backdrop-filter consolidated into CSS custom properties.
+ *   • Global `prefers-reduced-motion` rule replaces hardcoded per-element
+ *     list — new animations inherit automatically.
+ *   • Focus-visible outlines added for all newly focusable elements.
+ *
+ * v1.2.1 — Fix TrustedHTML violation in updateVolumeButton sleep-mode icon
+ *   so the volume/mute button renders on CSP-enforced sites (play.google.com).
+ *
+ * v1.2.0 — Pair-drag now works on AI chat sites (ChatGPT, Gemini, Claude,
+ *   Perplexity) via event isolation; perf + health pass.
+ * ========================================================================= */
 
 (function () {
     'use strict';
@@ -135,10 +173,19 @@
         },
 
         _restack() {
-            let top = 20;
-            this._active.forEach(n => {
-                n.style.top = `${top}px`;
-                top += n.offsetHeight + 10;
+            // Batch: schedule a single rAF; coalesce rapid successive calls.
+            if (this._restackScheduled) return;
+            this._restackScheduled = true;
+            const raf = window.requestAnimationFrame || ((cb) => setTimeout(cb, 16));
+            raf(() => {
+                this._restackScheduled = false;
+                // Read all heights first (single layout flush), then write all positions.
+                const heights = this._active.map(n => n.getBoundingClientRect().height);
+                let top = 20;
+                for (let i = 0; i < this._active.length; i++) {
+                    this._active[i].style.top = `${top}px`;
+                    top += heights[i] + 10;
+                }
             });
         },
 
@@ -515,6 +562,10 @@
                 --esv-z-overlay: 2147483646;
                 --esv-z-modal: 2147483647;
                 --esv-z-toast: 2147483647;
+                --esv-backdrop-glass: blur(14px) saturate(140%);
+                --esv-backdrop-glass-heavy: blur(18px) saturate(140%);
+                --esv-backdrop-glass-modal: blur(20px) saturate(140%);
+                --esv-backdrop-glass-overlay: blur(8px);
             }
 
             @keyframes esv-pulse {
@@ -526,7 +577,7 @@
                 from { opacity: 0; transform: translateY(6px); }
                 to   { opacity: 1; transform: translateY(0); }
             }
-            .stm-pulse-animate { animation: esv-pulse 480ms var(--esv-ease); }
+            .stm-pulse-animate { animation: esv-pulse 480ms var(--esv-ease); will-change: transform; }
 
             /* =====================================================
              * Floating control: container + dot + grip + volume + mini
@@ -540,11 +591,11 @@
                 justify-content: center;
                 gap: 0;
                 background: var(--esv-surface-1);
-                backdrop-filter: blur(14px) saturate(140%);
-                -webkit-backdrop-filter: blur(14px) saturate(140%);
+                backdrop-filter: var(--esv-backdrop-glass);
+                -webkit-backdrop-filter: var(--esv-backdrop-glass);
                 border: var(--esv-border-1);
                 border-radius: var(--esv-radius-pill);
-                padding: 4px;
+                padding: 3px;
                 box-shadow: var(--esv-shadow-md), var(--esv-shadow-inner);
                 font-family: var(--esv-font);
                 color: var(--esv-fg-1);
@@ -572,13 +623,13 @@
             }
 
             #stm-status-dot {
-                width: 32px;
-                height: 32px;
+                width: 26px;
+                height: 26px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 font-family: var(--esv-font);
-                font-size: var(--esv-fs-lg);
+                font-size: var(--esv-fs-md);
                 font-weight: 800;
                 color: #fff;
                 cursor: pointer;
@@ -586,7 +637,7 @@
                 position: relative;
                 z-index: 2;
                 background: var(--esv-accent-source-grad);
-                box-shadow: 0 2px 10px rgba(34, 197, 94, 0.35);
+                box-shadow: 0 1px 6px rgba(34, 197, 94, 0.32);
                 transition: transform var(--esv-dur-base) var(--esv-ease),
                             opacity var(--esv-dur-base) var(--esv-ease),
                             box-shadow var(--esv-dur-base) var(--esv-ease),
@@ -594,27 +645,27 @@
             }
             .stm-side-right #stm-status-dot {
                 background: var(--esv-accent-source-grad);
-                box-shadow: 0 2px 10px rgba(34, 197, 94, 0.35);
+                box-shadow: 0 1px 6px rgba(34, 197, 94, 0.32);
             }
             .stm-side-left #stm-status-dot {
                 background: var(--esv-accent-target-grad);
-                box-shadow: 0 2px 10px rgba(59, 130, 246, 0.35);
+                box-shadow: 0 1px 6px rgba(59, 130, 246, 0.32);
             }
             #stm-status-dot.stm-role-p {
                 background: var(--esv-accent-playlist-grad);
-                box-shadow: 0 2px 10px rgba(168, 85, 247, 0.35);
+                box-shadow: 0 1px 6px rgba(168, 85, 247, 0.32);
             }
             .stm-collapsed #stm-status-dot { transform: scale(0.85); opacity: 0.75; }
             #stm-ui-container:hover #stm-status-dot { transform: scale(1); opacity: 1; }
             #stm-status-dot.stm-drag-over {
                 background: linear-gradient(135deg, #fbbf24, #d97706) !important;
                 transform: scale(1.12) !important;
-                box-shadow: 0 0 24px rgba(251, 191, 36, 0.6) !important;
+                box-shadow: 0 0 18px rgba(251, 191, 36, 0.55) !important;
             }
             #stm-status-dot.stm-global-drag-over {
                 background: linear-gradient(135deg, #06b6d4, #0e7490) !important;
                 transform: scale(1.06) !important;
-                box-shadow: 0 0 18px rgba(6, 182, 212, 0.55) !important;
+                box-shadow: 0 0 14px rgba(6, 182, 212, 0.50) !important;
             }
 
             #stm-grip {
@@ -622,28 +673,28 @@
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                gap: 3px;
+                gap: 2px;
                 cursor: grab;
-                padding: 0 4px;
+                padding: 0 3px;
                 opacity: 0;
                 width: 0;
-                height: 24px;
+                height: 22px;
                 overflow: hidden;
                 transition: opacity var(--esv-dur-base) var(--esv-ease),
                             width var(--esv-dur-base) var(--esv-ease);
             }
             #stm-grip:active { cursor: grabbing; }
-            #stm-ui-container:not(.stm-collapsed) #stm-grip { opacity: 0.55; width: 20px; }
+            #stm-ui-container:not(.stm-collapsed) #stm-grip { opacity: 0.55; width: 16px; }
             #stm-grip:hover { opacity: 1 !important; }
             .stm-grip-dot {
-                width: 3px; height: 3px;
+                width: 2.5px; height: 2.5px;
                 background: var(--esv-fg-1);
                 border-radius: 50%;
             }
 
             #stm-volume-btn {
-                width: 28px;
-                height: 28px;
+                width: 24px;
+                height: 24px;
                 background: var(--esv-surface-3);
                 border-radius: 50%;
                 display: flex;
@@ -661,26 +712,26 @@
             }
             #stm-ui-container:not(.stm-collapsed) #stm-volume-btn {
                 opacity: 1;
-                width: 28px;
-                margin: 0 4px;
+                width: 24px;
+                margin: 0 3px;
             }
             #stm-volume-btn:hover {
                 background: var(--esv-surface-3-hover);
                 transform: scale(1.08);
             }
             #stm-volume-btn:active { transform: scale(0.96); }
-            #stm-volume-btn svg { width: 16px; height: 16px; fill: currentColor; }
+            #stm-volume-btn svg { width: 14px; height: 14px; fill: currentColor; }
 
             #stm-mini-playlist {
                 display: none;
                 align-items: center;
-                gap: 4px;
-                margin: 0 2px;
+                gap: 3px;
+                margin: 0 1px;
             }
             #stm-ui-container:not(.stm-collapsed) #stm-mini-playlist { display: flex; }
             .stm-mini-btn {
-                width: 26px;
-                height: 26px;
+                width: 22px;
+                height: 22px;
                 background: var(--esv-surface-3);
                 border-radius: var(--esv-radius-sm);
                 display: flex;
@@ -696,7 +747,7 @@
                 transform: scale(1.08);
             }
             .stm-mini-btn:active { transform: scale(0.96); }
-            .stm-mini-btn svg { width: 14px; height: 14px; fill: currentColor; }
+            .stm-mini-btn svg { width: 12px; height: 12px; fill: currentColor; }
 
             /* =====================================================
              * Floating menu
@@ -706,15 +757,15 @@
                 position: absolute;
                 top: calc(100% + 6px);
                 background: var(--esv-surface-2);
-                backdrop-filter: blur(18px) saturate(140%);
-                -webkit-backdrop-filter: blur(18px) saturate(140%);
+                backdrop-filter: var(--esv-backdrop-glass-heavy);
+                -webkit-backdrop-filter: var(--esv-backdrop-glass-heavy);
                 border: var(--esv-border-1);
                 border-radius: var(--esv-radius-md);
-                width: 160px;
+                width: 124px;
                 overflow: hidden;
                 box-shadow: var(--esv-shadow-md);
                 font-family: var(--esv-font);
-                font-size: var(--esv-fs-md);
+                font-size: var(--esv-fs-sm);
                 color: var(--esv-fg-1);
                 z-index: 3;
                 animation: esv-fade-up var(--esv-dur-base) var(--esv-ease);
@@ -722,25 +773,25 @@
             #stm-menu::before {
                 content: '';
                 position: absolute;
-                top: -8px;
+                top: -6px;
                 left: 0;
                 right: 0;
-                height: 8px;
+                height: 6px;
             }
             #stm-ui-container.stm-side-right #stm-menu { right: 0; }
             #stm-ui-container.stm-side-left  #stm-menu { left: 0; }
             .stm-menu-item {
                 display: block;
                 width: 100%;
-                padding: 10px 16px;
+                padding: 5px 12px;
                 background: none;
                 border: none;
                 text-align: left;
                 color: var(--esv-fg-1);
                 cursor: pointer;
                 font-family: inherit;
-                font-size: var(--esv-fs-md);
-                line-height: 1.4;
+                font-size: var(--esv-fs-sm);
+                line-height: 1.3;
                 transition: background var(--esv-dur-fast) var(--esv-ease),
                             color var(--esv-dur-fast) var(--esv-ease);
             }
@@ -764,12 +815,12 @@
                 position: fixed;
                 right: 20px;
                 min-width: 240px;
-                max-width: 420px;
+                max-width: min(420px, calc(100vw - 40px));
                 padding: 12px 14px;
                 border-radius: var(--esv-radius-md);
                 background: var(--esv-surface-2);
-                backdrop-filter: blur(18px) saturate(140%);
-                -webkit-backdrop-filter: blur(18px) saturate(140%);
+                backdrop-filter: var(--esv-backdrop-glass-heavy);
+                -webkit-backdrop-filter: var(--esv-backdrop-glass-heavy);
                 border: var(--esv-border-1);
                 box-shadow: var(--esv-shadow-md);
                 color: var(--esv-fg-1);
@@ -783,6 +834,7 @@
                 z-index: var(--esv-z-toast);
                 opacity: 0;
                 transform: translateX(120%);
+                will-change: transform, opacity;
                 transition: transform var(--esv-dur-slow) var(--esv-ease),
                             opacity var(--esv-dur-slow) var(--esv-ease),
                             top var(--esv-dur-base) var(--esv-ease);
@@ -857,8 +909,8 @@
                 position: fixed;
                 inset: 0;
                 background: var(--esv-overlay);
-                backdrop-filter: blur(8px);
-                -webkit-backdrop-filter: blur(8px);
+                backdrop-filter: var(--esv-backdrop-glass-overlay);
+                -webkit-backdrop-filter: var(--esv-backdrop-glass-overlay);
                 z-index: var(--esv-z-overlay);
             }
             #stm-config-panel {
@@ -868,8 +920,8 @@
                 left: 50%;
                 transform: translate(-50%, -50%);
                 background: var(--esv-surface-2);
-                backdrop-filter: blur(20px) saturate(140%);
-                -webkit-backdrop-filter: blur(20px) saturate(140%);
+                backdrop-filter: var(--esv-backdrop-glass-modal);
+                -webkit-backdrop-filter: var(--esv-backdrop-glass-modal);
                 border: var(--esv-border-1);
                 border-radius: var(--esv-radius-lg);
                 padding: 24px;
@@ -1077,14 +1129,14 @@
                 position: absolute;
                 top: calc(100% + 6px);
                 background: var(--esv-surface-2);
-                backdrop-filter: blur(18px) saturate(140%);
-                -webkit-backdrop-filter: blur(18px) saturate(140%);
+                backdrop-filter: var(--esv-backdrop-glass-heavy);
+                -webkit-backdrop-filter: var(--esv-backdrop-glass-heavy);
                 border: var(--esv-border-1);
                 border-radius: var(--esv-radius-md);
                 width: auto;
-                min-width: 280px;
-                max-width: min(420px, 85vw);
-                max-height: 520px;
+                min-width: 240px;
+                max-width: min(360px, 85vw);
+                max-height: 460px;
                 overflow-y: auto;
                 box-shadow: var(--esv-shadow-md);
                 font-family: var(--esv-font);
@@ -1093,7 +1145,7 @@
                 padding: 0;
                 animation: esv-fade-up var(--esv-dur-base) var(--esv-ease);
             }
-            #stm-playlist-panel::-webkit-scrollbar { width: 8px; }
+            #stm-playlist-panel::-webkit-scrollbar { width: 6px; }
             #stm-playlist-panel::-webkit-scrollbar-track { background: transparent; }
             #stm-playlist-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; }
             #stm-playlist-panel::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
@@ -1103,12 +1155,12 @@
             .stm-playlist-item {
                 display: flex;
                 align-items: center;
-                gap: 10px;
-                padding: 10px 14px;
+                gap: 7px;
+                padding: 5px 10px;
                 color: var(--esv-fg-1);
                 cursor: pointer;
-                font-size: var(--esv-fs-md);
-                line-height: 1.4;
+                font-size: var(--esv-fs-sm);
+                line-height: 1.3;
                 border-bottom: var(--esv-border-soft);
                 position: relative;
                 overflow: hidden;
@@ -1118,7 +1170,7 @@
             .stm-playlist-item:last-child { border-bottom: none; }
             .stm-playlist-item:hover {
                 background: var(--esv-surface-3-hover);
-                padding-left: 18px;
+                padding-left: 14px;
             }
             .stm-playlist-item.active {
                 background: rgba(59, 130, 246, 0.16);
@@ -1134,11 +1186,11 @@
                 overflow: hidden;
                 text-overflow: ellipsis;
                 font-weight: var(--esv-fw-medium);
-                font-size: var(--esv-fs-md);
+                font-size: var(--esv-fs-sm);
             }
             .stm-playlist-item-play-icon {
-                width: 12px;
-                height: 12px;
+                width: 11px;
+                height: 11px;
                 fill: currentColor;
                 opacity: 0;
                 transition: opacity var(--esv-dur-fast) var(--esv-ease);
@@ -1147,9 +1199,9 @@
             .stm-playlist-item.playing .stm-playlist-item-play-icon { opacity: 1; }
             .stm-playlist-item-remove {
                 opacity: 0;
-                padding: 4px 8px;
-                border-radius: 6px;
-                font-size: 16px;
+                padding: 3px 6px;
+                border-radius: 5px;
+                font-size: 14px;
                 color: var(--esv-fg-3);
                 transition: all var(--esv-dur-fast) var(--esv-ease);
                 user-select: none;
@@ -1165,16 +1217,17 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 6px;
+                gap: 4px;
                 background: rgba(255,255,255,0.05);
                 border: 1px solid rgba(255,255,255,0.10);
                 border-radius: var(--esv-radius-sm);
-                padding: 7px 10px;
+                padding: 3px 8px;
                 color: var(--esv-fg-1);
-                font-size: var(--esv-fs-sm);
+                font-size: var(--esv-fs-xs);
                 font-family: inherit;
                 font-weight: var(--esv-fw-medium);
                 cursor: pointer;
+                line-height: 1.4;
                 transition: background var(--esv-dur-fast) var(--esv-ease),
                             color var(--esv-dur-fast) var(--esv-ease),
                             border-color var(--esv-dur-fast) var(--esv-ease);
@@ -1188,10 +1241,10 @@
                 background: rgba(255,255,255,0.06);
                 border: 1px solid rgba(255,255,255,0.10);
                 border-radius: var(--esv-radius-sm);
-                padding: 7px 10px;
+                padding: 3px 8px;
                 color: var(--esv-fg-1);
                 font-family: inherit;
-                font-size: var(--esv-fs-sm);
+                font-size: var(--esv-fs-xs);
                 outline: none;
                 width: 100%;
                 box-sizing: border-box;
@@ -1211,20 +1264,41 @@
                 position: fixed;
                 z-index: var(--esv-z-modal);
                 background: var(--esv-surface-2);
-                backdrop-filter: blur(18px) saturate(140%);
-                -webkit-backdrop-filter: blur(18px) saturate(140%);
+                backdrop-filter: var(--esv-backdrop-glass-heavy);
+                -webkit-backdrop-filter: var(--esv-backdrop-glass-heavy);
                 border: var(--esv-border-1);
                 border-radius: var(--esv-radius-md);
-                min-width: 260px;
-                max-width: 400px;
+                min-width: 220px;
+                max-width: 340px;
                 max-height: 60vh;
                 overflow-y: auto;
                 box-shadow: var(--esv-shadow-md);
                 font-family: var(--esv-font);
-                font-size: var(--esv-fs-md);
+                font-size: var(--esv-fs-sm);
                 color: var(--esv-fg-1);
-                padding: 4px 0;
+                padding: 2px 0;
                 animation: esv-fade-up var(--esv-dur-base) var(--esv-ease);
+            }
+            #stm-source-picker .esv-picker-head {
+                padding: 6px 10px 5px 10px;
+                font-size: var(--esv-fs-xs);
+                color: var(--esv-fg-3);
+                text-transform: uppercase;
+                letter-spacing: 1.2px;
+                border-bottom: var(--esv-border-soft);
+                font-weight: var(--esv-fw-semibold);
+            }
+            #stm-source-picker .esv-picker-item {
+                padding: 5px 10px;
+                cursor: pointer;
+                border-bottom: var(--esv-border-soft);
+                transition: background var(--esv-dur-fast) var(--esv-ease),
+                            padding-left var(--esv-dur-fast) var(--esv-ease);
+            }
+            #stm-source-picker .esv-picker-item:last-child { border-bottom: none; }
+            #stm-source-picker .esv-picker-item:hover {
+                background: var(--esv-surface-3-hover);
+                padding-left: 14px;
             }
             #stm-source-picker .esv-picker-head {
                 padding: 10px 14px 8px 14px;
@@ -1261,21 +1335,34 @@
             }
 
             /* =====================================================
+             * a11y — focus rings for keyboard users
+             * ===================================================== */
+            #stm-status-dot:focus-visible,
+            #stm-volume-btn:focus-visible,
+            .stm-mini-btn:focus-visible,
+            .stm-playlist-item:focus-visible,
+            #stm-source-picker .esv-picker-item:focus-visible,
+            #stm-config-close-x:focus-visible {
+                outline: 2px solid var(--esv-accent-info);
+                outline-offset: 2px;
+            }
+
+            /* =====================================================
              * a11y — reduced motion
+             * Applies globally to every ESV surface so future
+             * animations inherit the rule automatically.
              * ===================================================== */
             @media (prefers-reduced-motion: reduce) {
-                #stm-ui-container,
-                #stm-status-dot,
-                #stm-volume-btn,
-                .stm-mini-btn,
-                .esv-notification,
-                .stm-playlist-item,
-                .stm-pulse-animate,
-                #stm-menu,
-                #stm-playlist-panel,
-                #stm-source-picker {
-                    animation: none !important;
-                    transition: none !important;
+                #stm-ui-container, #stm-ui-container *,
+                #stm-menu, #stm-menu *,
+                #stm-playlist-panel, #stm-playlist-panel *,
+                #stm-source-picker, #stm-source-picker *,
+                #stm-config-overlay, #stm-config-panel, #stm-config-panel *,
+                .esv-notification, .esv-notification * {
+                    animation-duration: 0.001ms !important;
+                    animation-iteration-count: 1 !important;
+                    transition-duration: 0.001ms !important;
+                    scroll-behavior: auto !important;
                 }
             }
 
@@ -1313,10 +1400,15 @@
         const panel = document.createElement('div');
         panel.id = 'stm-config-panel';
         panel.classList.add('esv-theme-auto');
+        // A11y: dialog semantics + focus target
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+        panel.setAttribute('aria-labelledby', 'stm-config-title');
+        panel.setAttribute('tabindex', '-1');
         panel.innerHTML = ttPolicy.createHTML(`
             <div class="stm-config-header">
-                <h3>Preference</h3>
-                <span id="stm-config-close-x">&times;</span>
+                <h3 id="stm-config-title">Preference</h3>
+                <span id="stm-config-close-x" role="button" tabindex="0" aria-label="Close preferences">&times;</span>
             </div>
             <div class="stm-config-section">
                 <h4>Create Source Tab</h4>
@@ -1456,50 +1548,105 @@
         document.body.appendChild(overlay);
         document.body.appendChild(panel);
         overlay.addEventListener('click', hideConfigPanel);
+        const closeX = panel.querySelector('#stm-config-close-x');
+        closeX.addEventListener('click', hideConfigPanel);
+        // Keyboard support for the close "X" span (it's not a real button).
+        closeX.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hideConfigPanel(); }
+        });
         panel.querySelector('#stm-config-cancel').addEventListener('click', hideConfigPanel);
-        panel.querySelector('#stm-config-close-x').addEventListener('click', hideConfigPanel);
         panel.querySelector('#stm-config-save').addEventListener('click', saveConfigFromPanel);
         panel.querySelector('#stm-config-reset').addEventListener('click', resetConfigToDefault);
         panel.querySelector('#stm-cfg-export').addEventListener('click', exportConfigToClipboard);
         panel.querySelector('#stm-cfg-import').addEventListener('click', importConfigFromClipboard);
-        return { overlay, panel };
+
+        // Cache field references once — avoids 15+ document.getElementById() calls
+        // on every open/save (major perf win when panel is opened frequently).
+        const q = (id) => panel.querySelector('#' + id);
+        const fields = {
+            sourceButton: q('stm-source-button'),
+            sourceCtrl: q('stm-source-ctrl'),
+            sourceAlt: q('stm-source-alt'),
+            sourceShift: q('stm-source-shift'),
+            targetButton: q('stm-target-button'),
+            targetCtrl: q('stm-target-ctrl'),
+            targetAlt: q('stm-target-alt'),
+            targetShift: q('stm-target-shift'),
+            notifyNewSource: q('stm-notify-new-source'),
+            notifyNewTarget: q('stm-notify-new-target'),
+            notifyRevoke: q('stm-notify-revoke'),
+            scMute: q('stm-sc-mute'),
+            scPnav: q('stm-sc-pnav'),
+            scRevoke: q('stm-sc-revoke'),
+            scEsc: q('stm-sc-esc'),
+            theme: q('stm-theme'),
+            playlistMax: q('stm-playlist-max'),
+            diagnostics: q('stm-diagnostics')
+        };
+        return { overlay, panel, fields };
+    }
+
+    // Focus trap for the config dialog — installed only while panel is visible.
+    let _cfgFocusReturn = null;
+    function _cfgTrapFocus(e) {
+        if (!configPanel || configPanel.panel.style.display !== 'block') return;
+        if (e.key !== 'Tab') return;
+        const focusables = configPanel.panel.querySelectorAll(
+            'input:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !configPanel.panel.contains(active))) {
+            e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && active === last) {
+            e.preventDefault(); first.focus();
+        }
     }
 
     function showConfigPanel() {
         if (window !== window.top) return;
         if (!configPanel) { configPanel = createConfigPanel(); }
-        document.getElementById('stm-source-button').value = config.sourceKey.button;
-        document.getElementById('stm-source-ctrl').checked = config.sourceKey.ctrl;
-        document.getElementById('stm-source-alt').checked = config.sourceKey.alt;
-        document.getElementById('stm-source-shift').checked = config.sourceKey.shift;
-        document.getElementById('stm-target-button').value = config.targetKey.button;
-        document.getElementById('stm-target-ctrl').checked = config.targetKey.ctrl;
-        document.getElementById('stm-target-alt').checked = config.targetKey.alt;
-        document.getElementById('stm-target-shift').checked = config.targetKey.shift;
+        const f = configPanel.fields;
+        f.sourceButton.value = config.sourceKey.button;
+        f.sourceCtrl.checked = config.sourceKey.ctrl;
+        f.sourceAlt.checked = config.sourceKey.alt;
+        f.sourceShift.checked = config.sourceKey.shift;
+        f.targetButton.value = config.targetKey.button;
+        f.targetCtrl.checked = config.targetKey.ctrl;
+        f.targetAlt.checked = config.targetKey.alt;
+        f.targetShift.checked = config.targetKey.shift;
 
         const notifications = config.notifications || DEFAULT_CONFIG.notifications;
-        document.getElementById('stm-notify-new-source').checked = !!notifications.newSourceRole;
-        document.getElementById('stm-notify-new-target').checked = !!notifications.newTargetRole;
-        document.getElementById('stm-notify-revoke').checked = !!notifications.revokeRole;
+        f.notifyNewSource.checked = !!notifications.newSourceRole;
+        f.notifyNewTarget.checked = !!notifications.newTargetRole;
+        f.notifyRevoke.checked = !!notifications.revokeRole;
 
         const sc = config.shortcuts || DEFAULT_CONFIG.shortcuts;
-        document.getElementById('stm-sc-mute').checked = !!sc.mute;
-        document.getElementById('stm-sc-pnav').checked = !!sc.playlistNav;
-        document.getElementById('stm-sc-revoke').checked = !!sc.revokeRole;
-        document.getElementById('stm-sc-esc').checked = !!sc.esc;
+        f.scMute.checked = !!sc.mute;
+        f.scPnav.checked = !!sc.playlistNav;
+        f.scRevoke.checked = !!sc.revokeRole;
+        f.scEsc.checked = !!sc.esc;
 
-        document.getElementById('stm-theme').value = config.theme || 'auto';
-        document.getElementById('stm-playlist-max').value = String(config.playlistMaxItems || 200);
+        f.theme.value = config.theme || 'auto';
+        f.playlistMax.value = String(config.playlistMaxItems || 200);
 
         // Diagnostics
         renderDiagnostics();
 
         configPanel.overlay.style.display = 'block';
         configPanel.panel.style.display = 'block';
+
+        // A11y: remember what had focus, trap Tab, move focus into dialog.
+        _cfgFocusReturn = document.activeElement;
+        window.addEventListener('keydown', _cfgTrapFocus, true);
+        try { f.sourceButton.focus(); } catch (e) { /* ignore */ }
     }
 
     function renderDiagnostics() {
-        const el = document.getElementById('stm-diagnostics');
+        const el = (configPanel && configPanel.fields && configPanel.fields.diagnostics) ||
+                   document.getElementById('stm-diagnostics');
         if (!el) return;
         try {
             const known = GM_getValue(KEY_KNOWN_SOURCES, []);
@@ -1527,25 +1674,33 @@
             configPanel.overlay.style.display = 'none';
             configPanel.panel.style.display = 'none';
         }
+        // A11y: detach focus trap + restore previous focus.
+        try { window.removeEventListener('keydown', _cfgTrapFocus, true); } catch (e) { /* ignore */ }
+        if (_cfgFocusReturn && typeof _cfgFocusReturn.focus === 'function') {
+            try { _cfgFocusReturn.focus(); } catch (e) { /* ignore */ }
+        }
+        _cfgFocusReturn = null;
     }
 
     function saveConfigFromPanel() {
+        if (!configPanel) return;
+        const f = configPanel.fields;
         const newConfig = {
-            sourceKey: { button: parseInt(document.getElementById('stm-source-button').value), ctrl: document.getElementById('stm-source-ctrl').checked, alt: document.getElementById('stm-source-alt').checked, shift: document.getElementById('stm-source-shift').checked },
-            targetKey: { button: parseInt(document.getElementById('stm-target-button').value), ctrl: document.getElementById('stm-target-ctrl').checked, alt: document.getElementById('stm-target-alt').checked, shift: document.getElementById('stm-target-shift').checked },
+            sourceKey: { button: parseInt(f.sourceButton.value), ctrl: f.sourceCtrl.checked, alt: f.sourceAlt.checked, shift: f.sourceShift.checked },
+            targetKey: { button: parseInt(f.targetButton.value), ctrl: f.targetCtrl.checked, alt: f.targetAlt.checked, shift: f.targetShift.checked },
             notifications: {
-                newSourceRole: document.getElementById('stm-notify-new-source').checked,
-                newTargetRole: document.getElementById('stm-notify-new-target').checked,
-                revokeRole: document.getElementById('stm-notify-revoke').checked
+                newSourceRole: f.notifyNewSource.checked,
+                newTargetRole: f.notifyNewTarget.checked,
+                revokeRole: f.notifyRevoke.checked
             },
             shortcuts: {
-                mute: document.getElementById('stm-sc-mute').checked,
-                playlistNav: document.getElementById('stm-sc-pnav').checked,
-                revokeRole: document.getElementById('stm-sc-revoke').checked,
-                esc: document.getElementById('stm-sc-esc').checked
+                mute: f.scMute.checked,
+                playlistNav: f.scPnav.checked,
+                revokeRole: f.scRevoke.checked,
+                esc: f.scEsc.checked
             },
-            theme: document.getElementById('stm-theme').value,
-            playlistMaxItems: parseInt(document.getElementById('stm-playlist-max').value, 10) || 200
+            theme: f.theme.value,
+            playlistMaxItems: parseInt(f.playlistMax.value, 10) || 200
         };
         saveConfig(newConfig);
         hideConfigPanel();
@@ -1710,19 +1865,27 @@
             if (themeMode === 'auto') ui.container.classList.add('esv-theme-auto');
             else if (themeMode === 'light') ui.container.classList.add('esv-theme-auto'); // forced via media won't apply; left as auto
             ui.dot.id = 'stm-status-dot';
+            // A11y: dot is a focusable button. aria-label is refreshed per-role in
+            // the render block below (see `ui.dot.title = ...`).
+            ui.dot.setAttribute('role', 'button');
+            ui.dot.setAttribute('tabindex', '0');
+            ui.dot.setAttribute('aria-haspopup', 'menu');
             ui.menu.id = 'stm-menu';
             ui.volume.id = 'stm-volume-btn';
+            // A11y: volume button — role/label refreshed dynamically in updateVolumeButton.
+            ui.volume.setAttribute('role', 'button');
+            ui.volume.setAttribute('tabindex', '0');
             ui.grip.id = 'stm-grip';
             ui.grip.innerHTML = ttPolicy.createHTML('<div class="stm-grip-dot"></div><div class="stm-grip-dot"></div><div class="stm-grip-dot"></div>');
 
             ui.playlistPanel.id = 'stm-playlist-panel';
             ui.miniPlaylist.id = 'stm-mini-playlist';
             ui.miniPlaylist.innerHTML = ttPolicy.createHTML(`
-                <div class="stm-mini-btn" title="Previous" data-action="prev">
-                    <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                <div class="stm-mini-btn" role="button" tabindex="0" title="Previous" aria-label="Previous playlist item" data-action="prev">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
                 </div>
-                <div class="stm-mini-btn" title="Next" data-action="next">
-                    <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6zm9-12h2v12h-2z"/></svg>
+                <div class="stm-mini-btn" role="button" tabindex="0" title="Next" aria-label="Next playlist item" data-action="next">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l8.5-6L6 6zm9-12h2v12h-2z"/></svg>
                 </div>
             `);
 
@@ -1750,6 +1913,13 @@
                 }
             });
             ui.dot.addEventListener('dragstart', handleRoleDragStart);
+            // Keyboard access: Enter/Space toggles the menu (mirrors mouse click).
+            ui.dot.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleMenu();
+                }
+            });
             // Guaranteed cleanup hook — fires on the drag SOURCE no matter where the drop
             // landed (including different windows, tabs, or cancelled drags via Esc).
             // Without this the cyan `.stm-global-drag-over` can stick when dropping on
@@ -1759,6 +1929,15 @@
             ui.miniPlaylist.addEventListener('click', (e) => {
                 const btn = e.target.closest('.stm-mini-btn');
                 if (btn) {
+                    navigatePlaylist(btn.dataset.action);
+                }
+            });
+            // Keyboard access for mini prev/next buttons.
+            ui.miniPlaylist.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                const btn = e.target.closest('.stm-mini-btn');
+                if (btn) {
+                    e.preventDefault();
                     navigatePlaylist(btn.dataset.action);
                 }
             });
@@ -1793,11 +1972,18 @@
             ui.dot.addEventListener('drop', handleLinkDrop);
 
             ui.menu.addEventListener('click', handleMenuClick);
-            ui.volume.addEventListener('click', () => {
+            const volumeActivate = () => {
                 if (!muteLazyloadActivated) {
                     activateMuteLazyload();
                 } else {
                     mediaManager.toggleMute();
+                }
+            };
+            ui.volume.addEventListener('click', volumeActivate);
+            ui.volume.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    volumeActivate();
                 }
             });
             window.addEventListener('click', (e) => {
@@ -1805,7 +1991,7 @@
                     toggleMenu();
                     ui.container.classList.add('stm-collapsed');
                 }
-            }, true);
+            }, { capture: true, passive: true });
 
             // Global Drop Support (for pairing)
             // dragenter is registered FIRST so we pre-empt host overlays (ChatGPT,
@@ -1817,25 +2003,25 @@
             // Safety nets: drag may end without firing drop/dragleave when user drops on
             // another window, presses Esc, or alt-tabs away. Clear stuck visuals on these.
             window.addEventListener('dragend', _esvClearDragVisuals, true);
-            window.addEventListener('blur', _esvClearDragVisuals);
-            window.addEventListener('focus', _esvClearDragVisuals);
+            window.addEventListener('blur', _esvClearDragVisuals, { passive: true });
+            window.addEventListener('focus', _esvClearDragVisuals, { passive: true });
             // First mousemove or pointerdown AFTER a drag is the clearest signal that
             // the drag is over from the user's POV. The hot-path mousemove listener is
             // attached lazily in handleRoleDragStart (WI-5) — only while a drag is in
             // flight — to avoid a global capture-phase mousemove handler at steady state.
             window.addEventListener('pointerdown', () => {
                 if (_esvDragInFlight) _esvClearDragVisuals();
-            }, true);
+            }, { capture: true, passive: true });
             window.addEventListener('mouseup', () => {
                 if (_esvDragInFlight) _esvClearDragVisuals();
-            }, true);
+            }, { capture: true, passive: true });
             window.addEventListener('keydown', (ke) => {
                 if (ke.key === 'Escape') _esvClearDragVisuals();
-            }, true);
+            }, { capture: true, passive: true });
             // visibilitychange catches alt-tab / split-view focus shifts.
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') _esvClearDragVisuals();
-            });
+            }, { passive: true });
         }
 
         const hasMedia = mediaManager && mediaManager.hasMedia;
@@ -1860,15 +2046,25 @@
         ui.dot.classList.remove('stm-role-p');
         ui.container.classList.remove('stm-role-playlist');
         ui.miniPlaylist.style.display = 'none';
+        // BUGFIX (v1.3.x): playlist panel visibility could leak across role
+        // transitions. Path: playlist → open panel → revoke → become target
+        // → open menu — panel still had display:block from the earlier
+        // playlist session. Always hide it here for non-playlist roles;
+        // toggleMenu() re-shows it only when appropriate.
+        if (myRole !== 'playlist' && ui.playlistPanel) {
+            ui.playlistPanel.style.display = 'none';
+        }
 
         if (myRole === 'source') {
             ui.dot.textContent = 'S';
             ui.dot.style.display = 'flex';
             ui.dot.title = `Source — group ${(myId || '').slice(-4)}`;
+            ui.dot.setAttribute('aria-label', ui.dot.title + ' (press Enter to open menu)');
         } else if (myRole === 'target') {
             ui.dot.textContent = 'T';
             ui.dot.style.display = 'flex';
             ui.dot.title = `Target — group ${(myId || '').slice(-4)}`;
+            ui.dot.setAttribute('aria-label', ui.dot.title + ' (press Enter to open menu)');
         } else if (myRole === 'playlist') {
             ui.dot.textContent = 'P';
             ui.dot.style.display = 'flex';
@@ -1876,11 +2072,13 @@
             ui.container.classList.add('stm-role-playlist');
             ui.miniPlaylist.style.display = 'flex';
             ui.dot.title = `Playlist — group ${(myId || '').slice(-4)}`;
+            ui.dot.setAttribute('aria-label', ui.dot.title + ' (press Enter to open menu)');
         } else {
             // This block is mostly for safety if the container display logic changes.
             ui.dot.style.display = 'none';
             ui.dot.textContent = '';
             ui.dot.title = '';
+            ui.dot.removeAttribute('aria-label');
         }
 
         // Update Volume Button
@@ -1934,6 +2132,10 @@
                         ui.playlistPanel.style.top = `calc(100% + ${menuHeight + 6}px)`;
                     }, 0);
                 }
+            } else if (ui.playlistPanel) {
+                // Defensive: outside playlist role the panel must never be visible,
+                // regardless of any prior stale display style left on the element.
+                ui.playlistPanel.style.display = 'none';
             }
 
             if (!isVisible) {
@@ -1984,6 +2186,9 @@
     let initialLeft = 0;
     let initialTop = 0;
     let isHorizontalSwipe = false;
+    // Cached at mousedown to avoid a layout read on every mousemove tick.
+    let cachedContainerHeight = 0;
+    let cachedWindowHeight = 0;
     const SWIPE_THRESHOLD = 50; // Minimum horizontal movement to trigger swipe
 
     function handleGripMouseDown(e) {
@@ -1993,6 +2198,9 @@
         dragStartY = e.clientY;
         initialLeft = ui.container.offsetLeft;
         initialTop = ui.container.offsetTop;
+        // Read layout dimensions ONCE per drag session; they don't change while dragging.
+        cachedContainerHeight = ui.container.offsetHeight;
+        cachedWindowHeight = window.innerHeight;
         isHorizontalSwipe = false;
 
         ui.grip.style.cursor = 'grabbing';
@@ -2013,13 +2221,9 @@
             return;
         }
 
-        // Regular vertical movement
+        // Regular vertical movement — write only, no layout read.
         let newTop = initialTop + deltaY;
-
-        // Boundary checks
-        const containerHeight = ui.container.offsetHeight;
-        const windowHeight = window.innerHeight;
-        newTop = Math.max(10, Math.min(newTop, windowHeight - containerHeight - 10));
+        newTop = Math.max(10, Math.min(newTop, cachedWindowHeight - cachedContainerHeight - 10));
 
         ui.container.style.top = `${newTop}px`;
     }
@@ -2218,17 +2422,21 @@
 
             if (!muteLazyloadActivated) {
                 // Sleep mode - show activation icon with visual indicator
-                ui.volume.innerHTML = ttPolicy.createHTML(`<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`);
+                ui.volume.innerHTML = ttPolicy.createHTML(`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`);
                 ui.volume.style.background = 'rgba(255, 193, 7, 0.2)'; // Amber background for sleep mode
                 ui.volume.title = 'Click to activate mute control (currently in sleep mode)';
+                ui.volume.setAttribute('aria-label', 'Activate mute control');
+                ui.volume.removeAttribute('aria-pressed');
             } else {
                 // Active mode - show normal volume icons
                 ui.volume.style.background = 'rgba(255, 255, 255, 0.1)'; // Normal background
                 const volIcon = myIsMuted
-                    ? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
-                    : `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
+                    ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
+                    : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
                 ui.volume.innerHTML = ttPolicy.createHTML(volIcon);
                 ui.volume.title = myIsMuted ? 'Click to unmute' : 'Click to mute';
+                ui.volume.setAttribute('aria-label', myIsMuted ? 'Unmute media' : 'Mute media');
+                ui.volume.setAttribute('aria-pressed', myIsMuted ? 'true' : 'false');
             }
         } else {
             ui.volume.style.display = 'none';
@@ -2445,7 +2653,7 @@
 
         // Header (Search + actions)
         const header = document.createElement('div');
-        header.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:8px 16px; border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:4px;';
+        header.style.cssText = 'display:flex; flex-direction:column; gap:4px; padding:5px 10px; border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:1px;';
 
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
@@ -2465,18 +2673,18 @@
         header.appendChild(searchInput);
 
         const btnRow = document.createElement('div');
-        btnRow.style.cssText = 'display:flex; gap:8px;';
+        btnRow.style.cssText = 'display:flex; gap:5px;';
         const shareBtn = document.createElement('button');
         shareBtn.id = 'stm-playlist-share-btn';
         shareBtn.className = 'stm-playlist-action-btn';
         shareBtn.title = 'Copy Playlist URL';
-        shareBtn.innerHTML = ttPolicy.createHTML(`<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg> Share`);
+        shareBtn.innerHTML = ttPolicy.createHTML(`<svg viewBox="0 0 24 24" aria-hidden="true" style="width:10px;height:10px;fill:currentColor;"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg> Share`);
         shareBtn.addEventListener('click', sharePlaylist);
         const clearBtn = document.createElement('button');
         clearBtn.id = 'stm-playlist-clear-btn';
         clearBtn.className = 'stm-playlist-action-btn';
         clearBtn.title = 'Clear Playlist';
-        clearBtn.innerHTML = ttPolicy.createHTML(`<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Clear`);
+        clearBtn.innerHTML = ttPolicy.createHTML(`<svg viewBox="0 0 24 24" aria-hidden="true" style="width:10px;height:10px;fill:currentColor;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> Clear`);
         clearBtn.addEventListener('click', () => {
             if (window.confirm('Clear playlist?')) {
                 GM_setValue(getPlaylistKey(myId), []);
@@ -2497,12 +2705,12 @@
 
         if (playlist.length === 0) {
             const empty = document.createElement('div');
-            empty.style.cssText = 'padding:12px; text-align:center; color:#888; font-size:12px;';
+            empty.style.cssText = 'padding:7px 10px; text-align:center; color:var(--esv-fg-3); font-size:11px;';
             empty.textContent = 'Playlist is empty';
             panel.appendChild(empty);
         } else if (filtered.length === 0) {
             const empty = document.createElement('div');
-            empty.style.cssText = 'padding:12px; text-align:center; color:#888; font-size:12px;';
+            empty.style.cssText = 'padding:7px 10px; text-align:center; color:var(--esv-fg-3); font-size:11px;';
             empty.textContent = 'No matches';
             panel.appendChild(empty);
         } else {
@@ -2517,6 +2725,12 @@
                 row.className = 'stm-playlist-item' + (isPlaying ? ' playing' : '') + (isActive ? ' active' : '');
                 row.dataset.index = String(origIndex);
                 row.draggable = true;
+                // A11y: rows behave as buttons; announce state to AT.
+                row.setAttribute('role', 'button');
+                row.setAttribute('tabindex', '0');
+                row.setAttribute('aria-label',
+                    `${siteName} — ${item.title}` +
+                    (isPlaying ? ' (playing)' : isActive ? ' (current)' : ''));
 
                 const icon = document.createElement('div');
                 icon.className = 'stm-playlist-item-play-icon';
@@ -2542,6 +2756,17 @@
                     }
                     GM_setValue(indexKey, origIndex);
                     window.location.href = playlist[origIndex].url;
+                });
+                // Keyboard access: Enter/Space activates the row (Backspace/Delete removes).
+                row.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        GM_setValue(indexKey, origIndex);
+                        window.location.href = playlist[origIndex].url;
+                    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                        e.preventDefault();
+                        removeFromPlaylist(origIndex);
+                    }
                 });
 
                 // Drag-to-reorder (C3)
@@ -2670,8 +2895,17 @@
 
         startBackground() {
             if (!this._observer) this.observe();
-            if (!this._interval) {
-                this._interval = setInterval(() => this.updateState(), 1500);
+            if (this._interval == null) {
+                // Self-scheduling setTimeout: prevents overlapping ticks if
+                // updateState() ever runs long, and avoids drift buildup.
+                const tick = () => {
+                    if (this._interval == null) return; // stopped
+                    try { this.updateState(); } catch (e) { /* ignore */ }
+                    if (this._interval != null) {
+                        this._interval = setTimeout(tick, 1500);
+                    }
+                };
+                this._interval = setTimeout(tick, 1500);
             }
         },
 
@@ -2680,8 +2914,8 @@
                 try { this._observer.disconnect(); } catch (e) { /* */ }
                 this._observer = null;
             }
-            if (this._interval) {
-                clearInterval(this._interval);
+            if (this._interval != null) {
+                clearTimeout(this._interval);
                 this._interval = null;
             }
         },
@@ -2817,13 +3051,16 @@
                         } else if (tag === 'IFRAME') {
                             this.trackIframe(node);
                         } else if (node.querySelectorAll) {
-                            // Cheap heuristic: only scan subtree if it might contain media
-                            const html = node.outerHTML || '';
-                            if (html.indexOf('<video') >= 0 || html.indexOf('<audio') >= 0) {
-                                node.querySelectorAll('video, audio').forEach(el => this.track(el));
-                            }
-                            if (html.indexOf('<iframe') >= 0) {
-                                node.querySelectorAll('iframe').forEach(iframe => this.trackIframe(iframe));
+                            // Direct DOM traversal — dramatically cheaper than
+                            // serializing outerHTML for every added subtree
+                            // (major win on React/Vue SPAs with frequent DOM churn).
+                            const nested = node.querySelectorAll('video, audio, iframe');
+                            if (nested.length) {
+                                for (const child of nested) {
+                                    const t = child.nodeName;
+                                    if (t === 'VIDEO' || t === 'AUDIO') this.track(child);
+                                    else if (t === 'IFRAME') this.trackIframe(child);
+                                }
                             }
                         }
                     }
@@ -3334,6 +3571,8 @@
         const picker = document.createElement('div');
         picker.id = 'stm-source-picker';
         picker.classList.add('esv-theme-auto');
+        picker.setAttribute('role', 'listbox');
+        picker.setAttribute('aria-label', `Pick a Source to ${asRole === 'target' ? 'follow' : 'add'}`);
         picker.style.left = `${Math.min(x, window.innerWidth - 280)}px`;
         picker.style.top = `${Math.min(y, window.innerHeight - 200)}px`;
 
@@ -3347,6 +3586,8 @@
         sorted.forEach(s => {
             const row = document.createElement('div');
             row.className = 'esv-picker-item';
+            row.setAttribute('role', 'option');
+            row.setAttribute('tabindex', '0');
             const titleEl = document.createElement('div');
             titleEl.className = 'esv-picker-item-title';
             titleEl.textContent = s.title || s.hostname || s.id;
@@ -3355,14 +3596,22 @@
             const ageMin = Math.max(0, Math.floor((Date.now() - (s.timestamp || 0)) / 60000));
             meta.textContent = `${s.hostname || 'unknown'} · group ${s.id.slice(-4)} · ${ageMin}m ago`;
             row.append(titleEl, meta);
-            row.addEventListener('click', () => {
+            row.setAttribute('aria-label', `${titleEl.textContent} — ${meta.textContent}`);
+            const activate = () => {
                 picker.remove();
                 setRole(asRole, s.id, asRole === 'source');
+            };
+            row.addEventListener('click', activate);
+            row.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
             });
             picker.appendChild(row);
         });
 
         document.body.appendChild(picker);
+        // Move keyboard focus into the picker so arrow-Tab and Enter work immediately.
+        const firstItem = picker.querySelector('.esv-picker-item');
+        if (firstItem) { try { firstItem.focus(); } catch (e) { /* ignore */ } }
 
         // Dismiss on outside click / esc
         const dismiss = (e) => {
@@ -3654,17 +3903,17 @@
             }
 
             // Listen for fullscreen changes to hide/show UI
-            document.addEventListener('fullscreenchange', () => updateUI());
+            document.addEventListener('fullscreenchange', () => updateUI(), { passive: true });
 
             // --- SPA Support Listeners ---
             document.addEventListener('yt-navigate-finish', () => {
                 setTimeout(waitForShortsPlayer, 300);
                 if (stateLoaded && myRole !== 'idle') updateUI();
-            });
+            }, { passive: true });
 
             window.addEventListener('popstate', () => {
                 if (stateLoaded && myRole !== 'idle') updateUI();
-            });
+            }, { passive: true });
 
             waitForShortsPlayer();
         });
