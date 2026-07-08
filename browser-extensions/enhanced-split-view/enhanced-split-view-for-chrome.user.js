@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.3.2
+// @version      1.3.3
 // @description  Extra control over Chrome's native split view: pin a source tab so links open on the side, with playlist, per-tab mute, and cross-tab sync.
 // @author       https://github.com/neoxush
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -23,6 +23,24 @@
 
 /* =========================================================================
  * CHANGELOG
+ *
+ * v1.3.3 — Color system: decouple role hues from status hues
+ *   • Source: green-500 (#22c55e) → emerald-500 (#10b981). Distinct from
+ *     --esv-accent-success so the config panel's Success toast no longer
+ *     shares a hex with the Source dot.
+ *   • Target: blue-500 (#3b82f6) → indigo-500 (#6366f1). Distinct from
+ *     --esv-accent-info; Save button, focus rings, and checked checkboxes
+ *     now stop visually reading as "Target."
+ *   • Playlist: purple-500 (#a855f7) → rose-500 (#f43f5e). Restores hue
+ *     separation between Target and Playlist after the indigo shift.
+ *   • Info: blue-500 → sky-500 (#0ea5e9) to complete the decoupling.
+ *   • All role/status colors now expose a matching `*-rgb` triplet token,
+ *     so translucent tints (box-shadow glow, .active/.playing row
+ *     background) reference the token instead of hardcoded rgba(). Palette
+ *     is now a single source of truth.
+ *   • Playlist rows: added a `\u25B6` (▶) glyph before .playing content.
+ *     Non-color redundancy so state is readable without color perception
+ *     (WCAG SC 1.4.1). Consistent with the universal "now playing" idiom.
  *
  * v1.3.2 — Perf: role-churn & data-transmission
  *   • saveState() now skips the GM_addValueChangeListener rewire when
@@ -575,16 +593,31 @@
                 --esv-fg-1: #f5f5f7;
                 --esv-fg-2: #c8c8cd;
                 --esv-fg-3: #8a8a92;
-                --esv-accent-source: #22c55e;
-                --esv-accent-source-grad: linear-gradient(135deg, #22c55e, #15803d);
-                --esv-accent-target: #3b82f6;
-                --esv-accent-target-grad: linear-gradient(135deg, #3b82f6, #1d4ed8);
-                --esv-accent-playlist: #a855f7;
-                --esv-accent-playlist-grad: linear-gradient(135deg, #a855f7, #7e22ce);
+                /* v1.3.3 palette — role hues decoupled from status hues.
+                 * Source: emerald (was green-500, collided with --esv-accent-success)
+                 * Target: indigo  (was blue-500,  collided with --esv-accent-info)
+                 * Playlist: rose  (was purple, moved to keep 3 distinct hues apart)
+                 * Info moved to sky so Save button / focus rings / checkboxes
+                 * stop visually reading as "Target."
+                 * RGB triplets are the single source of truth for translucent
+                 * tints (box-shadow glow, .active/.playing row backgrounds). */
+                --esv-accent-source: #10b981;
+                --esv-accent-source-rgb: 16, 185, 129;
+                --esv-accent-source-grad: linear-gradient(135deg, #10b981, #047857);
+                --esv-accent-target: #6366f1;
+                --esv-accent-target-rgb: 99, 102, 241;
+                --esv-accent-target-grad: linear-gradient(135deg, #6366f1, #4338ca);
+                --esv-accent-playlist: #f43f5e;
+                --esv-accent-playlist-rgb: 244, 63, 94;
+                --esv-accent-playlist-grad: linear-gradient(135deg, #f43f5e, #be123c);
                 --esv-accent-success: #22c55e;
-                --esv-accent-info:    #3b82f6;
+                --esv-accent-success-rgb: 34, 197, 94;
+                --esv-accent-info:    #0ea5e9;
+                --esv-accent-info-rgb: 14, 165, 233;
                 --esv-accent-warn:    #f59e0b;
+                --esv-accent-warn-rgb: 245, 158, 11;
                 --esv-accent-error:   #ef4444;
+                --esv-accent-error-rgb: 239, 68, 68;
                 --esv-radius-sm: 8px;
                 --esv-radius-md: 12px;
                 --esv-radius-lg: 16px;
@@ -676,7 +709,7 @@
                 position: relative;
                 z-index: 2;
                 background: var(--esv-accent-source-grad);
-                box-shadow: 0 1px 6px rgba(34, 197, 94, 0.32);
+                box-shadow: 0 1px 6px rgba(var(--esv-accent-source-rgb), 0.32);
                 transition: transform var(--esv-dur-base) var(--esv-ease),
                             opacity var(--esv-dur-base) var(--esv-ease),
                             box-shadow var(--esv-dur-base) var(--esv-ease),
@@ -684,15 +717,15 @@
             }
             .stm-side-right #stm-status-dot {
                 background: var(--esv-accent-source-grad);
-                box-shadow: 0 1px 6px rgba(34, 197, 94, 0.32);
+                box-shadow: 0 1px 6px rgba(var(--esv-accent-source-rgb), 0.32);
             }
             .stm-side-left #stm-status-dot {
                 background: var(--esv-accent-target-grad);
-                box-shadow: 0 1px 6px rgba(59, 130, 246, 0.32);
+                box-shadow: 0 1px 6px rgba(var(--esv-accent-target-rgb), 0.32);
             }
             #stm-status-dot.stm-role-p {
                 background: var(--esv-accent-playlist-grad);
-                box-shadow: 0 1px 6px rgba(168, 85, 247, 0.32);
+                box-shadow: 0 1px 6px rgba(var(--esv-accent-playlist-rgb), 0.32);
             }
             .stm-collapsed #stm-status-dot { transform: scale(0.85); opacity: 0.75; }
             #stm-ui-container:hover #stm-status-dot { transform: scale(1); opacity: 1; }
@@ -1092,7 +1125,7 @@
                 transform: rotate(45deg);
             }
             .stm-config-input input[type="checkbox"]:focus-visible {
-                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+                box-shadow: 0 0 0 3px rgba(var(--esv-accent-info-rgb), 0.35);
             }
             .stm-config-input select {
                 background: rgba(255,255,255,0.06);
@@ -1140,9 +1173,9 @@
             .stm-config-btn-save {
                 background: var(--esv-accent-info);
                 color: #fff;
-                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.32);
+                box-shadow: 0 4px 12px rgba(var(--esv-accent-info-rgb), 0.32);
             }
-            .stm-config-btn-save:hover { background: #2563eb; box-shadow: 0 6px 16px rgba(59, 130, 246, 0.42); }
+            .stm-config-btn-save:hover { background: #0284c7; box-shadow: 0 6px 16px rgba(var(--esv-accent-info-rgb), 0.42); }
             .stm-config-btn-cancel {
                 background: rgba(255,255,255,0.06);
                 color: var(--esv-fg-1);
@@ -1150,9 +1183,9 @@
             }
             .stm-config-btn-cancel:hover { background: rgba(255,255,255,0.12); }
             .stm-config-btn-reset {
-                background: rgba(239, 68, 68, 0.10);
+                background: rgba(var(--esv-accent-error-rgb), 0.10);
                 color: #f87171;
-                border-color: rgba(239, 68, 68, 0.28);
+                border-color: rgba(var(--esv-accent-error-rgb), 0.28);
             }
             .stm-config-btn-reset:hover {
                 background: var(--esv-accent-error);
@@ -1212,12 +1245,22 @@
                 padding-left: 14px;
             }
             .stm-playlist-item.active {
-                background: rgba(59, 130, 246, 0.16);
+                background: rgba(var(--esv-accent-target-rgb), 0.16);
                 box-shadow: inset 3px 0 0 0 var(--esv-accent-target);
             }
             .stm-playlist-item.playing {
-                background: rgba(34, 197, 94, 0.16);
+                background: rgba(var(--esv-accent-source-rgb), 0.16);
                 box-shadow: inset 3px 0 0 0 var(--esv-accent-source);
+            }
+            /* Non-color redundancy: glyph on the .playing row so state is
+             * readable without color perception (WCAG SC 1.4.1). */
+            .stm-playlist-item.playing::before {
+                content: '\u25B6';
+                margin-right: 4px;
+                color: var(--esv-accent-source);
+                font-size: 10px;
+                line-height: 1;
+                flex-shrink: 0;
             }
             .stm-playlist-item-title {
                 flex: 1;
@@ -1248,7 +1291,7 @@
             .stm-playlist-item:hover .stm-playlist-item-remove { opacity: 0.7; }
             .stm-playlist-item-remove:hover {
                 opacity: 1 !important;
-                background: rgba(239, 68, 68, 0.18);
+                background: rgba(var(--esv-accent-error-rgb), 0.18);
                 color: var(--esv-accent-error);
             }
             .stm-playlist-action-btn {
