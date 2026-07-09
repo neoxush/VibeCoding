@@ -1,0 +1,2118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>抽卡模拟器 — "欢迎新船长"</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: radial-gradient(ellipse at top, #1a2a4a 0%, #0b1220 60%, #050810 100%);
+    min-height: 100vh;
+    color: #e6ecf5;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 {
+    text-align: center;
+    margin: 4px 0 6px;
+    font-size: 26px;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  }
+  .subtitle {
+    text-align: center;
+    opacity: 0.7;
+    font-size: 13px;
+    margin-bottom: 22px;
+  }
+
+  .panel {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    border: 1px solid rgba(255,255,255,0.10);
+  }
+  h2 { margin: 0 0 12px; font-size: 16px; letter-spacing: 0.5px; }
+  h3 { margin: 14px 0 6px; font-size: 13px; opacity: 0.85; }
+
+  /* Tab container */
+  .tab-bar {
+    display: flex;
+    gap: 2px;
+    margin: -18px -20px 16px;
+    padding: 0 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+    background: rgba(0,0,0,0.15);
+    border-radius: 12px 12px 0 0;
+  }
+  button.tab-btn {
+    padding: 12px 22px;
+    background: transparent;
+    color: rgba(230, 236, 245, 0.55);
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    box-shadow: none;
+    min-height: 0;
+    margin-bottom: -1px;
+  }
+  button.tab-btn:hover {
+    color: rgba(230, 236, 245, 0.9);
+    background: rgba(255,255,255,0.04);
+    transform: none;
+    filter: none;
+  }
+  button.tab-btn.active {
+    color: #ffd35c;
+    background: rgba(255,255,255,0.06);
+    border-bottom-color: #ffb74d;
+  }
+  .tab-content { animation: fadeIn 0.2s ease; }
+  .tab-content.hidden { display: none; }
+  /* Generic hidden — used e.g. by switchTab() to fold the 统计数据 panel
+     on non-gacha tabs. Kept as its own rule so it applies to any element. */
+  .hidden { display: none !important; }
+
+  /* Tier chips / colors */
+  .tier-black  { color: #ffb74d; }        /* orange / SSR */
+  .tier-purple { color: #ce93d8; }        /* purple / SR */
+  .tier-blue   { color: #64b5f6; }        /* blue / R */
+  .bg-black    { background: linear-gradient(135deg, #ff9a3c, #c66a11); color: #1a1000; }
+  .bg-purple   { background: linear-gradient(135deg, #b56bd6, #6a3aa8); color: #fff; }
+  .bg-blue     { background: linear-gradient(135deg, #63a8f2, #2b6ec7); color: #fff; }
+
+  /* Rules panel */
+  .rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px;
+    font-size: 13px;
+  }
+  .rule-card {
+    padding: 10px 12px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    border-left: 3px solid;
+  }
+  .rule-card.black  { border-left-color: #ffb74d; }
+  .rule-card.purple { border-left-color: #ce93d8; }
+  .rule-card.blue   { border-left-color: #64b5f6; }
+  .rule-card .row { display: flex; justify-content: space-between; margin-top: 4px; }
+  .rule-card .row .k { opacity: 0.7; }
+
+  /* Pool list */
+  details { margin-top: 8px; }
+  summary { cursor: pointer; padding: 4px 0; font-size: 13px; opacity: 0.9; }
+  .pool { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .pool span {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    background: rgba(0,0,0,0.3);
+  }
+
+  /* Draw buttons */
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+  button {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: transform 0.1s, box-shadow 0.2s, filter 0.15s;
+    color: #fff;
+    min-height: 42px;
+    line-height: 1.2;
+  }
+  button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+  button:active { transform: translateY(0); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  /* Draw-action buttons share identical geometry — only color/gradient differs */
+  .btn-draw10, .btn-single {
+    padding: 10px 18px;
+    font-size: 14px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.30);
+  }
+  .btn-draw10 {
+    background: linear-gradient(135deg, #ffd35c, #ff8c00);
+    color: #1a0e00;
+    box-shadow: 0 3px 10px rgba(255,140,0,0.35);
+  }
+  .btn-single {
+    background: linear-gradient(135deg, #d9e3f0, #8fa3b8);
+    color: #1a2436;
+    box-shadow: 0 3px 10px rgba(120,140,170,0.30);
+  }
+  .btn-full   { background: linear-gradient(135deg, #7c4dff, #4527a0); }
+  .btn-mass   { background: linear-gradient(135deg, #26c6da, #00838f); }
+  .btn-reset  { background: linear-gradient(135deg, #ef5350, #b71c1c); }
+  .btn-close  { background: linear-gradient(135deg, #78909c, #37474f); }
+
+  /* Draw grid (10-pull display) */
+  .draw-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .draw-cell {
+    padding: 12px 6px 10px;
+    border-radius: 10px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    min-height: 108px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    animation: fadeIn 0.35s ease;
+    position: relative;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+  .draw-cell .avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 10%;
+    background: rgba(255,255,255,0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    font-family: "PingFang SC", "Microsoft YaHei", "SimHei", sans-serif;
+    line-height: 1;
+    margin-top: 12px;
+    color: rgba(0,0,0,0.72);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28), 0 2px 6px rgba(0,0,0,0.35);
+    overflow: hidden;
+  }
+  .draw-cell .avatar .portrait.big {
+    width: 100%; height: 100%; object-fit: cover; border-radius: inherit;
+  }
+  .draw-cell.bg-black .avatar { background: radial-gradient(circle at 30% 25%, #fff6d6, #ffca7a 55%, #ff9a3c); }
+  .draw-cell.bg-purple .avatar { background: radial-gradient(circle at 30% 25%, #f0d9ff, #cf95f0 55%, #a15fd1); }
+  .draw-cell.bg-blue .avatar { background: radial-gradient(circle at 30% 25%, #d7ecff, #8ec1f3 55%, #4a90d6); }
+  .draw-cell .name {
+    font-size: 13px;
+    line-height: 1.3;
+    padding: 0 4px;
+    word-break: break-all;
+  }
+  .draw-cell .type {
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    font-size: 9px;
+    opacity: 0.85;
+    font-weight: 500;
+  }
+  .draw-cell .pity {
+    position: absolute;
+    bottom: 4px;
+    right: 6px;
+    font-size: 9px;
+    opacity: 0.9;
+    font-weight: 600;
+  }
+  /* Rarity aura: subtle animated glow on rarer pulls */
+  .draw-cell.bg-black { animation: fadeIn 0.35s ease, auraBlack 2.4s ease-in-out infinite; }
+  .draw-cell.bg-purple { animation: fadeIn 0.35s ease, auraPurple 2.8s ease-in-out infinite; }
+  @keyframes auraBlack {
+    0%, 100% { box-shadow: 0 3px 12px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 0 0 rgba(255,180,80,0.55); }
+    50%      { box-shadow: 0 3px 12px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 22px 3px rgba(255,180,80,0.55); }
+  }
+  @keyframes auraPurple {
+    0%, 100% { box-shadow: 0 3px 12px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 0 0 rgba(206,147,216,0.4); }
+    50%      { box-shadow: 0 3px 12px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 14px 2px rgba(206,147,216,0.4); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* Small avatar for roster / pool / log */
+  .mini-avatar {
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    border-radius: 18%;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: "PingFang SC", "Microsoft YaHei", "SimHei", sans-serif;
+    line-height: 1;
+    margin-right: 6px;
+    vertical-align: middle;
+    background: rgba(255,255,255,0.12);
+    color: rgba(0,0,0,0.72);
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
+  }
+  .mini-avatar .portrait.mini {
+    width: 100%; height: 100%; object-fit: cover; border-radius: inherit;
+  }
+  .mini-avatar.tier-black-bg  { background: radial-gradient(circle at 30% 25%, #fff6d6, #ffb960); }
+  .mini-avatar.tier-purple-bg { background: radial-gradient(circle at 30% 25%, #f0d9ff, #bd80e6); }
+  .mini-avatar.tier-blue-bg   { background: radial-gradient(circle at 30% 25%, #d7ecff, #6faee4); }
+
+  /* Status bar */
+  .status-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .status-item {
+    padding: 8px 10px;
+    background: rgba(0,0,0,0.28);
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .status-item .lbl { opacity: 0.7; font-size: 12px; }
+  .status-item .val { font-weight: 700; font-size: 15px; }
+
+  /* Stats — top-of-page layout: 2×2 grid on desktop, single column on narrow */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 900px) {
+    .stats-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Latest 10-pull result block — sits between the two stats-grid rows */
+  .latest-block {
+    margin: 14px 0;
+    padding: 12px 14px;
+    background: rgba(0,0,0,0.22);
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .latest-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .latest-header h4 { margin: 0; font-size: 13px; letter-spacing: 0.5px; }
+  .latest-hint { font-size: 12px; opacity: 0.55; }
+  .latest-block .draw-grid { margin-top: 0; }
+  .latest-block:empty, .latest-block .draw-grid:empty { min-height: 0; }
+
+  /* Rules panel at bottom — soften visual weight */
+  .rules-wrapper > summary {
+    list-style: none;
+    padding: 6px 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rules-wrapper > summary::before {
+    content: '▶';
+    font-size: 11px;
+    opacity: 0.6;
+    transition: transform 0.15s;
+  }
+  .rules-wrapper[open] > summary::before { transform: rotate(90deg); }
+  .rules-wrapper > summary:hover { opacity: 0.85; }
+  .rules-wrapper > summary .rules-hint {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 400;
+    opacity: 0.55;
+  }
+  .rules-wrapper[open] > summary .rules-hint { display: none; }
+
+  .stat-block { background: rgba(0,0,0,0.22); border-radius: 8px; padding: 12px 14px; }
+  .stat-block h4 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 2px;
+    font-size: 13px;
+    line-height: 1.4;
+    border-bottom: 1px dashed rgba(255,255,255,0.06);
+    gap: 10px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .actual { opacity: 0.85; text-align: right; white-space: nowrap; }
+  .stat-row .exp    { opacity: 0.55; font-size: 11px; margin-left: 6px; }
+  .stat-row .name-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .log-box {
+    max-height: 380px;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.35);
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-family: Consolas, Menlo, "Microsoft YaHei", monospace;
+    font-size: 12.5px;
+    line-height: 1.75;
+  }
+  .log-box .mini-avatar {
+    width: 16px;
+    height: 16px;
+    margin: 0 4px 0 2px;
+    box-shadow: none;
+    vertical-align: -3px;
+  }
+  .log-box .l-black  { color: #ffb74d; }
+  .log-box .l-purple { color: #ce93d8; }
+  .log-box .l-blue   { color: #64b5f6; opacity: 0.85; }
+  .log-box .l-note   { color: #ffe082; }
+
+  /* Global hover tooltip — used by roster / log / draw-grid */
+  .global-tooltip {
+    position: fixed;
+    z-index: 999;
+    background: rgba(20, 25, 40, 0.97);
+    border: 1px solid rgba(255, 200, 100, 0.35);
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    min-width: 200px;
+    max-width: 360px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.7);
+    pointer-events: none;
+    color: #e6ecf5;
+    display: none;
+  }
+  .global-tooltip .tt-title { font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }
+  .global-tooltip .tt-sub   { opacity: 0.75; font-size: 11.5px; }
+  .global-tooltip .tt-row   { margin-top: 5px; font-size: 12px; opacity: 0.9; }
+  .global-tooltip .tt-draws {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(255,255,255,0.12);
+    font-family: Consolas, Menlo, monospace;
+    font-size: 11.5px;
+    line-height: 1.7;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .hoverable { cursor: help; }
+  .hoverable:hover { filter: brightness(1.18); }
+  /* Banner picker (top of 招募 tab) */
+  .banner-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 14px;
+    padding: 6px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  button.banner-btn {
+    padding: 8px 14px;
+    background: transparent;
+    color: rgba(230, 236, 245, 0.65);
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    box-shadow: none;
+    min-height: 0;
+  }
+  button.banner-btn:hover {
+    color: rgba(230, 236, 245, 0.95);
+    background: rgba(255,255,255,0.04);
+    transform: none;
+    filter: none;
+  }
+  button.banner-btn.active {
+    color: #ffd35c;
+    background: rgba(255,180,80,0.10);
+    border-color: rgba(255,180,80,0.35);
+  }
+  button.banner-btn .cat {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 400;
+    opacity: 0.55;
+    margin-top: 2px;
+    letter-spacing: 0;
+  }
+
+  /* Featured info block */
+  .featured-block {
+    padding: 10px 14px;
+    background: rgba(255,180,80,0.06);
+    border: 1px solid rgba(255,180,80,0.25);
+    border-radius: 8px;
+    margin: 0 0 14px;
+    font-size: 13px;
+  }
+  .featured-block h4 { margin: 0 0 4px; font-size: 13px; letter-spacing: 0.5px; }
+  .featured-block .summary { opacity: 0.7; font-size: 12px; line-height: 1.55; margin-bottom: 6px; }
+
+  /* UP overlay badge — appears on top-right of any avatar whose item is
+     featured in the currently active banner. Kept as a CSS ::before so we
+     never bake it into the source icon files. */
+  .avatar.is-up, .mini-avatar.is-up { position: relative; }
+  .avatar.is-up::before, .mini-avatar.is-up::before {
+    content: 'UP';
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    z-index: 5;
+    background: linear-gradient(135deg, #ffe27a, #ff8c00);
+    color: #1a0e00;
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 0.3px;
+    padding: 1px 3px;
+    border-radius: 3px;
+    line-height: 1;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(0,0,0,0.15);
+    pointer-events: none;
+  }
+  .draw-cell .avatar.is-up::before {
+    font-size: 10px;
+    padding: 2px 4px;
+    top: 3px;
+    right: 3px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Currency coin icon — inline, sized to sit alongside numbers */
+  .coin-icon {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    vertical-align: -3px;
+    margin: 0 1px;
+    pointer-events: none;
+  }
+  button .coin-icon { width: 16px; height: 16px; vertical-align: -3px; }
+  .status-item .coin-icon { width: 14px; height: 14px; vertical-align: -2px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>&#127943; 抽卡模拟器 — "欢迎新船长"</h1>
+  <div class="subtitle">支持单抽 / 十连 · 无次数上限 · 每 40 抽滚动保底 1 张黑券 · 每次十连保底 1 张紫券及以上 · 十连 8 折优惠仅限首 40 抽</div>
+
+  <!-- ═══ 顶部：招募 / 批量模拟（同一面板，标签切换）
+       [已注释] 40 连试炼 tab 已隐藏；如需恢复：反注释 tab-btn[data-tab=trial]
+       和 tab-content#tab-trial（JS 逻辑 run40Trial/simulateBanner 仍保留在文件中）
+  ═══ -->
+  <div class="panel">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="gacha" onclick="switchTab('gacha')">🎁 招募</button>
+      <!--
+      <button class="tab-btn" data-tab="trial" onclick="switchTab('trial')">🎲 40 连试炼</button>
+      -->
+      <button class="tab-btn" data-tab="batch" onclick="switchTab('batch')">📊 批量模拟</button>
+    </div>
+
+    <!-- 招募 -->
+    <div class="tab-content" id="tab-gacha">
+      <!-- 吧台选择器：切换 4 个 pool 之一 -->
+      <div class="banner-picker">
+        <button class="banner-btn active" data-banner="newcomer" onclick="switchBanner('newcomer')">
+          🎁 欢迎新船长<span class="cat">新手 · 一次性</span>
+        </button>
+        <button class="banner-btn" data-banner="dreamString" onclick="switchBanner('dreamString')">
+          🎋 织梦弦音<span class="cat">活动 · UP 茉莉</span>
+        </button>
+        <button class="banner-btn" data-banner="piluTreasure" onclick="switchBanner('piluTreasure')">
+          🎭 噼噜的旧日秘藏<span class="cat">活动 · UP 安眠人偶</span>
+        </button>
+        <button class="banner-btn" data-banner="permanent" onclick="switchBanner('permanent')">
+          ⚓ 这里不散场<span class="cat">常驻 · 标准池</span>
+        </button>
+      </div>
+
+      <!-- 当前吧台摘要 + UP 角色 -->
+      <div class="featured-block">
+        <h4><span id="banner-category" style="opacity:0.8; font-weight:500; font-size:12px;">新手 · 一次性吧台</span></h4>
+        <div class="summary" id="banner-summary"></div>
+        <div id="banner-featured"></div>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-item"><span class="lbl">已招募次数</span><span class="val" id="s-total">0</span></div>
+        <div class="status-item"><span class="lbl" id="lbl-blackPity">距黑券保底 (40)</span><span class="val" id="s-blackPity">40</span></div>
+        <div class="status-item"><span class="lbl">距紫券保底（本轮十连）</span><span class="val" id="s-purplePity">10</span></div>
+        <div class="status-item"><span class="lbl">已获得黑券数</span><span class="val tier-black" id="s-blackCount">0</span></div>
+        <div class="status-item"><span class="lbl">黑券保底触发数</span><span class="val" id="s-blackPityTriggers">0</span></div>
+        <div class="status-item"><span class="lbl">单抽 / 十连 次数</span><span class="val" id="s-drawCounts">0 / 0</span></div>
+        <div class="status-item"><span class="lbl" id="lbl-silverSpent">已消耗银币</span><span class="val" id="s-silverSpent">0</span></div>
+        <div class="status-item" id="promo-row"><span class="lbl">8折促销剩余</span><span class="val" id="s-promoRemain"><span style="color:#ffb74d;">40</span> / 40 <span class="exp" style="font-size:11px;">(8折)</span></span></div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px; margin: 4px 0 12px; font-size: 13px;">
+        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+          <input type="checkbox" id="chk-promo" checked onchange="togglePromo()"
+            style="width:15px; height:15px; cursor:pointer; accent-color:#ffb74d;">
+          启用首 40 抽 8 折优惠
+        </label>
+        <span style="opacity:0.55; font-size:12px;">仅"欢迎新船长"吧台适用；其他吧台此开关会自动禁用。</span>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-single" id="btn-1" onclick="doSinglePull()"><img class="coin-icon" src="gacha-screenshots/icons/coin-silver.png" alt="银币"> 1 · 来一杯（1 抽）</button>
+        <button class="btn-draw10" id="btn-10" onclick="doTenPull()"><img class="coin-icon" src="gacha-screenshots/icons/coin-silver.png" alt="银币"> 8 · 来十杯（10 抽 · 8折）</button>
+        <button class="btn-reset" onclick="manualReset()">重置本吧台记录</button>
+      </div>
+    </div>
+
+    <!--
+    [已注释] 40 连试炼 tab —— 保留 DOM 结构以便日后需要时快速启用；
+             对应的 JS 函数 (run40Trial / run40TrialBatch / clear40Trials / render40Trials /
+             simulateBanner) 未删除，仍可从控制台调用。
+    <div class="tab-content hidden" id="tab-trial">
+      <p style="opacity:0.65; font-size:12.5px; margin:0 0 12px; line-height:1.55;">
+        在与"招募"完全隔离的环境中，运行一整轮 40 抽（自带 40 抽黑券保底 + 每 10 抽紫券保底），观察单轮体验的运气差异。<br>
+        不影响主流程的任何统计；每次运行都会加入下方试炼历史，方便横向对比。
+      </p>
+      <div class="btn-row">
+        <button class="btn-full" onclick="run40Trial()">🎲 运行一次 40 连试炼</button>
+        <button class="btn-mass" onclick="run40TrialBatch(10)">连跑 10 次并追加历史</button>
+        <button class="btn-close" onclick="clear40Trials()">清空试炼历史</button>
+      </div>
+      <div id="trial-latest" class="latest-block" style="margin-top: 14px;">
+        <div class="latest-header">
+          <h4>最近一次试炼结果</h4>
+          <span class="latest-hint" id="trial-hint">点击"运行一次 40 连试炼"开始</span>
+        </div>
+        <div id="trial-latest-body"></div>
+      </div>
+      <div style="margin-top: 12px;">
+        <h4 style="margin: 8px 0 6px; font-size: 13px; letter-spacing: 0.5px;">试炼历史 <span style="opacity:0.55; font-weight:400; font-size:12px;" id="trial-count-hint">（共 0 次）</span></h4>
+        <div id="trial-history" class="log-box" style="max-height: 220px;">— 尚无试炼记录 —</div>
+      </div>
+    </div>
+    -->
+
+    <!-- 批量模拟（原独立面板 → 移入 Tab） -->
+    <div class="tab-content hidden" id="tab-batch">
+      <p style="opacity:0.65; font-size:12.5px; margin:0 0 12px; line-height:1.55;">
+        选定<strong>吧台</strong>和<strong>吧台数量 N</strong> 运行独立模拟（每一轮 = 该吧台的黑券保底长度，40 或 80 抽），聚合成统计报告。<br>
+        与"招募"完全隔离；用于验证保底数学、观察 UP 命中率、比较不同吧台的长期分布。
+      </p>
+      <div class="btn-row" style="align-items:center; gap:10px; flex-wrap:wrap;">
+        <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px;">
+          <span>吧台 =</span>
+          <select id="batch-banner"
+            style="padding:8px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.35); color:#e6ecf5; font-size:14px; font-family:inherit; min-width:180px;">
+            <option value="newcomer">欢迎新船长（40 抽/轮，无 UP）</option>
+            <option value="dreamString">织梦弦音（80 抽/轮，UP 茉莉 50%）</option>
+            <option value="piluTreasure">噼噜的旧日秘藏（80 抽/轮，UP 安眠人偶 75%）</option>
+            <option value="permanent">这里不散场（40 抽/轮，无 UP）</option>
+          </select>
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px;">
+          <span>轮数 N =</span>
+          <input type="number" id="batch-n" value="1000" min="1" max="1000000" step="100"
+            style="width:110px; padding:8px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.35); color:#e6ecf5; font-size:14px; font-family:inherit;">
+        </label>
+        <button class="btn-mass" onclick="runBatchSim()">▶ 运行模拟</button>
+        <button class="btn-close" onclick="clearBatchSim()">清空结果</button>
+        <span style="opacity:0.55; font-size:12px;">常用：100 · 1000 · 10000 · 100000</span>
+      </div>
+      <div id="batch-result" style="margin-top: 14px;"></div>
+    </div>
+  </div>
+
+  <!-- ═══ 中部：统计数据 + 招募记录 ═══
+       该面板只在 "招募" tab 激活时可见（其数据来自主流程 state.*）；
+       其他 tab（批量模拟、40 连试炼）与该 state 隔离，所以显示会全空
+       —— switchTab() 会在切换到非 gacha tab 时给该面板加 .hidden。 -->
+  <div class="panel" id="panel-stats">
+    <h2>统计数据</h2>
+
+    <!-- 概览：稀有度 + 羽毛票据 -->
+    <div class="stats-grid">
+      <div class="stat-block">
+        <h4>按稀有度（实际 vs 理论）</h4>
+        <div id="stats-tier"></div>
+      </div>
+      <div class="stat-block">
+        <h4>羽毛票据奖励</h4>
+        <div id="stats-feather"></div>
+      </div>
+    </div>
+
+    <!-- 最新十连结果（全宽，位于统计与日志之间） -->
+    <div class="latest-block">
+      <div class="latest-header">
+        <h4>最新十连结果</h4>
+        <span class="latest-hint" id="latest-hint">点击上方"来一杯"或"来十杯"开始抽卡</span>
+      </div>
+      <div class="draw-grid" id="draw-grid"></div>
+    </div>
+
+    <!-- 详情：获得列表 + 招募记录 -->
+    <div class="stats-grid">
+      <div class="stat-block">
+        <h4>船员 / 往日之影 获得列表</h4>
+        <div id="stats-roster" style="max-height: 360px; overflow-y: auto;"></div>
+      </div>
+      <div class="stat-block">
+        <h4>招募记录</h4>
+        <div id="log" class="log-box">— 暂无招募记录 —</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 底部：规则参考（默认折叠） ═══ -->
+  <div class="panel">
+    <details class="rules-wrapper">
+      <summary>
+        规则与概率 · 卡池清单
+        <span class="rules-hint">点击展开查看基础概率、保底规则及全部卡池物品</span>
+      </summary>
+
+      <div style="margin-top: 14px;">
+        <div class="rules-grid">
+          <div class="rule-card black">
+            <div class="tier-black"><strong>黑券船员（SSR）</strong></div>
+            <div class="row"><span class="k">基础概率</span><span>0.80%</span></div>
+            <div class="row"><span class="k">含保底综合概率</span><span>2.42%</span></div>
+            <div class="row"><span class="k">保底次数</span><span>40次招募</span></div>
+          </div>
+          <div class="rule-card purple">
+            <div class="tier-purple"><strong>紫券船员 / 往日之影（SR）</strong></div>
+            <div class="row"><span class="k">船员基础概率</span><span>3.00%</span></div>
+            <div class="row"><span class="k">往日之影基础</span><span>3.00%</span></div>
+            <div class="row"><span class="k">含保底综合概率</span><span>13.00%</span></div>
+            <div class="row"><span class="k">保底次数</span><span>10次招募</span></div>
+          </div>
+          <div class="rule-card blue">
+            <div class="tier-blue"><strong>蓝券往日之影（R）</strong></div>
+            <div class="row"><span class="k">基础概率</span><span>93.20%</span></div>
+            <div class="row"><span class="k">综合概率</span><span>84.58%</span></div>
+            <div class="row"><span class="k">额外奖励</span><span>+20 普通羽毛票据</span></div>
+          </div>
+        </div>
+
+        <details>
+          <summary>额外说明 — 重复获得转化为羽毛票据</summary>
+          <div style="font-size: 12.5px; opacity: 0.85; padding: 6px 0 2px; line-height: 1.6;">
+            · <span class="tier-black">黑券船员：</span>第 1 次额外获得<strong>专属羽毛票据 ×15</strong>；第 2 至第 7 次重复转化为该船员的<strong>船员秘闻</strong>并额外获得<strong>专属羽毛票据 ×15</strong>；第 8 次及以后重复转化为<strong>专属羽毛票据 ×30</strong>。<br>
+            · <span class="tier-purple">紫券船员：</span>第 1 次额外获得<strong>专属羽毛票据 ×3</strong>；第 2 至第 7 次重复转化为该船员的<strong>船员秘闻</strong>并额外获得<strong>专属羽毛票据 ×3</strong>；第 8 次及以后重复转化为<strong>专属羽毛票据 ×6</strong>。<br>
+            · <span class="tier-purple">紫券往日之影：</span>每次额外获得<strong>专属羽毛票据 ×3</strong>。<br>
+            · <span class="tier-blue">蓝券往日之影：</span>每次额外获得<strong>普通羽毛票据 ×20</strong>。
+          </div>
+        </details>
+
+        <details>
+          <summary>船员和往日之影清单</summary>
+          <h3 class="tier-black">黑券船员（共 6 位）</h3>
+          <div class="pool" id="pool-black"></div>
+          <h3 class="tier-purple">紫券船员（共 12 位）</h3>
+          <div class="pool" id="pool-purpleSailor"></div>
+          <h3 class="tier-purple">紫券往日之影（共 12 个）</h3>
+          <div class="pool" id="pool-purpleShadow"></div>
+          <h3 class="tier-blue">蓝券往日之影（共 12 个）</h3>
+          <div class="pool" id="pool-blueShadow"></div>
+        </details>
+      </div>
+    </details>
+  </div>
+
+</div>
+
+<script>
+  /* -------- 角色 / 道具 头像
+     - 优先使用 PORTRAITS[name] 中登记的图片路径
+     - 若缺失则回退为名称首字生成的圆形头像
+     - PORTRAITS 会在 BANNERS 定义之后按池自动填充：
+         black / purpleSailor / purpleShadow / blueShadow → black-XX / ps-XX / pv-XX / bv-XX
+  -------- */
+  const PORTRAITS = {};
+  const ICON_BASE = 'gacha-screenshots/icons/';
+  const TIER_PREFIX = {
+    black: 'black',
+    purpleSailor: 'ps',
+    purpleShadow: 'pv',
+    blueShadow: 'bv'
+  };
+  function initialFor(name) {
+    return name ? name.charAt(0) : '?';
+  }
+  function avatarHtml(name, sizeClass) {
+    // sizeClass: 'big' (draw grid 52px) or 'mini' (roster/pool/log 24px, log 16px)
+    if (PORTRAITS[name]) {
+      return `<img src="${PORTRAITS[name]}" alt="${name}" class="portrait ${sizeClass}">`;
+    }
+    return initialFor(name);
+  }
+  function tierBgClass(tier) {
+    if (tier === 'black') return 'tier-black-bg';
+    if (tier === 'blueShadow') return 'tier-blue-bg';
+    return 'tier-purple-bg';
+  }
+
+  /* 判定某道具是否是当前 activeBanner 的 UP 项目。UP 徽章由 CSS 叠加，
+     调用点在 mini-avatar / avatar 的 class 列表中追加 " is-up"。 */
+  function isFeatured(name, bannerId) {
+    const cfg = bannerId ? BANNERS[bannerId] : (typeof activeBanner === 'string' ? BANNERS[activeBanner] : null);
+    if (!cfg || !cfg.featured) return false;
+    const f = cfg.featured;
+    if (f.ssr && f.ssr.items.includes(name)) return true;
+    if (f.sr  && f.sr.items.includes(name))  return true;
+    return false;
+  }
+  function upClass(name, bannerId) {
+    return isFeatured(name, bannerId) ? ' is-up' : '';
+  }
+
+  /* -------- 卡池注册表（4 个吧台，各自独立） --------
+     跳过的第 5 个 = "每周免费·记忆重逢" 因为它只是每周 1 次 100% 抽奖，非蒙特卡洛研究对象。
+     每个吧台都携带自己的 pools / rates / pity / cost / featured 配置。
+     所有涉及吧台运行的运行时状态都放到 bannerState[bannerId] 中，见下方。
+  -------------------------------------------------------------- */
+  const STANDARD_PURPLE_SAILORS = ['艾丝','海赫','索西亚','懦夫','预兆之眼','胡话先知','跟屁虫','鬼手船匠','钟表匠','人偶师','托尼诺老爹','吝啬鬼'];
+  const STANDARD_PURPLE_SHADOWS = ['船长的礼物','沉浮罗盘','船之美','白日下的梦','昂首之旗','老将的军号','迷你号鲇鱼的消亡','机械生命','偏差之时','离膛一瞬','此刻即未来','被划掉的一页'];
+  const STANDARD_BLUE_SHADOWS   = ['不屈焰火','安宁絮语','疾步之风','洞悉之眼','思维浪潮','沙尘战甲','层岩俱裂','翠绿利牙','琥珀壳壁','蔚蓝叹息','紫霞尘埃','粉色歌谣'];
+
+  const BANNERS = {
+    newcomer: {
+      id: 'newcomer',
+      name: '欢迎新船长',
+      category: '新手 · 一次性吧台',
+      summary: '40 抽后促销结束（不再关闭抽卡）；每 40 抽保底 1 张黑券；每 10 抽保底 1 张紫券及以上。',
+      currency: { key: 'silver', label: '银币', iconPath: 'gacha-screenshots/icons/coin-silver.png' },
+      pity: { black: 40, purple: 10 },
+      rates: { black: 0.008, purpleSailor: 0.03, purpleShadow: 0.03, blueShadow: 0.932 },
+      combined: { black: 2.42, purple: 13.00, blue: 84.58 },
+      pools: {
+        black: ['焦面上校','铁腕统领','伊莎贝拉','小斧头','饿猫','海葬'],
+        purpleSailor: STANDARD_PURPLE_SAILORS,
+        purpleShadow: STANDARD_PURPLE_SHADOWS,
+        blueShadow:   STANDARD_BLUE_SHADOWS
+      },
+      featured: null,
+      cost: { single: 1, tenPromo: 8, tenFull: 10 },
+      promo: { limit: 40, hint: '首 40 抽十连享 8 折优惠（8 银币 / 10 银币）' },
+      firstSsrGuaranteed: false
+    },
+
+    dreamString: {
+      id: 'dreamString',
+      name: '织梦弦音',
+      category: '活动限时 · 私人吧台',
+      summary: '首张黑券必得茉莉；后续 50/50 抽茉莉（输了下次保底）。SR 50/50 抽 2 位 UP 船员。80 抽保底黑券，10 抽保底紫券。',
+      currency: { key: 'gold', label: '金币', iconPath: 'gacha-screenshots/icons/coin-gold.png' },
+      pity: { black: 80, purple: 10 },
+      rates: { black: 0.008, purpleSailor: 0.03, purpleShadow: 0.03, blueShadow: 0.932 },
+      combined: { black: 1.84, purple: 13.00, blue: 84.58 },
+      pools: {
+        // 常规黑券（不含 UP 茉莉）：6 位新手池 SSR + 本赛季轮换 黑格
+        black: ['焦面上校','铁腕统领','伊莎贝拉','小斧头','饿猫','海葬','黑格'],
+        purpleSailor: STANDARD_PURPLE_SAILORS,
+        purpleShadow: STANDARD_PURPLE_SHADOWS,
+        blueShadow:   STANDARD_BLUE_SHADOWS
+      },
+      featured: {
+        ssr: { items: ['茉莉'], chance: 0.5, tier: 'black' },
+        // SR UP 是变体版本，与基础版本（艾丝/预兆之眼）为独立道具
+        sr: { items: ['艾丝-RS','预兆之眼-英诺森'], chance: 0.5, tier: 'purpleSailor', appliesToTiers: ['purpleSailor','purpleShadow'] }
+      },
+      cost: { single: 1, tenPromo: 10, tenFull: 10 },
+      promo: null,
+      firstSsrGuaranteed: true
+    },
+
+    piluTreasure: {
+      id: 'piluTreasure',
+      name: '噼噜的旧日秘藏',
+      category: '活动限时 · 往日之影专场',
+      summary: '首张黑券必得安眠人偶；后续 75/25 抽安眠人偶（输了下次保底）。SR 50/50 抽 2 件 UP 往日之影。80 抽保底黑券，10 抽保底紫券。本池无紫券船员。',
+      currency: { key: 'piluLove', label: '噼噜的最爱', iconPath: 'gacha-screenshots/icons/coin-pilu.png' },
+      pity: { black: 80, purple: 10 },
+      rates: { black: 0.008, purpleSailor: 0, purpleShadow: 0.06, blueShadow: 0.932 },
+      combined: { black: 1.84, purple: 13.00, blue: 85.15 },
+      pools: {
+        // 全部是往日之影，虽然仍归 'black' tier 表示 SSR，但列表都是"影"类物品
+        black: ['他的战争','何人致哀之花','遗落宝石','文明法则','鱼骨串','缎带泪','破碎狂想曲'],
+        purpleSailor: [],
+        // 常规紫券往日之影（不含 UP 迷你号鲇鱼的消亡 / 此刻即未来）—— 剩 10 件
+        purpleShadow: ['船长的礼物','沉浮罗盘','船之美','白日下的梦','昂首之旗','老将的军号','机械生命','偏差之时','离膛一瞬','被划掉的一页'],
+        blueShadow:   STANDARD_BLUE_SHADOWS
+      },
+      featured: {
+        ssr: { items: ['安眠人偶'], chance: 0.75, tier: 'black' },
+        sr:  { items: ['迷你号鲇鱼的消亡','此刻即未来'], chance: 0.5, tier: 'purpleShadow', appliesToTiers: ['purpleShadow'] }
+      },
+      cost: { single: 1, tenPromo: 10, tenFull: 10 },
+      promo: null,
+      // 本吧台使用"寻找"语义（找到往日之影），而非"来一杯/来十杯"（喝酒）
+      buttons: { single: '寻找 1 次', ten: '寻找 10 次' },
+      firstSsrGuaranteed: true
+    },
+
+    permanent: {
+      id: 'permanent',
+      name: '这里不散场',
+      category: '常驻 · 公共吧台',
+      summary: '标准常驻池；每 40 抽保底 1 张黑券，每 10 抽保底 1 张紫券及以上；本赛季轮换 SSR = 黑格（船员）+ 破碎狂想曲（往日之影，若已入驻）。',
+      currency: { key: 'silver', label: '银币', iconPath: 'gacha-screenshots/icons/coin-silver.png' },
+      pity: { black: 40, purple: 10 },
+      rates: { black: 0.008, purpleSailor: 0.03, purpleShadow: 0.03, blueShadow: 0.932 },
+      combined: { black: 2.42, purple: 13.00, blue: 84.58 },
+      pools: {
+        // 6 位基础 SSR 船员 + 轮换 黑格 + 轮换 破碎狂想曲 (SSR 影)
+        black: ['焦面上校','铁腕统领','伊莎贝拉','小斧头','饿猫','海葬','黑格','破碎狂想曲'],
+        purpleSailor: STANDARD_PURPLE_SAILORS,
+        purpleShadow: STANDARD_PURPLE_SHADOWS,
+        blueShadow:   STANDARD_BLUE_SHADOWS
+      },
+      featured: null,
+      cost: { single: 1, tenPromo: 10, tenFull: 10 },
+      promo: null,
+      firstSsrGuaranteed: false
+    }
+  };
+
+  const BANNER_ORDER = ['newcomer','dreamString','piluTreasure','permanent'];
+
+  /* 依据所有卡池自动登记每个道具对应的图标路径。
+     - 已有的 42 个新手池图标继续可用（黑券/紫券船员/紫券影/蓝券影）
+     - 新增角色（茉莉、黑格）已裁剪；SR UP 变体（艾丝-RS、预兆之眼-英诺森）
+       复用基础图标 —— 由 CSS .is-up 类叠加 UP 徽章，无需变体图。
+     - 噼噜的旧日秘藏 SSR 影 8 件已从 155040 / 155306 裁剪完成。 */
+  const NEW_ICON_MAP = {
+    // 织梦弦音 —— 新角色
+    '茉莉': 'gacha-screenshots/icons/moli.png',
+    '黑格': 'gacha-screenshots/icons/heige.png',
+    // 织梦弦音 —— UP 变体，共用基础角色图标（UP 徽章由 CSS 叠加）
+    '艾丝-RS':          'gacha-screenshots/icons/ps-01.png',
+    '预兆之眼-英诺森':  'gacha-screenshots/icons/ps-05.png',
+    // 噼噜的旧日秘藏 —— 8 位 SSR 往日之影
+    // pilu-01 从高分辨率立绘 155306 裁剪，其余 7 位从 155040 网格裁剪
+    '安眠人偶':      'gacha-screenshots/icons/pilu-01.png',  // UP
+    '他的战争':      'gacha-screenshots/icons/pilu-02.png',
+    '何人致哀之花':  'gacha-screenshots/icons/pilu-03.png',
+    '遗落宝石':      'gacha-screenshots/icons/pilu-04.png',
+    '文明法则':      'gacha-screenshots/icons/pilu-05.png',
+    '鱼骨串':        'gacha-screenshots/icons/pilu-06.png',
+    '缎带泪':        'gacha-screenshots/icons/pilu-07.png',
+    '破碎狂想曲':    'gacha-screenshots/icons/pilu-08.png'   // rotating (also used by 这里不散场)
+  };
+  // 先给新手池注册（保留原有的黑券/紫券/紫影/蓝影 icon-XX.png 命名）
+  Object.entries(BANNERS.newcomer.pools).forEach(([poolKey, items]) => {
+    const prefix = TIER_PREFIX[poolKey];
+    items.forEach((name, idx) => {
+      const num = String(idx + 1).padStart(2, '0');
+      PORTRAITS[name] = ICON_BASE + prefix + '-' + num + '.png';
+    });
+  });
+  // 然后叠加新增映射
+  Object.assign(PORTRAITS, NEW_ICON_MAP);
+
+  /* 便捷访问当前 activeBanner 的配置（简化后续代码） */
+  function currentBanner()  { return BANNERS[activeBanner]; }
+  function currentPools()   { return currentBanner().pools; }
+  function currentRates()   { return currentBanner().rates; }
+  function currentCombined(){ return currentBanner().combined; }
+  function currentCost()    { return currentBanner().cost; }
+  function currentPity()    { return currentBanner().pity; }
+  function currentPromo()   { return currentBanner().promo; }
+  function currentFeatured(){ return currentBanner().featured; }
+
+  /* -------- 每个吧台的独立运行时状态 --------
+     switchBanner() 会切换 `state` 到指向对应银行的 state。
+     所有后续代码继续使用 `state.X` 无需感知具体吧台。
+  -------------------------------------------------- */
+  function freshBannerState() {
+    return {
+      totalDrawn: 0,
+      blackObtained: 0,
+      pullsSinceLastBlack: 0,
+      pityBlackTriggers: 0,
+      pityPurpleTriggers: 0,
+      curPullIdx: 0,
+      curPullHasPurplePlus: false,
+      log: [],
+      counts: { black: 0, purpleSailor: 0, purpleShadow: 0, blueShadow: 0 },
+      itemCounts: {},
+      itemDraws: {},
+      feather: { exclusive: 0, normal: 0, secrets: [] },
+      singleCount: 0,
+      tenCount: 0,
+      currencySpent: 0,
+      // 促销开关：只对 newcomer 池有意义（其他池 promo=null）
+      promoEnabled: true,
+      // 概率提升机制
+      firstSsrObtained: false,       // 首张 SSR 是否已抽（用于 firstSsrGuaranteed）
+      lastFailedFeaturedSsr: false,  // 上次 SSR 是否输掉 50/50（决定下次是否强制 UP）
+      lastFailedFeaturedSr: false    // 上次 SR 是否输掉 50/50
+    };
+  }
+  const bannerState = {
+    newcomer:      freshBannerState(),
+    dreamString:   freshBannerState(),
+    piluTreasure:  freshBannerState(),
+    permanent:     freshBannerState()
+  };
+  let activeBanner = 'newcomer';
+  let state = bannerState[activeBanner];   // 活动状态别名 —— 供既有 state.X 访问路径继续工作
+
+  /* -------- 招募单价计算（依据当前 activeBanner） -------- */
+  function tenPullPrice() {
+    const c = currentCost();
+    const promo = currentPromo();
+    if (promo && state.promoEnabled && state.totalDrawn < promo.limit) return c.tenPromo;
+    return c.tenFull;
+  }
+  function singlePullPrice() { return currentCost().single; }
+  function promoRemaining() {
+    const promo = currentPromo();
+    if (!promo || !state.promoEnabled) return 0;
+    return Math.max(0, promo.limit - state.totalDrawn);
+  }
+
+  /* -------- 40 连试炼状态（tab 已注释，但代码保留） -------- */
+  const trials = {
+    history: []
+  };
+
+  /* -------- 初始化：渲染卡池清单（底部规则面板） -------- */
+  function renderPoolLists() {
+    const pools = currentPools();
+    const poolMap = { 'pool-black': pools.black, 'pool-purpleSailor': pools.purpleSailor, 'pool-purpleShadow': pools.purpleShadow, 'pool-blueShadow': pools.blueShadow };
+    Object.entries(poolMap).forEach(([elId, items]) => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.innerHTML = '';
+      const tier = elId === 'pool-black' ? 'black' : elId === 'pool-blueShadow' ? 'blueShadow' : (elId === 'pool-purpleSailor' ? 'purpleSailor' : 'purpleShadow');
+      const bgCls = tierBgClass(tier);
+      const tierClass = (tier === 'black') ? 'tier-black' : (tier === 'blueShadow') ? 'tier-blue' : 'tier-purple';
+      // 若为空数组则显示占位
+      if (!items || items.length === 0) {
+        el.innerHTML = '<span style="opacity:0.5; font-size:12px;">（本吧台无此类物品）</span>';
+        return;
+      }
+      items.forEach(n => {
+        const s = document.createElement('span');
+        s.innerHTML = `<span class="mini-avatar ${bgCls}${upClass(n)}">${avatarHtml(n, 'mini')}</span>${n}`;
+        s.className = tierClass;
+        el.appendChild(s);
+      });
+    });
+  }
+  renderPoolLists();
+
+  /* -------- 招募抽取逻辑（当前 activeBanner） -------- */
+  function randomFromPool(poolKey) {
+    const arr = currentPools()[poolKey];
+    if (!arr || arr.length === 0) return null;
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  // 选择本次招募的稀有度（考虑滚动黑券保底 + 十连内紫券保底）
+  function chooseTier(inTenPullContext) {
+    const cfg = currentBanner();
+    const isLast10 = inTenPullContext && state.curPullIdx === cfg.pity.purple - 1;
+    const isLast40 = state.pullsSinceLastBlack === cfg.pity.black - 1;
+
+    // 黑券硬保底优先
+    if (isLast40) return { tier: 'black', pity: 'black-pity' };
+
+    // 正常滚点
+    const r = Math.random();
+    const R = cfg.rates;
+    let tier;
+    if (r < R.black) tier = 'black';
+    else if (r < R.black + R.purpleSailor) tier = 'purpleSailor';
+    else if (r < R.black + R.purpleSailor + R.purpleShadow) tier = 'purpleShadow';
+    else tier = 'blueShadow';
+
+    // 十连内紫券保底：若抽到蓝券且未达成 SR，则提升为紫券
+    if (isLast10 && !state.curPullHasPurplePlus && tier === 'blueShadow') {
+      const rs = R.purpleSailor, rv = R.purpleShadow;
+      if (rs + rv === 0) {
+        // 无紫券配置时理论不该走到这里；兜底为紫影
+        tier = R.purpleShadow > 0 ? 'purpleShadow' : 'purpleSailor';
+      } else {
+        tier = (Math.random() * (rs + rv) < rs) ? 'purpleSailor' : 'purpleShadow';
+      }
+      return { tier, pity: 'purple-pity' };
+    }
+    return { tier, pity: null };
+  }
+
+  /*
+    从选定的 tier 中挑选具体道具。若当前吧台有 UP 概率提升机制，则按下述规则：
+     - SSR 首次保底（firstSsrGuaranteed）：本吧台第一张黑券必为 UP items[0]
+     - SSR 50/50 / 75/25（chance）：命中则从 UP items 均分挑一件；未命中则从 pools[tier] 挑
+     - 输掉 50/50 后下一张 SSR 强制 UP
+     - SR 同理，但 UP 名单可能覆盖 purpleSailor / purpleShadow 中的一个 tier
+       （若 UP 覆盖的是 sailor，则 shadow 侧的 SR 也走 UP 路径 —— 因为规则说的是"下次紫券对象必为 UP 船员"）
+    返回：{ name, featured, tier: 实际归类的 tier, first }
+  */
+  function pickItem(tier) {
+    const cfg = currentBanner();
+    const featured = cfg.featured;
+
+    // ---- SSR featured ----
+    if (tier === 'black' && featured?.ssr && featured.ssr.tier === 'black') {
+      const spec = featured.ssr;
+      // 首张 SSR 保底
+      if (cfg.firstSsrGuaranteed && !state.firstSsrObtained) {
+        state.firstSsrObtained = true;
+        return { name: spec.items[0], featured: true, tier: 'black', first: true };
+      }
+      const force = state.lastFailedFeaturedSsr;
+      const rollFeatured = force || Math.random() < spec.chance;
+      if (rollFeatured) {
+        state.lastFailedFeaturedSsr = false;
+        return { name: spec.items[Math.floor(Math.random() * spec.items.length)], featured: true, tier: 'black' };
+      } else {
+        state.lastFailedFeaturedSsr = true;
+        const name = randomFromPool('black');
+        return { name, featured: false, tier: 'black' };
+      }
+    }
+
+    // ---- SR featured ----
+    if (featured?.sr && featured.sr.appliesToTiers && featured.sr.appliesToTiers.includes(tier)) {
+      const spec = featured.sr;
+      const force = state.lastFailedFeaturedSr;
+      const rollFeatured = force || Math.random() < spec.chance;
+      if (rollFeatured) {
+        state.lastFailedFeaturedSr = false;
+        return {
+          name: spec.items[Math.floor(Math.random() * spec.items.length)],
+          featured: true,
+          tier: spec.tier   // UP 物品的实际归类 tier（可能与 requestedTier 不同）
+        };
+      } else {
+        state.lastFailedFeaturedSr = true;
+        // 从原选定 tier 的标准池抽（UP 物品已从标准池中排除，见 BANNERS 配置）
+        let name = randomFromPool(tier);
+        // 若该 tier 池为空（噼噜的旧日秘藏.purpleSailor = []），改抽其他紫券 tier
+        if (!name) {
+          const other = tier === 'purpleSailor' ? 'purpleShadow' : 'purpleSailor';
+          name = randomFromPool(other);
+          return { name, featured: false, tier: other };
+        }
+        return { name, featured: false, tier };
+      }
+    }
+
+    // ---- 无 featured：直接从 tier 池均匀抽 ----
+    let name = randomFromPool(tier);
+    if (!name) {
+      // 极端兜底：该 tier 无可抽物；跳到蓝券
+      return { name: randomFromPool('blueShadow'), featured: false, tier: 'blueShadow' };
+    }
+    return { name, featured: false, tier };
+  }
+
+  function computeFeatherAndSecret(tier, itemName, drawNo) {
+    const key = tier + '|' + itemName;
+    const prevCount = state.itemCounts[key] || 0;
+    const newCount = prevCount + 1;
+    state.itemCounts[key] = newCount;
+    if (!state.itemDraws[key]) state.itemDraws[key] = [];
+    state.itemDraws[key].push(drawNo);
+
+    let reward = { exclusive: 0, normal: 0, secret: false };
+    if (tier === 'black') {
+      if (newCount === 1)      { reward.exclusive = 15; }
+      else if (newCount <= 7)  { reward.exclusive = 15; reward.secret = true; }
+      else                     { reward.exclusive = 30; }
+    } else if (tier === 'purpleSailor') {
+      if (newCount === 1)      { reward.exclusive = 3; }
+      else if (newCount <= 7)  { reward.exclusive = 3; reward.secret = true; }
+      else                     { reward.exclusive = 6; }
+    } else if (tier === 'purpleShadow') {
+      reward.exclusive = 3;
+    } else if (tier === 'blueShadow') {
+      reward.normal = 20;
+    }
+    state.feather.exclusive += reward.exclusive;
+    state.feather.normal    += reward.normal;
+    if (reward.secret) state.feather.secrets.push({ name: itemName, tier, dupIdx: newCount });
+    return { ...reward, dupIdx: newCount };
+  }
+
+  // 执行单次招募（主流程，无上限）
+  function drawOne(inTenPullContext) {
+    const cfg = currentBanner();
+    const { tier: rawTier, pity } = chooseTier(inTenPullContext);
+    const picked = pickItem(rawTier);
+    const actualTier = picked.tier;   // featured 可能覆盖 tier
+    const name = picked.name;
+
+    // 十连内保底追踪：只在十连语境更新
+    if (inTenPullContext) {
+      if (actualTier === 'black' || actualTier === 'purpleSailor' || actualTier === 'purpleShadow') {
+        state.curPullHasPurplePlus = true;
+      }
+      state.curPullIdx++;
+      if (state.curPullIdx >= cfg.pity.purple) {
+        state.curPullIdx = 0;
+        state.curPullHasPurplePlus = false;
+      }
+    }
+
+    // 黑券保底：任意招募都会累计与重置
+    if (actualTier === 'black') {
+      state.blackObtained++;
+      if (pity === 'black-pity') state.pityBlackTriggers++;
+      state.pullsSinceLastBlack = 0;
+    } else {
+      state.pullsSinceLastBlack++;
+    }
+    if (pity === 'purple-pity') state.pityPurpleTriggers++;
+
+    state.counts[actualTier]++;
+    state.totalDrawn++;
+    const reward = computeFeatherAndSecret(actualTier, name, state.totalDrawn);
+
+    const record = {
+      tier: actualTier,
+      name,
+      pity,
+      reward,
+      drawNo: state.totalDrawn,
+      kind: inTenPullContext ? 'ten' : 'single',
+      featured: picked.featured,
+      first: picked.first === true
+    };
+    state.log.push(record);
+    return record;
+  }
+
+  function tenPull() {
+    // 每次十连都是独立的 SR 保底窗口
+    const cfg = currentBanner();
+    state.curPullIdx = 0;
+    state.curPullHasPurplePlus = false;
+    const pulls = [];
+    for (let i = 0; i < cfg.pity.purple; i++) {
+      pulls.push(drawOne(true));
+    }
+    return pulls;
+  }
+
+  /* -------- 界面操作 -------- */
+  function doTenPull() {
+    state.tenCount++;
+    // 十连价格在批次开始时锁定
+    state.currencySpent += tenPullPrice();
+    const pulls = tenPull();
+    renderDrawGrid(pulls);
+    renderStatus();
+    renderStats();
+    renderLog();
+  }
+
+  function doSinglePull() {
+    state.singleCount++;
+    state.currencySpent += singlePullPrice();
+    const pull = drawOne(false);
+    renderDrawGrid([pull], `单抽（第 ${pull.drawNo} 次招募）`);
+    renderStatus();
+    renderStats();
+    renderLog();
+  }
+
+  // "重置全部记录"按钮：只清空当前 activeBanner 的状态（其他 banner 保留）
+  function manualReset() {
+    clearTooltipCache();
+    bannerState[activeBanner] = freshBannerState();
+    state = bannerState[activeBanner];
+    // 与全局 UI 复选框（若可见）同步 promoEnabled
+    const chk = document.getElementById('chk-promo');
+    if (chk) state.promoEnabled = chk.checked;
+    document.getElementById('draw-grid').innerHTML = '';
+    const hintEl = document.getElementById('latest-hint');
+    if (hintEl) hintEl.textContent = '点击上方"来一杯"或"来十杯"开始抽卡';
+    renderStatus();
+    renderStats();
+    renderLog();
+  }
+
+  // 切换当前 activeBanner，保留每个吧台各自的状态
+  function switchBanner(id) {
+    if (!BANNERS[id]) return;
+    activeBanner = id;
+    state = bannerState[activeBanner];
+    clearTooltipCache();
+    // 更新 tab 高亮
+    document.querySelectorAll('.banner-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.banner === id);
+    });
+    // 重建卡池清单（因为不同 banner 有不同的池）
+    renderPoolLists();
+    // 显示当前 banner 的 UI 状态
+    document.getElementById('draw-grid').innerHTML = '';
+    const hintEl = document.getElementById('latest-hint');
+    if (hintEl) hintEl.textContent = '点击上方"来一杯"或"来十杯"开始抽卡';
+    // 促销复选框与当前 banner 促销开关同步
+    const chk = document.getElementById('chk-promo');
+    if (chk) {
+      chk.checked = state.promoEnabled;
+      chk.disabled = !currentPromo();
+    }
+    renderStatus();
+    renderStats();
+    renderLog();
+    renderBannerInfo();
+  }
+
+  /* -------- 40 连试炼引擎（隔离环境，当前 tab 已注释）
+     若日后恢复该 tab，此函数会按 activeBanner 的配置运行一轮完整吧台。 */
+  function simulateBanner() {
+    const cfg = currentBanner();
+    const BLACK_PITY_N = cfg.pity.black;
+    const PURPLE_PITY_N = cfg.pity.purple;
+    const R = cfg.rates;
+    let totalDrawn = 0, blackObtained = 0;
+    let pullsSinceLastBlack = 0;
+    let curPullIdx = 0, curHasP = false;
+    const localCounts = { black: 0, purpleSailor: 0, purpleShadow: 0, blueShadow: 0 };
+    const localItemCounts = {};
+    const localFeather = { exclusive: 0, normal: 0, secrets: [] };
+    const draws = [];
+    let pityBlackTriggered = false;
+    let pityPurpleTriggerCount = 0;
+
+    while (totalDrawn < BLACK_PITY_N) {
+      const isLast10 = curPullIdx === PURPLE_PITY_N - 1;
+      const isLast40 = pullsSinceLastBlack === BLACK_PITY_N - 1;
+      const needBlack = isLast40;
+      const needPurple = isLast10 && !curHasP;
+
+      let tier, pity = null;
+      if (needBlack) { tier = 'black'; pity = 'black-pity'; pityBlackTriggered = true; }
+      else {
+        const r = Math.random();
+        if (r < R.black) tier = 'black';
+        else if (r < R.black + R.purpleSailor) tier = 'purpleSailor';
+        else if (r < R.black + R.purpleSailor + R.purpleShadow) tier = 'purpleShadow';
+        else tier = 'blueShadow';
+        if (needPurple && tier === 'blueShadow') {
+          const rs = R.purpleSailor, rv = R.purpleShadow;
+          if (rs + rv === 0) tier = 'purpleShadow';
+          else tier = (Math.random()*(rs+rv) < rs) ? 'purpleSailor' : 'purpleShadow';
+          pity = 'purple-pity';
+          pityPurpleTriggerCount++;
+        }
+      }
+
+      const pool = cfg.pools[tier] || cfg.pools.blueShadow;
+      const name = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : '(无)';
+
+      if (tier === 'black' || tier === 'purpleSailor' || tier === 'purpleShadow') curHasP = true;
+      if (tier === 'black') { blackObtained++; pullsSinceLastBlack = 0; }
+      else pullsSinceLastBlack++;
+
+      localCounts[tier]++;
+      const key = tier + '|' + name;
+      const prev = localItemCounts[key] || 0;
+      const nc = prev + 1;
+      localItemCounts[key] = nc;
+      let ex = 0, nrm = 0, sec = false;
+      if (tier === 'black') { if (nc === 1) ex = 15; else if (nc <= 7) { ex = 15; sec = true; } else ex = 30; }
+      else if (tier === 'purpleSailor') { if (nc === 1) ex = 3; else if (nc <= 7) { ex = 3; sec = true; } else ex = 6; }
+      else if (tier === 'purpleShadow') ex = 3;
+      else if (tier === 'blueShadow') nrm = 20;
+      localFeather.exclusive += ex;
+      localFeather.normal    += nrm;
+      if (sec) localFeather.secrets.push({ name, tier, dupIdx: nc });
+
+      totalDrawn++; curPullIdx++;
+      if (curPullIdx >= PURPLE_PITY_N) { curPullIdx = 0; curHasP = false; }
+
+      draws.push({ tier, name, pity, drawNo: totalDrawn });
+    }
+
+    return {
+      draws,
+      counts: localCounts,
+      itemCounts: localItemCounts,
+      feather: localFeather,
+      pityBlackTriggered,
+      pityPurpleTriggerCount,
+      blackObtained
+    };
+  }
+
+  function run40Trial() {
+    const result = simulateBanner();
+    trials.history.push(result);
+    render40Trials();
+  }
+
+  function run40TrialBatch(n) {
+    for (let i = 0; i < n; i++) trials.history.push(simulateBanner());
+    render40Trials();
+  }
+
+  function clear40Trials() {
+    trials.history = [];
+    render40Trials();
+  }
+
+  /* -------- 批量模拟（蒙特卡洛，可选择吧台） -------- */
+  function runBatchSim() {
+    const input = document.getElementById('batch-n');
+    let N = parseInt(input.value, 10);
+    if (!Number.isFinite(N) || N < 1) { N = 1000; input.value = 1000; }
+    if (N > 1000000) { N = 1000000; input.value = 1000000; }
+
+    // 使用批量模拟专属的 banner 选择器；未选择时使用当前 activeBanner
+    const bannerSelect = document.getElementById('batch-banner');
+    const bannerId = bannerSelect ? bannerSelect.value : activeBanner;
+    const cfg = BANNERS[bannerId];
+    if (!cfg) return;
+
+    const resultEl = document.getElementById('batch-result');
+    resultEl.innerHTML = `<div style="opacity:0.7;">运行中…（吧台"${cfg.name}" · ${N.toLocaleString()} 轮）</div>`;
+
+    setTimeout(() => {
+      const t0 = performance.now();
+      const BLACK_PITY_N = cfg.pity.black;
+      const PURPLE_PITY_N = cfg.pity.purple;
+      const R = cfg.rates;
+
+      let sumBlack = 0, sumPurpleS = 0, sumPurpleP = 0, sumBlue = 0;
+      let banners0Black = 0, bannersMultiBlack = 0;
+      let purplePityTriggers = 0, blackPityTriggers = 0;
+      let featuredSsrHits = 0, featuredSrHits = 0;
+      let firstSsrIsFeatured = 0;
+      const blackDist = [0, 0, 0, 0, 0];       // 0/1/2/3/≥4 per banner
+      const purpleDist = new Array(16).fill(0);
+      let sumExclusive = 0, sumNormal = 0;
+
+      const featSsr = cfg.featured?.ssr;
+      const featSr  = cfg.featured?.sr;
+
+      for (let b = 0; b < N; b++) {
+        let totalDrawn = 0, blackObtained = 0;
+        let pullsSinceLastBlack = 0;
+        let curPullIdx = 0, curHasP = false;
+        let bp=0, ps=0, pp=0, bs=0;
+        // Per-banner (per-40-抽) featured state
+        let firstSsrObtained = false;
+        let lastFailedSsr = false;
+        let lastFailedSr  = false;
+        const localItemCounts = {};
+        let ex = 0, nrm = 0;
+
+        while (totalDrawn < BLACK_PITY_N) {
+          const isLast10 = curPullIdx === PURPLE_PITY_N - 1;
+          const isLast40 = pullsSinceLastBlack === BLACK_PITY_N - 1;
+          const needBlack = isLast40;
+          const needPurple = isLast10 && !curHasP;
+          let rawTier;
+          if (needBlack) { rawTier = 'black'; blackPityTriggers++; }
+          else {
+            const r = Math.random();
+            if (r < R.black) rawTier='black';
+            else if (r < R.black + R.purpleSailor) rawTier='purpleSailor';
+            else if (r < R.black + R.purpleSailor + R.purpleShadow) rawTier='purpleShadow';
+            else rawTier='blueShadow';
+            if (needPurple && rawTier==='blueShadow') {
+              const rs = R.purpleSailor, rv = R.purpleShadow;
+              if (rs + rv === 0) rawTier = 'purpleShadow';
+              else rawTier = (Math.random()*(rs+rv) < rs) ? 'purpleSailor' : 'purpleShadow';
+              purplePityTriggers++;
+            }
+          }
+
+          // 挑选具体道具 + 判定 tier（考虑 featured 覆盖）
+          let actualTier = rawTier;
+          let name;
+          let isFeatured = false;
+          let isFirst = false;
+          if (rawTier === 'black' && featSsr && featSsr.tier === 'black') {
+            if (cfg.firstSsrGuaranteed && !firstSsrObtained) {
+              firstSsrObtained = true;
+              name = featSsr.items[0];
+              isFeatured = true; isFirst = true;
+              firstSsrIsFeatured++;
+            } else {
+              const force = lastFailedSsr;
+              const roll = force || Math.random() < featSsr.chance;
+              if (roll) {
+                lastFailedSsr = false;
+                name = featSsr.items[Math.floor(Math.random()*featSsr.items.length)];
+                isFeatured = true;
+                featuredSsrHits++;
+              } else {
+                lastFailedSsr = true;
+                const pool = cfg.pools.black;
+                name = pool[Math.floor(Math.random()*pool.length)];
+              }
+            }
+          } else if (featSr && featSr.appliesToTiers && featSr.appliesToTiers.includes(rawTier)) {
+            const force = lastFailedSr;
+            const roll = force || Math.random() < featSr.chance;
+            if (roll) {
+              lastFailedSr = false;
+              name = featSr.items[Math.floor(Math.random()*featSr.items.length)];
+              actualTier = featSr.tier;
+              isFeatured = true;
+              featuredSrHits++;
+            } else {
+              lastFailedSr = true;
+              let pool = cfg.pools[rawTier];
+              if (!pool || pool.length === 0) {
+                const other = rawTier === 'purpleSailor' ? 'purpleShadow' : 'purpleSailor';
+                pool = cfg.pools[other];
+                actualTier = other;
+              }
+              name = pool[Math.floor(Math.random()*pool.length)];
+            }
+          } else {
+            const pool = cfg.pools[rawTier];
+            name = pool && pool.length > 0
+              ? pool[Math.floor(Math.random()*pool.length)]
+              : cfg.pools.blueShadow[Math.floor(Math.random()*cfg.pools.blueShadow.length)];
+            if (!pool || pool.length === 0) actualTier = 'blueShadow';
+          }
+
+          // 羽毛票据（含 UP 与 non-UP 均按同规则累计）
+          const key = actualTier + '|' + name;
+          const nc = (localItemCounts[key] || 0) + 1;
+          localItemCounts[key] = nc;
+          if (actualTier === 'black') { if (nc === 1) ex += 15; else if (nc <= 7) ex += 15; else ex += 30; }
+          else if (actualTier === 'purpleSailor') { if (nc === 1) ex += 3; else if (nc <= 7) ex += 3; else ex += 6; }
+          else if (actualTier === 'purpleShadow') ex += 3;
+          else if (actualTier === 'blueShadow') nrm += 20;
+
+          // 状态更新
+          if (actualTier==='black') { bp++; blackObtained++; curHasP=true; pullsSinceLastBlack=0; }
+          else if (actualTier==='purpleSailor') { ps++; curHasP=true; pullsSinceLastBlack++; }
+          else if (actualTier==='purpleShadow') { pp++; curHasP=true; pullsSinceLastBlack++; }
+          else { bs++; pullsSinceLastBlack++; }
+          totalDrawn++; curPullIdx++;
+          if (curPullIdx >= PURPLE_PITY_N) { curPullIdx = 0; curHasP = false; }
+        }
+        sumBlack += bp; sumPurpleS += ps; sumPurpleP += pp; sumBlue += bs;
+        sumExclusive += ex; sumNormal += nrm;
+        if (bp === 0) banners0Black++;
+        if (bp > 1) bannersMultiBlack++;
+        blackDist[Math.min(bp, 4)]++;
+        purpleDist[Math.min(ps + pp, 15)]++;
+      }
+
+      const elapsed = performance.now() - t0;
+      const totalDraws = N * BLACK_PITY_N;
+      renderBatchResult({
+        bannerName: cfg.name,
+        combined: cfg.combined,
+        blackPityN: BLACK_PITY_N,
+        N, totalDraws, elapsed,
+        sumBlack, sumPurpleS, sumPurpleP, sumBlue,
+        banners0Black, bannersMultiBlack,
+        blackPityTriggers, purplePityTriggers,
+        blackDist, purpleDist,
+        sumExclusive, sumNormal,
+        featuredSsrHits, featuredSrHits, firstSsrIsFeatured,
+        hasSsrFeatured: !!featSsr,
+        hasSrFeatured:  !!featSr
+      });
+    }, 30);
+  }
+
+  function clearBatchSim() {
+    document.getElementById('batch-result').innerHTML = '';
+  }
+
+  function renderBatchResult(r) {
+    const pct = (n) => (n / r.totalDraws * 100).toFixed(3);
+    const avg = (n) => (n / r.N).toFixed(3);
+    const cbn = r.combined;
+
+    const blackDistLabels = ['0 个', '1 个', '2 个', '3 个', '≥4 个'];
+    const blackDistHtml = blackDistLabels.map((lbl, i) => {
+      const c = r.blackDist[i];
+      const p = (c / r.N * 100).toFixed(2);
+      const barW = Math.max(1, Math.round((c / r.N) * 200));
+      const barColor = i === 0 ? '#ef5350' : i === 1 ? '#8fa3b8' : '#ffb74d';
+      return `<div class="stat-row" style="align-items:center;">
+        <span style="min-width:70px;">${lbl}</span>
+        <span style="flex:1; margin:0 10px;">
+          <span style="display:inline-block; height:10px; width:${barW}px; background:${barColor}; border-radius:2px; vertical-align:middle;"></span>
+        </span>
+        <span class="actual"><strong>${c.toLocaleString()}</strong> <span class="exp">(${p}%)</span></span>
+      </div>`;
+    }).join('');
+
+    const maxPurple = Math.max(...r.purpleDist);
+    const purpleDistHtml = r.purpleDist.map((c, i) => {
+      const lbl = i === 15 ? '≥15' : String(i);
+      const p = (c / r.N * 100).toFixed(2);
+      const barW = maxPurple > 0 ? Math.max(1, Math.round((c / maxPurple) * 180)) : 1;
+      return `<div class="stat-row" style="align-items:center; padding:3px 2px;">
+        <span style="min-width:40px; font-size:12px;">${lbl} 个</span>
+        <span style="flex:1; margin:0 10px;">
+          <span style="display:inline-block; height:8px; width:${barW}px; background:#ce93d8; border-radius:2px; vertical-align:middle;"></span>
+        </span>
+        <span class="actual" style="font-size:12px;">${c.toLocaleString()} <span class="exp">(${p}%)</span></span>
+      </div>`;
+    }).join('');
+
+    const featuredRows = [];
+    if (r.hasSsrFeatured) {
+      featuredRows.push(`<div class="stat-row"><span>UP SSR 命中数</span>
+        <span class="actual"><strong>${r.featuredSsrHits.toLocaleString()}</strong> <span class="exp">(占 SSR 总数 ${r.sumBlack > 0 ? (r.featuredSsrHits/r.sumBlack*100).toFixed(2) : '0.00'}%)</span></span></div>`);
+      if (r.firstSsrIsFeatured > 0) {
+        featuredRows.push(`<div class="stat-row"><span>首张 SSR 命中 UP</span>
+          <span class="actual"><strong>${r.firstSsrIsFeatured.toLocaleString()}</strong> <span class="exp">(${(r.firstSsrIsFeatured/r.N*100).toFixed(2)}% 的轮次)</span></span></div>`);
+      }
+    }
+    if (r.hasSrFeatured) {
+      const srTotal = r.sumPurpleS + r.sumPurpleP;
+      featuredRows.push(`<div class="stat-row"><span>UP SR 命中数</span>
+        <span class="actual"><strong>${r.featuredSrHits.toLocaleString()}</strong> <span class="exp">(占 SR 总数 ${srTotal > 0 ? (r.featuredSrHits/srTotal*100).toFixed(2) : '0.00'}%)</span></span></div>`);
+    }
+
+    const html = `
+      <div style="padding: 10px 12px; background: rgba(0,0,0,0.28); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); font-size:13px; line-height:1.6;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.08);">
+          <h4 style="margin:0; font-size:14px;">"${r.bannerName}" · ${r.N.toLocaleString()} 轮 · ${r.totalDraws.toLocaleString()} 抽</h4>
+          <span style="opacity:0.55; font-size:12px;">耗时 ${r.elapsed.toFixed(1)} ms · 每轮 ${r.blackPityN} 抽</span>
+        </div>
+
+        <div class="stats-grid">
+          <div>
+            <h4 style="margin:0 0 8px; font-size:13px; opacity:0.85;">稀有度实际分布 vs 理论概率</h4>
+            <div class="stat-row"><span class="tier-black"><strong>黑券船员</strong></span>
+              <span class="actual"><strong>${r.sumBlack.toLocaleString()}</strong> · ${pct(r.sumBlack)}% <span class="exp">(理论 ~${cbn.black}%)</span></span>
+            </div>
+            <div class="stat-row"><span class="tier-purple"><strong>紫券船员</strong></span>
+              <span class="actual"><strong>${r.sumPurpleS.toLocaleString()}</strong> · ${pct(r.sumPurpleS)}%</span>
+            </div>
+            <div class="stat-row"><span class="tier-purple"><strong>紫券往日之影</strong></span>
+              <span class="actual"><strong>${r.sumPurpleP.toLocaleString()}</strong> · ${pct(r.sumPurpleP)}%</span>
+            </div>
+            <div class="stat-row"><span class="tier-purple"><strong>紫券合计</strong></span>
+              <span class="actual"><strong>${(r.sumPurpleS+r.sumPurpleP).toLocaleString()}</strong> · ${pct(r.sumPurpleS+r.sumPurpleP)}% <span class="exp">(理论 ~${cbn.purple}%)</span></span>
+            </div>
+            <div class="stat-row"><span class="tier-blue"><strong>蓝券往日之影</strong></span>
+              <span class="actual"><strong>${r.sumBlue.toLocaleString()}</strong> · ${pct(r.sumBlue)}% <span class="exp">(理论 ~${cbn.blue}%)</span></span>
+            </div>
+
+            <h4 style="margin:14px 0 6px; font-size:13px; opacity:0.85;">保底触发次数</h4>
+            <div class="stat-row"><span>黑券 ${r.blackPityN} 保底</span>
+              <span class="actual"><strong>${r.blackPityTriggers.toLocaleString()}</strong> <span class="exp">(${(r.blackPityTriggers/r.N*100).toFixed(2)}% 的轮次)</span></span>
+            </div>
+            <div class="stat-row"><span>紫券 10 保底</span>
+              <span class="actual"><strong>${r.purplePityTriggers.toLocaleString()}</strong> <span class="exp">(平均每轮 ${avg(r.purplePityTriggers)} 次)</span></span>
+            </div>
+
+            ${featuredRows.length > 0 ? `<h4 style="margin:14px 0 6px; font-size:13px; opacity:0.85;">概率提升机制</h4>${featuredRows.join('')}` : ''}
+
+            <h4 style="margin:14px 0 6px; font-size:13px; opacity:0.85;">羽毛票据（平均每轮）</h4>
+            <div class="stat-row"><span>专属羽毛票据</span>
+              <span class="actual"><strong>${avg(r.sumExclusive)}</strong> <span class="exp">(总 ${r.sumExclusive.toLocaleString()})</span></span>
+            </div>
+            <div class="stat-row"><span>普通羽毛票据</span>
+              <span class="actual"><strong>${avg(r.sumNormal)}</strong> <span class="exp">(总 ${r.sumNormal.toLocaleString()})</span></span>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="margin:0 0 8px; font-size:13px; opacity:0.85;">每轮的黑券数量分布</h4>
+            ${blackDistHtml}
+
+            <h4 style="margin:14px 0 6px; font-size:13px; opacity:0.85;">每轮的紫券（船员+往日之影）数量分布</h4>
+            <div style="max-height:280px; overflow-y:auto; padding-right:4px;">${purpleDistHtml}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('batch-result').innerHTML = html;
+  }
+
+  /* -------- 渲染 -------- */
+  function renderDrawGrid(pulls, note) {
+    // 每次新的抽卡（或十连/单抽结果显示）时清空所有悬浮提示引用；
+    // 后续 renderStats / renderLog 会为新 DOM 注册新的 tooltip
+    clearTooltipCache();
+    const grid = document.getElementById('draw-grid');
+    grid.innerHTML = '';
+    // 更新"最新十连结果"顶部提示
+    const hintEl = document.getElementById('latest-hint');
+    if (hintEl) {
+      if (pulls && pulls.length > 0) {
+        const first = pulls[0].drawNo;
+        const last = pulls[pulls.length - 1].drawNo;
+        hintEl.textContent = note ? note : `本轮：第 ${first} – ${last} 次招募`;
+      } else {
+        hintEl.textContent = '点击上方"来一杯"或"来十杯"开始抽卡';
+      }
+    }
+    pulls.forEach(p => {
+      const cell = document.createElement('div');
+      const tierColor = (p.tier === 'black') ? 'bg-black'
+                      : (p.tier === 'purpleSailor' || p.tier === 'purpleShadow') ? 'bg-purple'
+                      : 'bg-blue';
+      cell.className = 'draw-cell hoverable ' + tierColor;
+      const typeLabel = (p.tier === 'black') ? '黑券·船员'
+                      : (p.tier === 'purpleSailor') ? '紫券·船员'
+                      : (p.tier === 'purpleShadow') ? '紫券·往日之影'
+                      : '蓝券·往日之影';
+      let pityBadge = '';
+      if (p.pity === 'black-pity') pityBadge = '⚡ 40保底';
+      else if (p.pity === 'purple-pity') pityBadge = '⚡ 10保底';
+
+      // 该卡此前总共出现过几次（本次是第几次）
+      const key = p.tier + '|' + p.name;
+      const dupIdx = (state.itemDraws[key] || []).indexOf(p.drawNo) + 1;
+      const totalDupCount = (state.itemCounts[key] || 0);
+      const priorDraws = (state.itemDraws[key] || []).filter(n => n !== p.drawNo);
+      const priorText = priorDraws.length > 0
+        ? `<div class="tt-draws"><div style="opacity:0.6; font-size:11px; margin-bottom:3px;">此前也曾抽到于</div>${priorDraws.map(drawNumFormat).join(' · ')}</div>`
+        : '';
+      const kindLabel = p.kind === 'single' ? '单抽' : '十连';
+      const pityInfo = p.pity === 'black-pity' ? '<div class="tt-row" style="color:#ffb74d;">⚡ 触发 40 抽黑券保底</div>'
+                     : p.pity === 'purple-pity' ? '<div class="tt-row" style="color:#ce93d8;">⚡ 触发 10 抽紫券保底</div>'
+                     : '';
+      const rewardParts = [];
+      if (p.reward.exclusive > 0) rewardParts.push(`专属票据 +${p.reward.exclusive}`);
+      if (p.reward.normal > 0)    rewardParts.push(`普通票据 +${p.reward.normal}`);
+      if (p.reward.secret)        rewardParts.push('触发船员秘闻');
+      const rewardText = rewardParts.length ? `<div class="tt-row">奖励：${rewardParts.join(' · ')}</div>` : '';
+      const tooltipHtml = `
+        <div class="tt-title">${p.name}</div>
+        <div class="tt-sub">${tierLabelHtml(p.tier)} · ${kindLabel} · 第 ${drawNumFormat(p.drawNo)} 次招募</div>
+        <div class="tt-row">本次为该道具第 <strong>${dupIdx}</strong> 次出货（累计 ${totalDupCount} 次）</div>
+        ${pityInfo}
+        ${rewardText}
+        ${priorText}
+      `;
+      const tid = registerTooltip(tooltipHtml);
+      cell.dataset.hoverId = tid;
+
+      cell.innerHTML = `
+        <span class="type">${typeLabel}</span>
+        <div class="avatar${upClass(p.name)}">${avatarHtml(p.name, 'big')}</div>
+        <div class="name">${p.name}</div>
+        ${pityBadge ? `<span class="pity">${pityBadge}</span>` : ''}
+      `;
+      grid.appendChild(cell);
+    });
+  }
+
+  function renderStatus() {
+    const cfg = currentBanner();
+    // 货币图标（HTML 片段）：某些吧台可能未配置图标（例如 噼噜的最爱），此时留空
+    const coinHtml = cfg.currency.iconPath
+      ? `<img class="coin-icon" src="${cfg.currency.iconPath}" alt="${cfg.currency.label}">`
+      : '';
+
+    document.getElementById('s-total').textContent = state.totalDrawn;
+    document.getElementById('s-blackPity').textContent = cfg.pity.black - state.pullsSinceLastBlack;
+    document.getElementById('s-purplePity').textContent =
+      state.curPullHasPurplePlus ? '— (已达成)' : `${cfg.pity.purple - state.curPullIdx}`;
+    document.getElementById('s-blackCount').textContent = state.blackObtained;
+    document.getElementById('s-blackPityTriggers').textContent = state.pityBlackTriggers;
+    document.getElementById('s-drawCounts').textContent = `${state.singleCount} / ${state.tenCount}`;
+
+    // 货币显示：使用当前 banner 的 currency label + 图标
+    const cSpentEl = document.getElementById('s-silverSpent');
+    const cSpentLbl = document.getElementById('lbl-silverSpent');
+    if (cSpentEl) cSpentEl.innerHTML = coinHtml + ' <strong>' + state.currencySpent + '</strong>';
+    if (cSpentLbl) cSpentLbl.textContent = `已消耗${cfg.currency.label}`;
+
+    // 距黑券保底标签：不同 banner 的黑券保底次数不同（40 vs 80）
+    const blackPityLbl = document.getElementById('lbl-blackPity');
+    if (blackPityLbl) blackPityLbl.textContent = `距黑券保底 (${cfg.pity.black})`;
+
+    // 促销剩余 + 十连按钮价格动态更新
+    const promo = currentPromo();
+    const remain = promoRemaining();
+    const promoRow = document.getElementById('promo-row');
+    const promoEl = document.getElementById('s-promoRemain');
+    if (promo) {
+      if (promoRow) promoRow.style.display = '';
+      if (promoEl) {
+        if (!state.promoEnabled) {
+          promoEl.innerHTML = `<span style="opacity:0.4;">— </span><span class="exp" style="font-size:11px;">(已关闭·原价)</span>`;
+        } else if (remain > 0) {
+          promoEl.innerHTML = `<span style="color:#ffb74d;">${remain}</span> / ${promo.limit} <span class="exp" style="font-size:11px;">(8折)</span>`;
+        } else {
+          promoEl.innerHTML = `<span style="opacity:0.55;">0 / ${promo.limit}</span> <span class="exp" style="font-size:11px;">(已用完·原价)</span>`;
+        }
+      }
+    } else {
+      if (promoRow) promoRow.style.display = 'none';
+    }
+
+    const btn1  = document.getElementById('btn-1');
+    const btn10 = document.getElementById('btn-10');
+    // 每个吧台的按钮文本（默认 = 新手/常驻/织梦弦音 的"来一杯 / 来十杯"）
+    const buttons = cfg.buttons || { single: '来一杯（1 抽）', ten: '来十杯（10 抽）' };
+    if (btn1)  btn1.innerHTML  = `${coinHtml} ${cfg.cost.single} · ${buttons.single}`;
+    if (btn10) {
+      const p = tenPullPrice();
+      const isPromo = promo && state.promoEnabled && remain > 0;
+      // 若 tenLabel 以"）"结尾且当前 banner 有 promo，则在括号内插入 8折 / 原价 后缀。
+      // 否则（如噼噜的旧日秘藏的"寻找 10 次"）不添加任何 promo 后缀。
+      let tenText = buttons.ten;
+      if (promo && tenText.endsWith('）')) {
+        const suffix = isPromo ? ' · 8折' : ' · 原价';
+        tenText = tenText.slice(0, -1) + suffix + '）';
+      }
+      btn10.innerHTML = `${coinHtml} ${p} · ${tenText}`;
+    }
+  }
+
+  // 当前吧台概览信息：类别 / 摘要 / 概率提升角色
+  function renderBannerInfo() {
+    const cfg = currentBanner();
+    const catEl = document.getElementById('banner-category');
+    const summaryEl = document.getElementById('banner-summary');
+    const featuredEl = document.getElementById('banner-featured');
+    if (catEl) catEl.textContent = cfg.category;
+    if (summaryEl) summaryEl.textContent = cfg.summary;
+    if (!featuredEl) return;
+
+    if (!cfg.featured) {
+      featuredEl.innerHTML = '<div style="opacity:0.55; padding:8px 4px; font-size:12.5px;">本吧台无概率提升角色。</div>';
+      return;
+    }
+
+    const rows = [];
+    if (cfg.featured.ssr) {
+      const s = cfg.featured.ssr;
+      const items = s.items.map(n => {
+        const bgCls = tierBgClass('black');
+        return `<span class="mini-avatar ${bgCls} is-up" style="margin-right:4px;">${avatarHtml(n, 'mini')}</span><span class="tier-black" style="font-weight:600;">${n}</span>`;
+      }).join(' · ');
+      rows.push(`<div style="padding:6px 0;">
+        <div style="font-size:12px; opacity:0.75; margin-bottom:3px;">🔺 <span class="tier-black">黑券 UP</span> · 概率 ${(s.chance*100).toFixed(0)}% · ${cfg.firstSsrGuaranteed ? '首张必得 ' + s.items[0] + '；' : ''}输了下一张必得 UP</div>
+        <div>${items}</div>
+      </div>`);
+    }
+    if (cfg.featured.sr) {
+      const s = cfg.featured.sr;
+      const items = s.items.map(n => {
+        const bgCls = tierBgClass(s.tier);
+        return `<span class="mini-avatar ${bgCls} is-up" style="margin-right:4px;">${avatarHtml(n, 'mini')}</span><span class="tier-purple" style="font-weight:600;">${n}</span>`;
+      }).join(' · ');
+      rows.push(`<div style="padding:6px 0; border-top:1px dashed rgba(255,255,255,0.08);">
+        <div style="font-size:12px; opacity:0.75; margin-bottom:3px;">🔺 <span class="tier-purple">紫券 UP</span> · 概率 ${(s.chance*100).toFixed(0)}% · 输了下一张必得 UP</div>
+        <div>${items}</div>
+      </div>`);
+    }
+    featuredEl.innerHTML = rows.join('');
+  }
+
+  /* -------- 40 连试炼渲染 -------- */
+  function render40Trials() {
+    const latestBody = document.getElementById('trial-latest-body');
+    const hintEl = document.getElementById('trial-hint');
+    const countHint = document.getElementById('trial-count-hint');
+    const historyEl = document.getElementById('trial-history');
+    // Tab 被注释隐藏后，这些元素可能不存在；直接跳过渲染即可
+    if (!latestBody || !hintEl || !countHint || !historyEl) return;
+    const n = trials.history.length;
+    countHint.textContent = `（共 ${n} 次）`;
+
+    if (n === 0) {
+      hintEl.textContent = '点击"运行一次 40 连试炼"开始';
+      latestBody.innerHTML = '';
+      historyEl.textContent = '— 尚无试炼记录 —';
+      return;
+    }
+    const latest = trials.history[n - 1];
+    hintEl.textContent = `试炼 #${n} · 共 40 抽`;
+
+    // 汇总统计 + 稀有卡列表 + 40 抽紧凑网格
+    const rareItems = latest.draws.filter(d => d.tier !== 'blueShadow');
+    const rareHtml = rareItems.map(d => {
+      const cls = (d.tier === 'black') ? 'tier-black'
+                : (d.tier === 'blueShadow') ? 'tier-blue'
+                : 'tier-purple';
+      const bgCls = tierBgClass(d.tier);
+      const pity = d.pity === 'black-pity' ? ' <span class="l-note">[40保底]</span>'
+                 : d.pity === 'purple-pity' ? ' <span class="l-note">[10保底]</span>' : '';
+      return `<div class="stat-row" style="padding:5px 2px;">
+        <span class="${cls}"><span class="mini-avatar ${bgCls}${upClass(d.name)}">${avatarHtml(d.name, 'mini')}</span>#${String(d.drawNo).padStart(2,'0')} ${d.name}${pity}</span>
+      </div>`;
+    }).join('') || '<div style="opacity:0.55; padding:5px 2px;">本轮试炼未抽到任何紫券或黑券。</div>';
+
+    // 40 抽紧凑图标网格
+    const cellHtml = latest.draws.map(d => {
+      const bgCls = tierBgClass(d.tier);
+      const border = d.tier === 'black' ? '2px solid #ffb74d'
+                   : (d.tier === 'purpleSailor' || d.tier === 'purpleShadow') ? '2px solid #ce93d8'
+                   : '1px solid rgba(255,255,255,0.08)';
+      return `<span class="mini-avatar ${bgCls}${upClass(d.name)}" title="#${d.drawNo} ${d.name}" style="width:28px; height:28px; margin:0; box-shadow:none; border:${border};">${avatarHtml(d.name, 'mini')}</span>`;
+    }).join('');
+
+    latestBody.innerHTML = `
+      <div class="stats-grid" style="margin-bottom: 10px;">
+        <div>
+          <div class="stat-row"><span class="tier-black"><strong>黑券船员</strong></span><span class="actual">×${latest.counts.black}${latest.pityBlackTriggered ? ' <span class="l-note" style="font-size:11px;">[保底触发]</span>' : ''}</span></div>
+          <div class="stat-row"><span class="tier-purple"><strong>紫券船员</strong></span><span class="actual">×${latest.counts.purpleSailor}</span></div>
+          <div class="stat-row"><span class="tier-purple"><strong>紫券往日之影</strong></span><span class="actual">×${latest.counts.purpleShadow}</span></div>
+          <div class="stat-row"><span class="tier-blue"><strong>蓝券往日之影</strong></span><span class="actual">×${latest.counts.blueShadow}</span></div>
+          <div class="stat-row"><span>紫券10保底触发</span><span class="actual">×${latest.pityPurpleTriggerCount}</span></div>
+          <div class="stat-row"><span>专属羽毛票据</span><span class="actual"><strong>${latest.feather.exclusive}</strong></span></div>
+          <div class="stat-row"><span>普通羽毛票据</span><span class="actual"><strong>${latest.feather.normal}</strong></span></div>
+        </div>
+        <div>
+          <div style="font-size:12px; opacity:0.7; margin-bottom:6px;">40 抽紧凑视图（黑券描边金色，紫券描边紫色）</div>
+          <div style="display:grid; grid-template-columns: repeat(10, 28px); gap:4px;">${cellHtml}</div>
+          <div style="font-size:12px; opacity:0.7; margin: 12px 0 4px;">本轮紫券/黑券掉落列表</div>
+          <div style="max-height: 180px; overflow-y: auto;">${rareHtml}</div>
+        </div>
+      </div>
+    `;
+
+    // 历史列表（最新在上）
+    const rows = trials.history.slice().reverse().map((t, i) => {
+      const idx = trials.history.length - i;
+      const pityMark = t.pityBlackTriggered
+        ? '<span class="l-note">[黑保底]</span>'
+        : '<span style="opacity:0.55;">自然出</span>';
+      const blackNames = t.draws.filter(d => d.tier === 'black').map(d => d.name).join('、') || '—';
+      return `<div>#${String(idx).padStart(2,'0')} <span class="l-black">黑券×${t.counts.black}</span>（${blackNames}）· <span class="l-purple">紫券×${t.counts.purpleSailor + t.counts.purpleShadow}</span> · <span class="l-blue">蓝券×${t.counts.blueShadow}</span> · ${pityMark} · 紫10保底×${t.pityPurpleTriggerCount}</div>`;
+    }).join('');
+    historyEl.innerHTML = rows;
+    historyEl.scrollTop = 0;
+  }
+
+  function renderStats() {
+    // 稀有度统计
+    const tierEl = document.getElementById('stats-tier');
+    const cbn = currentCombined();
+    if (state.totalDrawn === 0) {
+      tierEl.innerHTML = '<div style="opacity:0.55;">暂无招募记录。</div>';
+    } else {
+      const total = state.totalDrawn;
+      const cfg = currentBanner();
+      // 若本吧台无紫券船员（如噼噜的旧日秘藏），期望值全部落在紫券影上
+      const purpleSailorExp = cfg.rates.purpleSailor > 0 ? cbn.purple/2 : 0;
+      const purpleShadowExp = cfg.rates.purpleShadow > 0 && cfg.rates.purpleSailor === 0 ? cbn.purple : cbn.purple/2;
+      const rows = [
+        { label: '黑券船员',     cls: 'tier-black',  c: state.counts.black,        exp: cbn.black },
+        { label: '紫券船员',     cls: 'tier-purple', c: state.counts.purpleSailor, exp: purpleSailorExp },
+        { label: '紫券往日之影', cls: 'tier-purple', c: state.counts.purpleShadow, exp: purpleShadowExp },
+        { label: '蓝券往日之影', cls: 'tier-blue',   c: state.counts.blueShadow,   exp: cbn.blue },
+      ];
+      tierEl.innerHTML = rows.map(r => {
+        const pct = (r.c / total * 100).toFixed(2);
+        const expStr = r.exp > 0 ? `(理论 ~${r.exp.toFixed(2)}%)` : '(本池无)';
+        return `<div class="stat-row">
+          <span class="${r.cls}"><strong>${r.label}</strong> ×${r.c}</span>
+          <span class="actual">${pct}% <span class="exp">${expStr}</span></span>
+        </div>`;
+      }).join('');
+    }
+
+    // 羽毛票据统计
+    const featherEl = document.getElementById('stats-feather');
+    featherEl.innerHTML = `
+      <div class="stat-row"><span>专属羽毛票据</span><span class="actual"><strong>${state.feather.exclusive}</strong></span></div>
+      <div class="stat-row"><span>普通羽毛票据</span><span class="actual"><strong>${state.feather.normal}</strong></span></div>
+      <div class="stat-row"><span>船员秘闻</span><span class="actual"><strong>${state.feather.secrets.length}</strong></span></div>
+    `;
+
+    // 获得列表
+    const rosterEl = document.getElementById('stats-roster');
+    const entries = Object.entries(state.itemCounts);
+    if (entries.length === 0) {
+      rosterEl.innerHTML = '<div style="opacity:0.55;">尚未获得任何道具。</div>';
+    } else {
+      const tierOrder = { black: 0, purpleSailor: 1, purpleShadow: 2, blueShadow: 3 };
+      entries.sort((a, b) => {
+        const [ta, na] = a[0].split('|');
+        const [tb, nb] = b[0].split('|');
+        if (tierOrder[ta] !== tierOrder[tb]) return tierOrder[ta] - tierOrder[tb];
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return na.localeCompare(nb);
+      });
+      rosterEl.innerHTML = entries.map(([k, count]) => {
+        const [tier, name] = k.split('|');
+        const cls = (tier === 'black') ? 'tier-black'
+                  : (tier === 'blueShadow') ? 'tier-blue'
+                  : 'tier-purple';
+        const bgCls = tierBgClass(tier);
+        // 构建悬浮提示：包含每次出货的招募序号
+        const draws = state.itemDraws[k] || [];
+        const drawsHtml = draws.map(drawNumFormat).join(' · ');
+        const tooltipHtml = `
+          <div class="tt-title">${name}</div>
+          <div class="tt-sub">${tierLabelHtml(tier)} · 累计出货 ${count} 次</div>
+          <div class="tt-draws"><div style="opacity:0.6; font-size:11px; margin-bottom:3px;">出现于招募序号</div>${drawsHtml}</div>
+        `;
+        const tid = registerTooltip(tooltipHtml);
+        return `<div class="stat-row hoverable" data-hover-id="${tid}"><span class="${cls}"><span class="mini-avatar ${bgCls}${upClass(name)}">${avatarHtml(name, 'mini')}</span>${name}</span><span class="actual">×${count}</span></div>`;
+      }).join('');
+    }
+  }
+
+  function renderLog() {
+    const el = document.getElementById('log');
+    if (state.log.length === 0) {
+      el.textContent = '— 暂无招募记录 —';
+      return;
+    }
+    const lines = state.log.map(r => {
+      let cls = '';
+      let mark = '';
+      if (r.tier === 'black') { cls = 'l-black'; mark = '★★★'; }
+      else if (r.tier === 'purpleSailor' || r.tier === 'purpleShadow') { cls = 'l-purple'; mark = '★★'; }
+      else { cls = 'l-blue'; mark = '★'; }
+      let pityText = '';
+      if (r.pity === 'black-pity') pityText = ' <span class="l-note">[黑券40保底]</span>';
+      else if (r.pity === 'purple-pity') pityText = ' <span class="l-note">[紫券10保底]</span>';
+      const dup = r.reward.dupIdx > 1 ? ` <span class="l-note">(重复#${r.reward.dupIdx})</span>` : '';
+      const bgCls = tierBgClass(r.tier);
+      const icon = `<span class="mini-avatar ${bgCls}${upClass(r.name)}">${avatarHtml(r.name, 'mini')}</span>`;
+      const kindMark = r.kind === 'single' ? ' <span style="opacity:0.55; font-size:11px;">[单]</span>' : '';
+
+      // Tooltip: same rich detail as draw grid cells
+      const kindLabel = r.kind === 'single' ? '单抽' : '十连';
+      const pityInfo = r.pity === 'black-pity' ? '<div class="tt-row" style="color:#ffb74d;">⚡ 触发 40 抽黑券保底</div>'
+                     : r.pity === 'purple-pity' ? '<div class="tt-row" style="color:#ce93d8;">⚡ 触发 10 抽紫券保底</div>'
+                     : '';
+      const rewardParts = [];
+      if (r.reward.exclusive > 0) rewardParts.push(`专属票据 +${r.reward.exclusive}`);
+      if (r.reward.normal > 0)    rewardParts.push(`普通票据 +${r.reward.normal}`);
+      if (r.reward.secret)        rewardParts.push('触发船员秘闻');
+      const rewardText = rewardParts.length ? `<div class="tt-row">奖励：${rewardParts.join(' · ')}</div>` : '';
+      const tooltipHtml = `
+        <div class="tt-title">${r.name}</div>
+        <div class="tt-sub">${tierLabelHtml(r.tier)} · ${kindLabel} · ${drawNumFormat(r.drawNo)}</div>
+        <div class="tt-row">该道具此为第 <strong>${r.reward.dupIdx}</strong> 次出货</div>
+        ${pityInfo}
+        ${rewardText}
+      `;
+      const tid = registerTooltip(tooltipHtml);
+
+      return `<span class="${cls} hoverable" data-hover-id="${tid}">#${String(r.drawNo).padStart(2,'0')}${kindMark} ${mark}${icon}${r.name}</span>${pityText}${dup}`;
+    });
+    el.innerHTML = lines.join('<br>');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  /* -------- 全局悬浮提示框（用于花名册 / 招募记录 / 十连结果单格） --------
+     用法：
+       const id = registerTooltip('<div class="tt-title">标题</div>...');
+       <span class="hoverable" data-hover-id="${id}">目标</span>
+     渲染前调用 clearTooltipCache() 释放旧引用，避免内存堆积。
+  ------------------------------------------------------------------- */
+  const tooltipEl = document.createElement('div');
+  tooltipEl.className = 'global-tooltip';
+  document.body.appendChild(tooltipEl);
+  const tooltipCache = new Map();
+  let hoverIdCounter = 0;
+  function registerTooltip(html) {
+    const id = 'tt-' + (++hoverIdCounter);
+    tooltipCache.set(id, html);
+    return id;
+  }
+  function clearTooltipCache() {
+    tooltipCache.clear();
+    tooltipEl.style.display = 'none';
+  }
+  function positionTooltip(e) {
+    const pad = 14;
+    const rect = tooltipEl.getBoundingClientRect();
+    let x = e.clientX + pad;
+    let y = e.clientY + pad;
+    if (x + rect.width > window.innerWidth - 4)  x = e.clientX - rect.width - pad;
+    if (y + rect.height > window.innerHeight - 4) y = e.clientY - rect.height - pad;
+    if (x < 4) x = 4;
+    if (y < 4) y = 4;
+    tooltipEl.style.left = x + 'px';
+    tooltipEl.style.top  = y + 'px';
+  }
+  document.body.addEventListener('mouseover', (e) => {
+    const target = e.target.closest('[data-hover-id]');
+    if (!target) return;
+    const html = tooltipCache.get(target.dataset.hoverId);
+    if (!html) return;
+    tooltipEl.innerHTML = html;
+    tooltipEl.style.display = 'block';
+    positionTooltip(e);
+  });
+  document.body.addEventListener('mouseout', (e) => {
+    const target = e.target.closest('[data-hover-id]');
+    if (target && !e.relatedTarget?.closest?.('[data-hover-id]')) {
+      tooltipEl.style.display = 'none';
+    }
+  });
+  document.body.addEventListener('mousemove', (e) => {
+    if (tooltipEl.style.display === 'block') positionTooltip(e);
+  });
+
+  // 格式化：把 tier 转为可读中文标签 + 颜色 class
+  function tierLabelHtml(tier) {
+    if (tier === 'black')        return '<span class="tier-black">黑券 · 船员</span>';
+    if (tier === 'purpleSailor') return '<span class="tier-purple">紫券 · 船员</span>';
+    if (tier === 'purpleShadow') return '<span class="tier-purple">紫券 · 往日之影</span>';
+    return '<span class="tier-blue">蓝券 · 往日之影</span>';
+  }
+  function drawNumFormat(n) { return '#' + String(n).padStart(3, '0'); }
+
+  // 初始渲染
+  renderStatus();
+  renderStats();
+  renderLog();
+  renderBannerInfo();
+  render40Trials();
+
+  // 标签页切换：切换 "招募" / "批量模拟" 面板
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.tab-content').forEach(c => {
+      c.classList.toggle('hidden', c.id !== 'tab-' + tabId);
+    });
+    // 统计数据面板只与主流程 state 相关，仅在 "招募" tab 下有意义。
+    // 切换到 "批量模拟" 或其他 tab 时隐藏它，避免用户看到全空的"暂无招募记录"面板。
+    const statsPanel = document.getElementById('panel-stats');
+    if (statsPanel) statsPanel.classList.toggle('hidden', tabId !== 'gacha');
+  }
+
+  // 8 折优惠开关：由 UI 复选框控制。切换后立即刷新按钮价签与促销剩余显示。
+  function togglePromo() {
+    state.promoEnabled = document.getElementById('chk-promo').checked;
+    renderStatus();
+  }
+</script>
+</body>
+</html>
