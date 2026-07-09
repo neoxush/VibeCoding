@@ -19,8 +19,8 @@ in a browser with no build step. Used for:
 
 - **Zero dependencies**: no npm, no CDN, no server. Just `<html>` opened in-browser.
 - **~2100 lines** of HTML + CSS + JS all in `ywzh-gachasimulator.html`.
-- **~55 PNG icon assets** referenced via relative paths in `gacha-screenshots/icons/`.
-- All source screenshots kept in `gacha-screenshots/*.png` for re-cropping.
+- **~55 PNG icon assets** referenced via relative paths in `asset/icons/`.
+- All source screenshots kept in `asset/*.png` for re-cropping.
 
 ```
 project-root/
@@ -30,7 +30,7 @@ project-root/
 │   ├── SDD.md                        # ← This file
 │   └── archive/
 │       └── snapshot-single-pool.html # Pre-multi-banner milestone snapshot
-└── gacha-screenshots/
+└── asset/
     ├── Screenshot 2026-*.png         # Source screenshots (game UI captures)
     └── icons/
         ├── black-01..06.png          # Newcomer pool: 6 base SSR sailors
@@ -277,7 +277,7 @@ Performance: ~200 ms for N=1,000,000 banners (40M draws total) on modest hardwar
    newBanner: {
      id: 'newBanner',
      name: '...',
-     currency: { key, label, iconPath: 'gacha-screenshots/icons/coin-X.png' },
+     currency: { key, label, iconPath: 'asset/icons/coin-X.png' },
      pity:  { black: 40 or 80, purple: 10 },
      rates: { black: 0.008, purpleSailor: ..., purpleShadow: ..., blueShadow: ... },
      combined: { black, purple, blue },
@@ -297,13 +297,13 @@ Performance: ~200 ms for N=1,000,000 banners (40M draws total) on modest hardwar
 
 ### 6.2 Add a new item icon
 
-1. Save source screenshot into `gacha-screenshots/` (any filename).
+1. Save source screenshot into `asset/` (any filename).
 2. Crop via PowerShell + inline C# (see project git history — `[CoinChroma]::Process`
    pattern for coin-style transparent icons; `Crop-IconCentered` for character portraits).
-3. Save PNG under `gacha-screenshots/icons/<name>.png`.
+3. Save PNG under `asset/icons/<name>.png`.
 4. Add mapping to `NEW_ICON_MAP` (search that identifier in the HTML):
    ```javascript
-   '角色名': 'gacha-screenshots/icons/<name>.png'
+   '角色名': 'asset/icons/<name>.png'
    ```
 5. If the character is already in a `BANNERS[X].pools[tier]` array, `avatarHtml()`
    will pick up the icon automatically. If new, add to a pool first.

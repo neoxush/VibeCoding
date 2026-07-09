@@ -587,8 +587,8 @@
       </div>
 
       <div class="btn-row">
-        <button class="btn-single" id="btn-1" onclick="doSinglePull()"><img class="coin-icon" src="gacha-screenshots/icons/coin-silver.png" alt="银币"> 1 · 来一杯（1 抽）</button>
-        <button class="btn-draw10" id="btn-10" onclick="doTenPull()"><img class="coin-icon" src="gacha-screenshots/icons/coin-silver.png" alt="银币"> 8 · 来十杯（10 抽 · 8折）</button>
+        <button class="btn-single" id="btn-1" onclick="doSinglePull()"><img class="coin-icon" src="asset/icons/coin-silver.png" alt="银币"> 1 · 来一杯（1 抽）</button>
+        <button class="btn-draw10" id="btn-10" onclick="doTenPull()"><img class="coin-icon" src="asset/icons/coin-silver.png" alt="银币"> 8 · 来十杯（10 抽 · 8折）</button>
         <button class="btn-reset" onclick="manualReset()">重置本吧台记录</button>
       </div>
     </div>
@@ -758,7 +758,7 @@
          black / purpleSailor / purpleShadow / blueShadow → black-XX / ps-XX / pv-XX / bv-XX
   -------- */
   const PORTRAITS = {};
-  const ICON_BASE = 'gacha-screenshots/icons/';
+  const ICON_BASE = 'asset/icons/';
   const TIER_PREFIX = {
     black: 'black',
     purpleSailor: 'ps',
@@ -810,7 +810,7 @@
       name: '欢迎新船长',
       category: '新手 · 一次性吧台',
       summary: '40 抽后促销结束（不再关闭抽卡）；每 40 抽保底 1 张黑券；每 10 抽保底 1 张紫券及以上。',
-      currency: { key: 'silver', label: '银币', iconPath: 'gacha-screenshots/icons/coin-silver.png' },
+      currency: { key: 'silver', label: '银币', iconPath: 'asset/icons/coin-silver.png' },
       pity: { black: 40, purple: 10 },
       rates: { black: 0.008, purpleSailor: 0.03, purpleShadow: 0.03, blueShadow: 0.932 },
       combined: { black: 2.42, purple: 13.00, blue: 84.58 },
@@ -831,7 +831,7 @@
       name: '织梦弦音',
       category: '活动限时 · 私人吧台',
       summary: '首张黑券必得茉莉；后续 50/50 抽茉莉（输了下次保底）。SR 50/50 抽 2 位 UP 船员。80 抽保底黑券，10 抽保底紫券。',
-      currency: { key: 'gold', label: '金币', iconPath: 'gacha-screenshots/icons/coin-gold.png' },
+      currency: { key: 'gold', label: '金币', iconPath: 'asset/icons/coin-gold.png' },
       pity: { black: 80, purple: 10 },
       rates: { black: 0.008, purpleSailor: 0.03, purpleShadow: 0.03, blueShadow: 0.932 },
       combined: { black: 1.84, purple: 13.00, blue: 84.58 },
@@ -857,7 +857,7 @@
       name: '噼噜的旧日秘藏',
       category: '活动限时 · 往日之影专场',
       summary: '首张黑券必得安眠人偶；后续 75/25 抽安眠人偶（输了下次保底）。SR 50/50 抽 2 件 UP 往日之影。80 抽保底黑券，10 抽保底紫券。本池无紫券船员。',
-      currency: { key: 'piluLove', label: '噼噜的最爱', iconPath: 'gacha-screenshots/icons/coin-pilu.png' },
+      currency: { key: 'piluLove', label: '噼噜的最爱', iconPath: 'asset/icons/coin-pilu.png' },
       pity: { black: 80, purple: 10 },
       rates: { black: 0.008, purpleSailor: 0, purpleShadow: 0.06, blueShadow: 0.932 },
       combined: { black: 1.84, purple: 13.00, blue: 85.15 },
@@ -885,7 +885,7 @@
       name: '这里不散场',
       category: '常驻 · 公共吧台',
       summary: '标准常驻池；每 40 抽保底 1 张黑券，每 10 抽保底 1 张紫券及以上；本赛季轮换 SSR = 黑格（船员）+ 破碎狂想曲（往日之影，若已入驻）。',
-      currency: { key: 'silver', label: '银币', iconPath: 'gacha-screenshots/icons/coin-silver.png' },
+      currency: { key: 'silver', label: '银币', iconPath: 'asset/icons/coin-silver.png' },
       pity: { black: 40, purple: 10 },
       rates: { black: 0.008, purpleSailor: 0.03, purpleShadow: 0.03, blueShadow: 0.932 },
       combined: { black: 2.42, purple: 13.00, blue: 84.58 },
@@ -912,21 +912,21 @@
      - 噼噜的旧日秘藏 SSR 影 8 件已从 155040 / 155306 裁剪完成。 */
   const NEW_ICON_MAP = {
     // 织梦弦音 —— 新角色
-    '茉莉': 'gacha-screenshots/icons/moli.png',
-    '黑格': 'gacha-screenshots/icons/heige.png',
+    '茉莉': 'asset/icons/moli.png',
+    '黑格': 'asset/icons/heige.png',
     // 织梦弦音 —— UP 变体，共用基础角色图标（UP 徽章由 CSS 叠加）
-    '艾丝-RS':          'gacha-screenshots/icons/ps-01.png',
-    '预兆之眼-英诺森':  'gacha-screenshots/icons/ps-05.png',
+    '艾丝-RS':          'asset/icons/ps-01.png',
+    '预兆之眼-英诺森':  'asset/icons/ps-05.png',
     // 噼噜的旧日秘藏 —— 8 位 SSR 往日之影
     // pilu-01 从高分辨率立绘 155306 裁剪，其余 7 位从 155040 网格裁剪
-    '安眠人偶':      'gacha-screenshots/icons/pilu-01.png',  // UP
-    '他的战争':      'gacha-screenshots/icons/pilu-02.png',
-    '何人致哀之花':  'gacha-screenshots/icons/pilu-03.png',
-    '遗落宝石':      'gacha-screenshots/icons/pilu-04.png',
-    '文明法则':      'gacha-screenshots/icons/pilu-05.png',
-    '鱼骨串':        'gacha-screenshots/icons/pilu-06.png',
-    '缎带泪':        'gacha-screenshots/icons/pilu-07.png',
-    '破碎狂想曲':    'gacha-screenshots/icons/pilu-08.png'   // rotating (also used by 这里不散场)
+    '安眠人偶':      'asset/icons/pilu-01.png',  // UP
+    '他的战争':      'asset/icons/pilu-02.png',
+    '何人致哀之花':  'asset/icons/pilu-03.png',
+    '遗落宝石':      'asset/icons/pilu-04.png',
+    '文明法则':      'asset/icons/pilu-05.png',
+    '鱼骨串':        'asset/icons/pilu-06.png',
+    '缎带泪':        'asset/icons/pilu-07.png',
+    '破碎狂想曲':    'asset/icons/pilu-08.png'   // rotating (also used by 这里不散场)
   };
   // 先给新手池注册（保留原有的黑券/紫券/紫影/蓝影 icon-XX.png 命名）
   Object.entries(BANNERS.newcomer.pools).forEach(([poolKey, items]) => {
