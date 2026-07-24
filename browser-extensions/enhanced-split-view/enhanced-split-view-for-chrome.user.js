@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Enhanced Split View for Chrome
 // @namespace    http://tampermonkey.net/
-// @version      1.3.3
+// @version      1.3.5
 // @description  Extra control over Chrome's native split view: pin a source tab so links open on the side, with playlist, per-tab mute, and cross-tab sync.
 // @author       https://github.com/neoxush
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=google.com
@@ -23,6 +23,46 @@
 
 /* =========================================================================
  * CHANGELOG
+ *
+ * v1.3.5 — Source-local nav: catch obfuscated-class pagination
+ *   Field report: 80lv-style sites where pagination widgets use hash-obfuscated
+ *   CSS module class names (E2y4M, _2ZymR, _2pSuN, …) and CSS ::before pseudo
+ *   elements to render page numbers still triggered forward-to-Target on
+ *   v1.3.4. None of the semantic / class / aria / query signals fired because
+ *   the DOM carries no readable labels.
+ *
+ *   isSourceLocalNavigation() extended with two shape-based signals:
+ *     - Signal 6: linkURL.pathname matches /page/N/ or /pg/N/ (WordPress,
+ *       Ghost, Hugo, Jekyll, many static-site generators). Bare /p/N/ is
+ *       deliberately excluded because several blog engines use it for
+ *       individual post IDs (a content link, not pagination).
+ *     - Signal 7: anchor sits in <li> inside a <ul>/<ol> with >=3 <li>
+ *       children each wrapping an <a href>, AND anchor's own text is empty
+ *       (CSS pseudo label) OR short + non-alphabetic (number, chevron, arrow).
+ *       Preserves site nav / breadcrumbs / content link lists (those anchors
+ *       carry alphabetic word text).
+ *
+ *   Perf: HTMLCollection walk capped at 3 matches with early break, still
+ *   only on the already-rare left-click-on-anchor path. No observers, no
+ *   per-node scanning, no cost outside a click.
+ *
+ * v1.3.4 — Source tab: don't hijack in-page navigation
+ *   • handleLinkClick() now consults isSourceLocalNavigation() and lets the
+ *     click through (Source tab navigates itself) when the anchor is
+ *     same-origin AND matches at least one strong "page-list" signal:
+ *       - rel="next" / rel="prev" / rel="previous"
+ *       - role="tab" or ancestor [role="tablist"]
+ *       - inside a pagination/pager container (WordPress .page-numbers,
+ *         Bootstrap .pagination, generic .pager, [class*="pagination" i],
+ *         nav[aria-label*="page" i], etc.)
+ *       - aria-label reading like page nav ("Next", "Page 3", "Go to page…",
+ *         "First page", "Last page")
+ *       - same pathname + query-only change with a known pagination key
+ *         (page, p, pg, offset, start, from, skip, after, before)
+ *   • Cross-origin links keep forwarding as before. No new UI, no toggle.
+ *   • Perf: single compiled container selector, one closest() call, only on
+ *     the already-rare left-click-on-anchor path — no observers, no per-node
+ *     scanning. Player / playlist codepaths are untouched.
  *
  * v1.3.3 — Color system: decouple role hues from status hues
  *   • Source: green-500 (#22c55e) → emerald-500 (#10b981). Distinct from
@@ -2207,7 +2247,7 @@
                 ui.playlistPanel.style.display = showing ? 'block' : 'none';
                 if (showing) {
                     updatePlaylistUI();
-                    // Position playlist below menu. 
+                    // Position playlist below menu.
                     // Since menu is 140px wide and has 2 items, it's roughly 85px high.
                     setTimeout(() => {
                         const menuHeight = ui.menu.offsetHeight || 85;
@@ -3612,6 +3652,113 @@
         }
         toggleMenu();
     }
+    // Pagination/pager container selectors, compiled once.
+    // Kept as a single constant so we do only one .closest() traversal per click.
+    // Signals here are *structural* — they indicate the link lives inside a
+    // page-list widget (WordPress .page-numbers, Bootstrap .pagination, generic
+    // .pager, ARIA-labelled nav) and therefore navigates the Source tab itself
+    // rather than opening arbitrary content.
+    const SOURCE_LOCAL_NAV_CONTAINER_SEL =
+        'nav[aria-label*="pagin" i],' +
+        'nav[aria-label*="page" i],' +
+        '[aria-label*="pagination" i],' +
+        '[role="tablist"],' +
+        '.pagination,.pager,' +
+        '[class*="pagination" i],' +
+        '[class*="pager" i],' +
+        'ul.page-numbers';
+
+    // Query keys that, when present in a same-pathname link, signal pagination.
+    // Hoisted once so Signal 5 doesn't re-allocate per click.
+    const SOURCE_LOCAL_NAV_PAGE_QUERY_KEYS = [
+        'page', 'p', 'pg', 'offset', 'start', 'from', 'skip', 'after', 'before'
+    ];
+
+    // Heuristic: is this anchor a "navigate the Source tab in place" click
+    // (pagination, tab-strip, rel=next/prev) rather than a content link the
+    // user meant to open on the Target side? Conservative by design — a false
+    // negative just preserves today's forward-to-Target default; a false
+    // positive silently loses a forward, which is worse. We only bypass when
+    // the link is same-origin AND matches at least one strong signal.
+    function isSourceLocalNavigation(link) {
+        try {
+            const linkURL = new URL(link.href, location.href);
+            // Cross-origin links are never intra-source navigation.
+            if (linkURL.origin !== location.origin) return false;
+
+            // Signal 1: semantic rel=next / rel=prev / rel=previous (W3C).
+            const rel = (link.getAttribute('rel') || '').toLowerCase();
+            if (rel && /\b(next|prev|previous)\b/.test(rel)) return true;
+
+            // Signal 2: ARIA tab role — the link is a tab-strip switcher.
+            if (link.getAttribute('role') === 'tab') return true;
+
+            // Signal 3: sits inside a pagination / tablist / pager container.
+            // Single closest() call thanks to the compiled selector above.
+            if (link.closest(SOURCE_LOCAL_NAV_CONTAINER_SEL)) return true;
+
+            // Signal 4: the link's own aria-label reads like page nav.
+            const aria = (link.getAttribute('aria-label') || '').toLowerCase();
+            if (aria && /(^|\s)(next|previous|prev)($|\s)|\bpage\s*\d+\b|\bgo to page\b|\b(first|last)\s*page\b/.test(aria)) return true;
+
+            // Signal 5: same pathname, only the query string differs, AND the
+            // query includes a well-known pagination key. Catches sites with
+            // no semantic markup (e.g. `?page=2`, `?offset=40`).
+            if (linkURL.pathname === location.pathname && linkURL.search !== location.search) {
+                const params = linkURL.searchParams;
+                for (let i = 0; i < SOURCE_LOCAL_NAV_PAGE_QUERY_KEYS.length; i++) {
+                    if (params.has(SOURCE_LOCAL_NAV_PAGE_QUERY_KEYS[i])) return true;
+                }
+            }
+
+            // Signal 6: URL pathname matches a well-known pagination structure
+            // like /page/N/ or /pg/N/. Catches WordPress, Ghost, Hugo, Jekyll,
+            // and many static-site generators regardless of current path. We
+            // deliberately do NOT match bare /p/N/ — several blog engines use
+            // that scheme for individual post IDs (a content link, not
+            // pagination), so including it would drop legitimate forwards.
+            if (/\/(?:page|pg)\/\d+\/?$/i.test(linkURL.pathname)) return true;
+
+            // Signal 7: list-nav widget shape (obfuscated-class pagination).
+            // Anchor sits in <li> whose <ul>/<ol> parent has >=3 <li> children
+            // each containing an <a href>, AND the anchor's own visible text
+            // is either empty (CSS ::before pseudo label, e.g. 80lv) or a
+            // short non-alphabetic token (bare number "2", chevron/arrow).
+            // Preserves site nav / breadcrumbs / content link lists because
+            // those anchors carry alphabetic word text.
+            //
+            // Perf: HTMLCollection walk capped at 3 matches with early break.
+            // Runs only on the already-rare left-click-on-anchor path.
+            const parentLi = link.parentElement;
+            if (parentLi && parentLi.tagName === 'LI') {
+                const list = parentLi.parentElement;
+                if (list && (list.tagName === 'UL' || list.tagName === 'OL')) {
+                    let liLinkSiblings = 0;
+                    const kids = list.children;
+                    for (let i = 0; i < kids.length; i++) {
+                        const sib = kids[i];
+                        if (sib.tagName === 'LI' && sib.querySelector('a[href]')) {
+                            if (++liLinkSiblings >= 3) break;
+                        }
+                    }
+                    if (liLinkSiblings >= 3) {
+                        const text = (link.textContent || '').trim();
+                        // Empty text = CSS pseudo label. Short + no letters =
+                        // bare number ("2"), chevron ("‹"), arrow ("→"), etc.
+                        if (text === '' || (text.length <= 3 && !/[a-z]/i.test(text))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        } catch (err) {
+            // Malformed href / cross-realm anchors → forward as today.
+            return false;
+        }
+    }
+
     function handleLinkClick(e) {
         if (myRole !== 'source' || !myId) return;
         // Bail on non-primary buttons or modifier keys (explicit "open-in-new-tab" gestures).
@@ -3625,6 +3772,13 @@
         if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
         // Skip download links (user wants the file locally, not on target).
         if (link.hasAttribute('download')) return;
+        // Source-local page navigation (pagination, tab-strip, rel=next/prev):
+        // let the browser navigate the Source tab itself, do NOT forward to
+        // Target. Heuristic is conservative; see isSourceLocalNavigation().
+        if (isSourceLocalNavigation(link)) {
+            log('Source-local nav, skipping forward:', href);
+            return;
+        }
         // Capture link text/title for richer playlist entries downstream
         const linkTitle = (link.title || link.textContent || '').trim().slice(0, 200) || null;
         // Only intercept if we can publish; otherwise let the navigation proceed normally.
