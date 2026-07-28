@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     LivePreview - A live window preview tool for Windows.
     Shows a real-time DWM thumbnail of any running window in a floating, movable, pin-to-top overlay.
@@ -19,6 +19,125 @@
     Run with: powershell -ExecutionPolicy Bypass -File LivePreview.ps1
 #>
 
+# ============================================================
+# Console Information - Do Not Close This Window
+# ============================================================
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Write-Host ""
+Write-Host "  ============================================================" -ForegroundColor DarkCyan
+Write-Host "    LivePreview(win) - Live Window Preview Tool" -ForegroundColor Cyan
+Write-Host "  ============================================================" -ForegroundColor DarkCyan
+Write-Host ""
+Write-Host "  [!] This window keeps the LivePreview function alive." -ForegroundColor Yellow
+Write-Host "      Do NOT close this window, or the preview will stop." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  [!] 此窗口用于保持 LivePreview 实时预览功能运行。" -ForegroundColor Yellow
+Write-Host "      请勿关闭此窗口，否则预览将停止工作。" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  ============================================================" -ForegroundColor DarkCyan
+Write-Host ""
+
+# ============================================================
+# Environment & System Pre-check
+# ============================================================
+$script:checksPassed = $true
+$script:checkErrors = @()
+
+# 1. Check OS - Windows Vista (6.0) or later required for DWM Thumbnail API
+$osVersion = [System.Environment]::OSVersion
+if ($osVersion.Platform -ne [System.PlatformID]::Win32NT) {
+    $script:checkErrors += "This tool only runs on Windows (requires Win32NT platform)."
+    $script:checksPassed = $false
+}
+elseif ($osVersion.Version.Major -lt 6) {
+    $script:checkErrors += "Windows Vista or later is required (detected: $($osVersion.VersionString)). DWM Thumbnail API is not available."
+    $script:checksPassed = $false
+}
+
+# 2. Check if Desktop Window Manager (DWM) service is running
+try {
+    $dwmService = Get-Service -Name "uxsms" -ErrorAction Stop
+    if ($dwmService.Status -ne "Running") {
+        $script:checkErrors += "Desktop Window Manager service (uxsms) is not running. DWM is required for live thumbnails."
+        $script:checksPassed = $false
+    }
+} catch {
+    # On Windows 8+, DWM cannot be disabled, so missing service check is acceptable
+    if ([System.Environment]::OSVersion.Version.Major -lt 6 -or
+        ([System.Environment]::OSVersion.Version.Major -eq 6 -and [System.Environment]::OSVersion.Version.Minor -lt 2)) {
+        $script:checkErrors += "Cannot verify Desktop Window Manager service. DWM may not be available."
+        $script:checksPassed = $false
+    }
+}
+
+# 3. Check PowerShell version (need 3.0+ for reliable WPF support)
+if ($PSVersionTable.PSVersion.Major -lt 3) {
+    $script:checkErrors += "PowerShell 3.0 or later is required (detected: $($PSVersionTable.PSVersion)). Please update PowerShell."
+    $script:checksPassed = $false
+}
+
+# 4. Check required .NET assemblies are loadable
+$requiredAssemblies = @("PresentationFramework", "PresentationCore", "WindowsBase", "System.Windows.Forms")
+foreach ($asm in $requiredAssemblies) {
+    try {
+        [void][System.Reflection.Assembly]::LoadWithPartialName($asm)
+        if (-not ([System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq $asm })) {
+            throw "Assembly not found"
+        }
+    } catch {
+        $script:checkErrors += "Required .NET assembly '$asm' is not available. Ensure .NET Framework 3.5+ or .NET Desktop Runtime is installed."
+        $script:checksPassed = $false
+    }
+}
+
+# 5. Check DWM composition is enabled (relevant for Vista/7 where it can be disabled)
+if ($script:checksPassed) {
+    try {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class DwmCheck {
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmIsCompositionEnabled(out bool enabled);
+}
+"@ -ErrorAction Stop
+        $compositionEnabled = $false
+        $hr = [DwmCheck]::DwmIsCompositionEnabled([ref]$compositionEnabled)
+        if ($hr -eq 0 -and -not $compositionEnabled) {
+            $script:checkErrors += "DWM Desktop Composition is disabled. Please enable Aero theme or Desktop Composition in system settings."
+            $script:checksPassed = $false
+        }
+    } catch {
+        # If we can't check, dwmapi.dll might not be available at all
+        $script:checkErrors += "Cannot load dwmapi.dll. DWM Thumbnail API may not be available on this system."
+        $script:checksPassed = $false
+    }
+}
+
+# Report results and exit if checks failed
+if (-not $script:checksPassed) {
+    Write-Host ""
+    Write-Host "  [X] Environment check FAILED / 环境检查未通过" -ForegroundColor Red
+    Write-Host "  ============================================================" -ForegroundColor Red
+    foreach ($err in $script:checkErrors) {
+        Write-Host "  - $err" -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "  LivePreview cannot start. Please fix the issues above."
+    Write-Host "  LivePreview 无法启动，请先解决以上问题。"
+    Write-Host ""
+    Write-Host "  Press any key to exit / 按任意键退出..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    exit 1
+}
+
+Write-Host "  [OK] Environment check passed / 环境检查通过" -ForegroundColor Green
+Write-Host "  Starting LivePreview... / 正在启动 LivePreview..." -ForegroundColor Cyan
+Write-Host ""
+
+# ============================================================
+# Main Program Start
+# ============================================================
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
@@ -249,48 +368,53 @@ public class NativeMethods {
 "@
 
 # ============================================================
-# Create Main Window
+# Global State & Helpers
 # ============================================================
-$reader = [System.Xml.XmlNodeReader]::new($MainXaml)
-$mainWindow = [System.Windows.Markup.XamlReader]::Load($reader)
-
-$titleBar      = $mainWindow.FindName("TitleBar")
-$titleText     = $mainWindow.FindName("TitleText")
-$btnSelect     = $mainWindow.FindName("BtnSelect")
-$btnNew        = $mainWindow.FindName("BtnNew")
-$btnPin        = $mainWindow.FindName("BtnPin")
-$btnClose      = $mainWindow.FindName("BtnClose")
-$previewBorder = $mainWindow.FindName("PreviewBorder")
-$placeholderText = $mainWindow.FindName("PlaceholderText")
-$outerBorder   = $mainWindow.FindName("OuterBorder")
-
-# State variables
-$script:thumbnailHandle = [IntPtr]::Zero
-$script:targetHandle    = [IntPtr]::Zero
-$script:isPinned        = $false
-$script:timer           = $null
-$script:titleBarVisible = $true
-$script:scriptPath      = $PSCommandPath
-
-# Mini size constants (the compact monitoring size)
+$script:firstTargetSet  = $false
+$script:openWindowCount = 0
 $script:MINI_WIDTH  = 320
 $script:MINI_HEIGHT = 210
 
+# Console window helper for minimizing cmd.exe
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class ConsoleHelper {
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetConsoleWindow();
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    public const int SW_MINIMIZE = 6;
+    public static void MinimizeConsole() {
+        IntPtr hwnd = GetConsoleWindow();
+        if (hwnd != IntPtr.Zero) {
+            ShowWindow(hwnd, SW_MINIMIZE);
+        }
+    }
+}
+"@
+
 # ============================================================
-# Helper Functions
+# Per-Window Functions (operate on context stored in Window.Tag)
 # ============================================================
-function Update-Thumbnail {
-    if ($script:thumbnailHandle -eq [IntPtr]::Zero) { return }
+
+function Get-Ctx($sender) {
+    $wnd = [System.Windows.Window]::GetWindow($sender)
+    if ($null -eq $wnd) { return $null }
+    return $wnd.Tag
+}
+
+function Update-Thumbnail($ctx) {
+    if ($null -eq $ctx -or $ctx.ThumbnailHandle -eq [IntPtr]::Zero) { return }
+    $wnd = $ctx.Window
+    $previewBorder = $ctx.PreviewBorder
 
     $sourceSize = New-Object PSIZE
-    $hr = [NativeMethods]::DwmQueryThumbnailSourceSize($script:thumbnailHandle, [ref]$sourceSize)
+    $hr = [NativeMethods]::DwmQueryThumbnailSourceSize($ctx.ThumbnailHandle, [ref]$sourceSize)
     if ($hr -ne 0) { return }
 
-    # Get the preview area position relative to the window
-    $point = $previewBorder.TranslatePoint([System.Windows.Point]::new(0, 0), $mainWindow)
-
-    # Account for DPI
-    $source = [System.Windows.PresentationSource]::FromVisual($mainWindow)
+    $point = $previewBorder.TranslatePoint([System.Windows.Point]::new(0, 0), $wnd)
+    $source = [System.Windows.PresentationSource]::FromVisual($wnd)
     $dpiX = 1.0; $dpiY = 1.0
     if ($null -ne $source) {
         $dpiX = $source.CompositionTarget.TransformToDevice.M11
@@ -302,14 +426,12 @@ function Update-Thumbnail {
     $destRight  = [int](($point.X + $previewBorder.ActualWidth) * $dpiX)
     $destBottom = [int](($point.Y + $previewBorder.ActualHeight) * $dpiY)
 
-    # Maintain aspect ratio
     $destWidth  = $destRight - $destLeft
     $destHeight = $destBottom - $destTop
 
     if ($sourceSize.y -gt 0 -and $destHeight -gt 0) {
         $sourceAspect = [double]$sourceSize.x / [double]$sourceSize.y
         $destAspect   = [double]$destWidth / [double]$destHeight
-
         if ($sourceAspect -gt $destAspect) {
             $newHeight = [int]($destWidth / $sourceAspect)
             $offset = [int](($destHeight - $newHeight) / 2)
@@ -329,28 +451,25 @@ function Update-Thumbnail {
     $props.fVisible = $true
     $props.fSourceClientAreaOnly = $false
     $props.opacity = 255
-
-    [void][NativeMethods]::DwmUpdateThumbnailProperties($script:thumbnailHandle, [ref]$props)
+    [void][NativeMethods]::DwmUpdateThumbnailProperties($ctx.ThumbnailHandle, [ref]$props)
 }
 
-function Unregister-Thumbnail {
-    if ($script:thumbnailHandle -ne [IntPtr]::Zero) {
-        [void][NativeMethods]::DwmUnregisterThumbnail($script:thumbnailHandle)
-        $script:thumbnailHandle = [IntPtr]::Zero
+function Unregister-Thumbnail($ctx) {
+    if ($null -eq $ctx) { return }
+    if ($ctx.ThumbnailHandle -ne [IntPtr]::Zero) {
+        [void][NativeMethods]::DwmUnregisterThumbnail($ctx.ThumbnailHandle)
+        $ctx.ThumbnailHandle = [IntPtr]::Zero
     }
 }
 
-function Set-TargetWindow {
-    param([IntPtr]$Handle, [string]$Title)
+function Set-TargetWindow($ctx, [IntPtr]$Handle, [string]$Title) {
+    Unregister-Thumbnail $ctx
 
-    Unregister-Thumbnail
+    $ctx.TargetHandle = $Handle
+    $ctx.TitleText.Text = "  $Title"
+    $ctx.PlaceholderText.Visibility = [System.Windows.Visibility]::Collapsed
 
-    $script:targetHandle = $Handle
-    $titleText.Text = "  $Title"
-    $placeholderText.Visibility = [System.Windows.Visibility]::Collapsed
-
-    # Get our window handle
-    $helper = [System.Windows.Interop.WindowInteropHelper]::new($mainWindow)
+    $helper = [System.Windows.Interop.WindowInteropHelper]::new($ctx.Window)
     $thisHandle = $helper.Handle
 
     $thumbOut = [IntPtr]::Zero
@@ -359,14 +478,20 @@ function Set-TargetWindow {
         [System.Windows.MessageBox]::Show("Failed to register thumbnail. Error: 0x$($hr.ToString('X8'))`nThe target window may have been closed.", "Error")
         return
     }
-    $script:thumbnailHandle = $thumbOut
-    Update-Thumbnail
+    $ctx.ThumbnailHandle = $thumbOut
+    Update-Thumbnail $ctx
+
+    # Minimize cmd.exe on first target selection (any window)
+    if (-not $script:firstTargetSet) {
+        $script:firstTargetSet = $true
+        [ConsoleHelper]::MinimizeConsole()
+    }
 }
 
-function Show-WindowPicker {
+function Show-WindowPicker($ctx) {
     $reader2 = [System.Xml.XmlNodeReader]::new($PickerXaml)
     $picker = [System.Windows.Markup.XamlReader]::Load($reader2)
-    $picker.Owner = $mainWindow
+    $picker.Owner = $ctx.Window
 
     $searchBox  = $picker.FindName("SearchBox")
     $windowList = $picker.FindName("WindowList")
@@ -374,33 +499,32 @@ function Show-WindowPicker {
     $btnCancel2 = $picker.FindName("BtnCancel")
     $btnRefresh = $picker.FindName("BtnRefresh")
 
-    $script:allWindows = $null
-    $script:pickerResult = $null
+    $script:_pickerWindows = $null
+    $script:_pickerResult  = $null
 
-    $refreshList = {
-        $helper = [System.Windows.Interop.WindowInteropHelper]::new($mainWindow)
+    $refreshAction = {
+        $helper = [System.Windows.Interop.WindowInteropHelper]::new($ctx.Window)
         $excludeHandle = $helper.Handle
-        $script:allWindows = [NativeMethods]::GetVisibleWindows($excludeHandle)
+        $script:_pickerWindows = [NativeMethods]::GetVisibleWindows($excludeHandle)
         $windowList.Items.Clear()
-        foreach ($w in $script:allWindows) {
+        foreach ($w in $script:_pickerWindows) {
             [void]$windowList.Items.Add($w.Value)
         }
     }
 
-    & $refreshList
+    & $refreshAction
 
-    $filterList = {
+    $searchBox.Add_TextChanged({
         $filter = $searchBox.Text.ToLowerInvariant().Trim()
         $windowList.Items.Clear()
-        foreach ($w in $script:allWindows) {
+        foreach ($w in $script:_pickerWindows) {
             if ([string]::IsNullOrEmpty($filter) -or $w.Value.ToLowerInvariant().Contains($filter)) {
                 [void]$windowList.Items.Add($w.Value)
             }
         }
-    }
+    })
 
-    $searchBox.Add_TextChanged({ & $filterList })
-    $btnRefresh.Add_Click({ & $refreshList })
+    $btnRefresh.Add_Click({ & $refreshAction })
 
     $windowList.Add_SelectionChanged({
         $btnOk2.IsEnabled = ($windowList.SelectedIndex -ge 0)
@@ -409,9 +533,9 @@ function Show-WindowPicker {
     $windowList.Add_MouseDoubleClick({
         if ($windowList.SelectedIndex -ge 0) {
             $selectedTitle = $windowList.SelectedItem.ToString()
-            foreach ($w in $script:allWindows) {
+            foreach ($w in $script:_pickerWindows) {
                 if ($w.Value -eq $selectedTitle) {
-                    $script:pickerResult = $w
+                    $script:_pickerResult = $w
                     break
                 }
             }
@@ -423,9 +547,9 @@ function Show-WindowPicker {
     $btnOk2.Add_Click({
         if ($windowList.SelectedIndex -ge 0) {
             $selectedTitle = $windowList.SelectedItem.ToString()
-            foreach ($w in $script:allWindows) {
+            foreach ($w in $script:_pickerWindows) {
                 if ($w.Value -eq $selectedTitle) {
-                    $script:pickerResult = $w
+                    $script:_pickerResult = $w
                     break
                 }
             }
@@ -442,195 +566,227 @@ function Show-WindowPicker {
     $searchBox.Focus() | Out-Null
 
     $result = $picker.ShowDialog()
-    if ($result -eq $true -and $null -ne $script:pickerResult) {
-        Set-TargetWindow -Handle $script:pickerResult.Key -Title $script:pickerResult.Value
+    if ($result -eq $true -and $null -ne $script:_pickerResult) {
+        Set-TargetWindow $ctx $script:_pickerResult.Key $script:_pickerResult.Value
     }
 }
 
-# ============================================================
-# Event Handlers
-# ============================================================
-
-# Title bar drag / double-click to snap to mini size
-$titleBar.Add_MouseLeftButtonDown({
-    param($sender, $e)
-    if ($e.ClickCount -eq 2) {
-        # Snap to mini monitoring size, preserving source aspect ratio
-        if ($script:thumbnailHandle -ne [IntPtr]::Zero) {
-            $sourceSize = New-Object PSIZE
-            $hr = [NativeMethods]::DwmQueryThumbnailSourceSize($script:thumbnailHandle, [ref]$sourceSize)
-            if ($hr -eq 0 -and $sourceSize.x -gt 0 -and $sourceSize.y -gt 0) {
-                # Calculate mini size that fits within MINI_WIDTH x MINI_HEIGHT
-                # while preserving the source aspect ratio
-                $titleBarHeight = 30
-                $availableHeight = $script:MINI_HEIGHT - $titleBarHeight
-                $sourceAspect = [double]$sourceSize.x / [double]$sourceSize.y
-
-                # Fit within the mini box
-                $fitWidth = $script:MINI_WIDTH
-                $fitHeight = [int]($fitWidth / $sourceAspect)
-
-                if ($fitHeight -gt $availableHeight) {
-                    $fitHeight = $availableHeight
-                    $fitWidth = [int]($fitHeight * $sourceAspect)
-                }
-
-                $mainWindow.Width = [Math]::Max($fitWidth + 2, 160)
-                $mainWindow.Height = [Math]::Max($fitHeight + $titleBarHeight + 2, 120)
-            }
-        } else {
-            # No preview active - reset to default mini size
-            $mainWindow.Width = $script:MINI_WIDTH
-            $mainWindow.Height = $script:MINI_HEIGHT
-        }
-    } else {
-        $mainWindow.DragMove()
-    }
-})
-
-# Right-click to pick window
-$titleBar.Add_MouseRightButtonDown({
-    Show-WindowPicker
-})
-
-# Select window button
-$btnSelect.Add_Click({ Show-WindowPicker })
-
-# New instance button - spawn a new independent preview window
-$btnNew.Add_Click({
-    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$($script:scriptPath)`""
-})
-
-# Pin button
-$btnPin.Add_Click({
-    $script:isPinned = -not $script:isPinned
-    $mainWindow.Topmost = $script:isPinned
-    if ($script:isPinned) {
-        $btnPin.Foreground = [System.Windows.Media.Brushes]::Gold
-        $btnPin.ToolTip = "Unpin from Top (Ctrl+T)"
-    } else {
-        $btnPin.Foreground = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(204,204,204))
-        $btnPin.ToolTip = "Pin on Top (Ctrl+T)"
-    }
-})
-
-# Close button
-$btnClose.Add_Click({
-    $mainWindow.Close()
-})
-
-# Keyboard shortcuts
-$mainWindow.Add_KeyDown({
-    param($sender, $e)
-    if ($e.Key -eq [System.Windows.Input.Key]::W -and
-        [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
-        Show-WindowPicker
-        $e.Handled = $true
-    }
-    elseif ($e.Key -eq [System.Windows.Input.Key]::N -and
-            [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
-        $btnNew.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        $e.Handled = $true
-    }
-    elseif ($e.Key -eq [System.Windows.Input.Key]::T -and
-            [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
-        $btnPin.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
-        $e.Handled = $true
-    }
-    elseif ($e.Key -eq [System.Windows.Input.Key]::Escape) {
-        $mainWindow.Close()
-    }
-})
-
-# Size changed - update thumbnail
-$mainWindow.Add_SizeChanged({ Update-Thumbnail })
-
-# ============================================================
-# Title bar auto-hide: hide when mouse leaves, show on enter
-# When hidden, resize window to exactly fit the source aspect ratio (no black bars)
-# ============================================================
-function Show-TitleBar {
-    if ($script:titleBarVisible) { return }
-    $script:titleBarVisible = $true
-    $titleBar.Visibility = [System.Windows.Visibility]::Visible
-    # Restore corner radius: title bar has top corners, preview has bottom corners
-    $previewBorder.CornerRadius = [System.Windows.CornerRadius]::new(0, 0, 6, 6)
-
-    # Grow window height to accommodate title bar
-    $mainWindow.Height = $mainWindow.Height + 28
-
-    Update-Thumbnail
+function Show-TitleBar($ctx) {
+    if ($ctx.TitleBarVisible) { return }
+    $ctx.TitleBarVisible = $true
+    $ctx.TitleBar.Visibility = [System.Windows.Visibility]::Visible
+    $ctx.PreviewBorder.CornerRadius = [System.Windows.CornerRadius]::new(0, 0, 6, 6)
+    $ctx.Window.Height = $ctx.Window.Height + 28
+    Update-Thumbnail $ctx
 }
 
-function Hide-TitleBar {
-    if (-not $script:titleBarVisible) { return }
-    $script:titleBarVisible = $false
-    $titleBar.Visibility = [System.Windows.Visibility]::Collapsed
-    # Preview now takes the full window - give it all rounded corners
-    $previewBorder.CornerRadius = [System.Windows.CornerRadius]::new(6)
+function Hide-TitleBar($ctx) {
+    if (-not $ctx.TitleBarVisible) { return }
+    $ctx.TitleBarVisible = $false
+    $ctx.TitleBar.Visibility = [System.Windows.Visibility]::Collapsed
+    $ctx.PreviewBorder.CornerRadius = [System.Windows.CornerRadius]::new(6)
 
-    # Resize window to exactly match source aspect ratio (no letterboxing)
-    if ($script:thumbnailHandle -ne [IntPtr]::Zero) {
+    if ($ctx.ThumbnailHandle -ne [IntPtr]::Zero) {
         $sourceSize = New-Object PSIZE
-        $hr = [NativeMethods]::DwmQueryThumbnailSourceSize($script:thumbnailHandle, [ref]$sourceSize)
+        $hr = [NativeMethods]::DwmQueryThumbnailSourceSize($ctx.ThumbnailHandle, [ref]$sourceSize)
         if ($hr -eq 0 -and $sourceSize.x -gt 0 -and $sourceSize.y -gt 0) {
-            # Account for DPI
-            $source = [System.Windows.PresentationSource]::FromVisual($mainWindow)
+            $source = [System.Windows.PresentationSource]::FromVisual($ctx.Window)
             $dpiX = 1.0; $dpiY = 1.0
             if ($null -ne $source) {
                 $dpiX = $source.CompositionTarget.TransformToDevice.M11
                 $dpiY = $source.CompositionTarget.TransformToDevice.M22
             }
-
             $sourceAspect = [double]$sourceSize.x / [double]$sourceSize.y
-
-            # Use current window width, calculate exact height to fill without black bars
-            # Subtract border thickness (1px each side = 2px total)
-            $contentWidth = $mainWindow.Width - 2
+            $contentWidth = $ctx.Window.Width - 2
             $exactHeight = $contentWidth / $sourceAspect
-            # Add back border
-            $mainWindow.Height = [Math]::Max($exactHeight + 2, 120)
+            $ctx.Window.Height = [Math]::Max($exactHeight + 2, 120)
         }
     } else {
-        # No preview - just shrink by title bar height
-        $mainWindow.Height = [Math]::Max($mainWindow.Height - 28, 120)
+        $ctx.Window.Height = [Math]::Max($ctx.Window.Height - 28, 120)
     }
-
-    Update-Thumbnail
+    Update-Thumbnail $ctx
 }
 
-$mainWindow.Add_MouseEnter({
-    Show-TitleBar
-})
+# ============================================================
+# New-PreviewWindow: Creates an independent preview window
+# ============================================================
+function New-PreviewWindow {
+    $reader = [System.Xml.XmlNodeReader]::new($MainXaml)
+    $wnd = [System.Windows.Markup.XamlReader]::Load($reader)
 
-$mainWindow.Add_MouseLeave({
-    Hide-TitleBar
-})
+    # Build per-window context (stored in Window.Tag)
+    $ctx = @{
+        Window          = $wnd
+        TitleBar        = $wnd.FindName("TitleBar")
+        TitleText       = $wnd.FindName("TitleText")
+        BtnSelect       = $wnd.FindName("BtnSelect")
+        BtnNew          = $wnd.FindName("BtnNew")
+        BtnPin          = $wnd.FindName("BtnPin")
+        BtnClose        = $wnd.FindName("BtnClose")
+        PreviewBorder   = $wnd.FindName("PreviewBorder")
+        PlaceholderText = $wnd.FindName("PlaceholderText")
+        OuterBorder     = $wnd.FindName("OuterBorder")
+        ThumbnailHandle = [IntPtr]::Zero
+        TargetHandle    = [IntPtr]::Zero
+        IsPinned        = $false
+        Timer           = $null
+        TitleBarVisible = $true
+    }
+    $wnd.Tag = $ctx
 
-# Also handle window deactivation/activation
-$mainWindow.Add_Deactivated({
-    Hide-TitleBar
-})
+    # ==========================================================
+    # Event Handlers (all use Get-Ctx to retrieve per-window state)
+    # ==========================================================
 
-$mainWindow.Add_Activated({
-    Show-TitleBar
-})
+    # Title bar drag / double-click to snap to mini size
+    $ctx.TitleBar.Add_MouseLeftButtonDown({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        if ($e.ClickCount -eq 2) {
+            if ($c.ThumbnailHandle -ne [IntPtr]::Zero) {
+                $sourceSize = New-Object PSIZE
+                $hr = [NativeMethods]::DwmQueryThumbnailSourceSize($c.ThumbnailHandle, [ref]$sourceSize)
+                if ($hr -eq 0 -and $sourceSize.x -gt 0 -and $sourceSize.y -gt 0) {
+                    $titleBarHeight = 30
+                    $availableHeight = $script:MINI_HEIGHT - $titleBarHeight
+                    $sourceAspect = [double]$sourceSize.x / [double]$sourceSize.y
+                    $fitWidth = $script:MINI_WIDTH
+                    $fitHeight = [int]($fitWidth / $sourceAspect)
+                    if ($fitHeight -gt $availableHeight) {
+                        $fitHeight = $availableHeight
+                        $fitWidth = [int]($fitHeight * $sourceAspect)
+                    }
+                    $c.Window.Width = [Math]::Max($fitWidth + 2, 160)
+                    $c.Window.Height = [Math]::Max($fitHeight + $titleBarHeight + 2, 120)
+                }
+            } else {
+                $c.Window.Width = $script:MINI_WIDTH
+                $c.Window.Height = $script:MINI_HEIGHT
+            }
+        } else {
+            $c.Window.DragMove()
+        }
+    })
 
-# Window loaded - start update timer
-$mainWindow.Add_Loaded({
-    $script:timer = [System.Windows.Threading.DispatcherTimer]::new()
-    $script:timer.Interval = [TimeSpan]::FromMilliseconds(100)
-    $script:timer.Add_Tick({ Update-Thumbnail })
-    $script:timer.Start()
-})
+    # Right-click to pick window
+    $ctx.TitleBar.Add_MouseRightButtonDown({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        Show-WindowPicker $c
+    })
 
-# Window closed - cleanup
-$mainWindow.Add_Closed({
-    if ($null -ne $script:timer) { $script:timer.Stop() }
-    Unregister-Thumbnail
-})
+    # Select window button
+    $ctx.BtnSelect.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        Show-WindowPicker $c
+    })
+
+    # New instance button
+    $ctx.BtnNew.Add_Click({
+        New-PreviewWindow
+    })
+
+    # Pin button
+    $ctx.BtnPin.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        $c.IsPinned = -not $c.IsPinned
+        $c.Window.Topmost = $c.IsPinned
+        if ($c.IsPinned) {
+            $c.BtnPin.Foreground = [System.Windows.Media.Brushes]::Gold
+            $c.BtnPin.ToolTip = "Unpin from Top (Ctrl+T)"
+        } else {
+            $c.BtnPin.Foreground = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(204,204,204))
+            $c.BtnPin.ToolTip = "Pin on Top (Ctrl+T)"
+        }
+    })
+
+    # Close button
+    $ctx.BtnClose.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        $c.Window.Close()
+    })
+
+    # Keyboard shortcuts
+    $wnd.Add_KeyDown({
+        param($sender, $e)
+        $c = $sender.Tag
+        if ($e.Key -eq [System.Windows.Input.Key]::W -and
+            [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
+            Show-WindowPicker $c
+            $e.Handled = $true
+        }
+        elseif ($e.Key -eq [System.Windows.Input.Key]::N -and
+                [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
+            New-PreviewWindow
+            $e.Handled = $true
+        }
+        elseif ($e.Key -eq [System.Windows.Input.Key]::T -and
+                [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
+            $c.BtnPin.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+            $e.Handled = $true
+        }
+        elseif ($e.Key -eq [System.Windows.Input.Key]::Escape) {
+            $c.Window.Close()
+        }
+    })
+
+    # Size changed - update thumbnail
+    $wnd.Add_SizeChanged({
+        param($sender, $e)
+        Update-Thumbnail $sender.Tag
+    })
+
+    # Title bar auto-hide
+    $wnd.Add_MouseEnter({
+        param($sender, $e)
+        Show-TitleBar $sender.Tag
+    })
+    $wnd.Add_MouseLeave({
+        param($sender, $e)
+        Hide-TitleBar $sender.Tag
+    })
+    $wnd.Add_Deactivated({
+        param($sender, $e)
+        Hide-TitleBar $sender.Tag
+    })
+    $wnd.Add_Activated({
+        param($sender, $e)
+        Show-TitleBar $sender.Tag
+    })
+
+    # Window closed - cleanup
+    $wnd.Add_Closed({
+        param($sender, $e)
+        $c = $sender.Tag
+        if ($null -ne $c.Timer) { $c.Timer.Stop() }
+        Unregister-Thumbnail $c
+        $script:openWindowCount--
+        if ($script:openWindowCount -le 0) {
+            [System.Windows.Threading.Dispatcher]::CurrentDispatcher.InvokeShutdown()
+        }
+    })
+
+    # Show window and start timer
+    $script:openWindowCount++
+    $wnd.Show()
+
+    # Timer for continuous thumbnail updates
+    $timer = [System.Windows.Threading.DispatcherTimer]::new()
+    $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+    $timer.Tag = $ctx
+    $timer.Add_Tick({
+        param($sender, $e)
+        Update-Thumbnail $sender.Tag
+    })
+    $timer.Start()
+    $ctx.Timer = $timer
+}
 
 # ============================================================
 # Launch
 # ============================================================
-$mainWindow.ShowDialog() | Out-Null
+New-PreviewWindow
+[System.Windows.Threading.Dispatcher]::Run()

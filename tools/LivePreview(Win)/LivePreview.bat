@@ -1,2 +1,4 @@
 @echo off
-powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0LivePreview.ps1"
+chcp 65001 >nul 2>nul
+title LivePreview - Keep This Window Open
+powershell -ExecutionPolicy Bypass -File "%~dp0LivePreview.ps1"
