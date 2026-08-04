@@ -375,6 +375,8 @@ public class NativeMethods {
 # ============================================================
 $script:firstTargetSet  = $false
 $script:openWindowCount = 0
+$script:instanceCounter = 0
+$script:hostPid         = $PID
 $script:MINI_WIDTH  = 320
 $script:MINI_HEIGHT = 210
 
@@ -469,7 +471,14 @@ function Set-TargetWindow($ctx, [IntPtr]$Handle, [string]$Title) {
     Unregister-Thumbnail $ctx
 
     $ctx.TargetHandle = $Handle
-    $ctx.TitleText.Text = "  $Title"
+
+    # Get target window's PID for display
+    $targetPid = 0
+    [void][NativeMethods]::GetWindowThreadProcessId($Handle, [ref]$targetPid)
+
+    $formatted = "LivePreview($($ctx.InstanceTag)) - $Title ($targetPid)"
+    $ctx.TitleText.Text = "  $formatted"
+    $ctx.Window.Title = $formatted
     $ctx.PlaceholderText.Visibility = [System.Windows.Visibility]::Collapsed
 
     $helper = [System.Windows.Interop.WindowInteropHelper]::new($ctx.Window)
@@ -617,9 +626,17 @@ function New-PreviewWindow {
     $reader = [System.Xml.XmlNodeReader]::new($MainXaml)
     $wnd = [System.Windows.Markup.XamlReader]::Load($reader)
 
+    $script:instanceCounter++
+    $instanceTag = "$script:hostPid#$script:instanceCounter"
+    $wnd.Title = "LivePreview($instanceTag)"
+
+    $titleText = $wnd.FindName("TitleText")
+    $titleText.Text = "  LivePreview($instanceTag) - Right-click to select window"
+
     # Build per-window context (stored in Window.Tag)
     $ctx = @{
         Window          = $wnd
+        InstanceTag     = $instanceTag
         TitleBar        = $wnd.FindName("TitleBar")
         TitleText       = $wnd.FindName("TitleText")
         BtnSelect       = $wnd.FindName("BtnSelect")
