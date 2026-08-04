@@ -300,6 +300,9 @@ public class NativeMethods {
                         <Button Name="BtnNew" Content="&#x2795;" ToolTip="New Instance (Ctrl+N)"
                                 Width="26" Height="20" FontSize="10"
                                 Background="Transparent" Foreground="#CCCCCC" BorderThickness="0" Cursor="Hand"/>
+                        <Button Name="BtnScale" Content="1x" ToolTip="Scale Size (Ctrl+S) - cycles 1x/2x/3x/4x"
+                                Width="26" Height="20" FontSize="10" FontWeight="Bold"
+                                Background="Transparent" Foreground="#CCCCCC" BorderThickness="0" Cursor="Hand"/>
                         <Button Name="BtnPin" Content="&#x1F4CC;" ToolTip="Pin on Top (Ctrl+T)"
                                 Width="26" Height="20" FontSize="10"
                                 Background="Transparent" Foreground="#CCCCCC" BorderThickness="0" Cursor="Hand"/>
@@ -621,6 +624,7 @@ function New-PreviewWindow {
         TitleText       = $wnd.FindName("TitleText")
         BtnSelect       = $wnd.FindName("BtnSelect")
         BtnNew          = $wnd.FindName("BtnNew")
+        BtnScale        = $wnd.FindName("BtnScale")
         BtnPin          = $wnd.FindName("BtnPin")
         BtnClose        = $wnd.FindName("BtnClose")
         PreviewBorder   = $wnd.FindName("PreviewBorder")
@@ -631,6 +635,10 @@ function New-PreviewWindow {
         IsPinned        = $false
         Timer           = $null
         TitleBarVisible = $true
+        ScaleIndex      = 0
+        ScaleFactors    = @(1, 2, 3, 4)
+        BaseWidth       = 320.0
+        BaseHeight      = 210.0
     }
     $wnd.Tag = $ctx
 
@@ -663,6 +671,12 @@ function New-PreviewWindow {
                 $c.Window.Width = $script:MINI_WIDTH
                 $c.Window.Height = $script:MINI_HEIGHT
             }
+            # Reset scale state: this new size becomes the 1x reference
+            $c.ScaleIndex = 0
+            $c.BaseWidth  = $c.Window.Width
+            $c.BaseHeight = $c.Window.Height
+            $c.BaseCaptured = $true
+            $c.BtnScale.Content = "1x"
         } else {
             $c.Window.DragMove()
         }
@@ -685,6 +699,26 @@ function New-PreviewWindow {
     # New instance button
     $ctx.BtnNew.Add_Click({
         New-PreviewWindow
+    })
+
+    # Scale button - cycles through 1x/2x/3x/5x, per-tab (per-window) independent
+    $ctx.BtnScale.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        # Snapshot base size on first use so 1x always maps to that reference
+        if (-not $c.ContainsKey('BaseCaptured') -or -not $c.BaseCaptured) {
+            # Use current size divided by current scale factor as the true 1x base
+            $curFactor = $c.ScaleFactors[$c.ScaleIndex]
+            $c.BaseWidth  = $c.Window.Width  / $curFactor
+            $c.BaseHeight = $c.Window.Height / $curFactor
+            $c.BaseCaptured = $true
+        }
+        $c.ScaleIndex = ($c.ScaleIndex + 1) % $c.ScaleFactors.Count
+        $factor = $c.ScaleFactors[$c.ScaleIndex]
+        $c.BtnScale.Content = "$($factor)x"
+        $c.Window.Width  = $c.BaseWidth  * $factor
+        $c.Window.Height = $c.BaseHeight * $factor
+        Update-Thumbnail $c
     })
 
     # Pin button
@@ -721,6 +755,11 @@ function New-PreviewWindow {
         elseif ($e.Key -eq [System.Windows.Input.Key]::N -and
                 [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
             New-PreviewWindow
+            $e.Handled = $true
+        }
+        elseif ($e.Key -eq [System.Windows.Input.Key]::S -and
+                [System.Windows.Input.Keyboard]::Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
+            $c.BtnScale.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
             $e.Handled = $true
         }
         elseif ($e.Key -eq [System.Windows.Input.Key]::T -and
