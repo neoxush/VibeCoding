@@ -476,9 +476,32 @@ function Set-TargetWindow($ctx, [IntPtr]$Handle, [string]$Title) {
     $targetPid = 0
     [void][NativeMethods]::GetWindowThreadProcessId($Handle, [ref]$targetPid)
 
-    $formatted = "LivePreview($($ctx.InstanceTag)) - $Title ($targetPid)"
-    $ctx.TitleText.Text = "  $formatted"
-    $ctx.Window.Title = $formatted
+    # Resolve a friendly display name for the target process.
+    # Priority: FileDescription (localized, e.g. Chinese product name) > MainWindowTitle > ProcessName
+    $procName = "unknown"
+    try {
+        $proc = Get-Process -Id $targetPid -ErrorAction Stop
+        $friendly = $null
+        try {
+            if ($proc.MainModule -and $proc.MainModule.FileVersionInfo) {
+                $fd = $proc.MainModule.FileVersionInfo.FileDescription
+                if ($fd -and $fd.Trim()) { $friendly = $fd.Trim() }
+            }
+        } catch {}
+        if (-not $friendly -and $proc.MainWindowTitle) {
+            $mwt = $proc.MainWindowTitle.Trim()
+            if ($mwt) { $friendly = $mwt }
+        }
+        if (-not $friendly) { $friendly = $proc.ProcessName }
+        $procName = $friendly
+    } catch {}
+
+    # Short title (shown on taskbar AND in-app title bar): "FriendlyName(#Index)"
+    # Extract this window's index from InstanceTag ("hostPid#index")
+    $idx = ($ctx.InstanceTag -split '#')[-1]
+    $shortTitle = "$procName(#$idx)"
+    $ctx.TitleText.Text = "  $shortTitle"
+    $ctx.Window.Title = $shortTitle
     $ctx.PlaceholderText.Visibility = [System.Windows.Visibility]::Collapsed
 
     $helper = [System.Windows.Interop.WindowInteropHelper]::new($ctx.Window)
