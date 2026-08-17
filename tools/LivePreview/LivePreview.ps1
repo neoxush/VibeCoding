@@ -379,6 +379,9 @@ public class NativeMethods {
                                 Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
                         <Button Name="BtnAutoPlay" Content="&#x25B6; Play" Width="64" Height="24" FontSize="11"
                                 Background="#4266D6" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
+                        <Button Name="BtnAutoRefresh" Content="&#x21BB;" ToolTip="Refresh macro list"
+                                Width="28" Height="24" FontSize="13"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
                         <Button Name="BtnAutoFolder" Content="&#x1F4C1;" ToolTip="Open macro folder"
                                 Width="28" Height="24" FontSize="11"
                                 Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand"/>
@@ -929,6 +932,7 @@ function New-PreviewWindow {
         AutoRecName     = $wnd.FindName("AutoRecName")
         BtnAutoRecord   = $wnd.FindName("BtnAutoRecord")
         BtnAutoPlay     = $wnd.FindName("BtnAutoPlay")
+        BtnAutoRefresh  = $wnd.FindName("BtnAutoRefresh")
         BtnAutoFolder   = $wnd.FindName("BtnAutoFolder")
         AutoStatus      = $wnd.FindName("AutoStatus")
         AutoDot         = $wnd.FindName("AutoDot")
@@ -1101,6 +1105,13 @@ function New-PreviewWindow {
         $hwnd = [int64]$c.TargetHandle
         $args = "play -Name `"$macro`" -TargetHwnd $hwnd -Delay $delay -Repeat $repeat -Interval $interval -Speed $speed$modeFlag"
         Start-AutoJob $c $args "Playback" 'play'
+    })
+
+    $ctx.BtnAutoRefresh.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        Refresh-AutoMacros $c
+        $c.AutoStatus.Text = "Macro list refreshed."
     })
 
     $ctx.BtnAutoFolder.Add_Click({
