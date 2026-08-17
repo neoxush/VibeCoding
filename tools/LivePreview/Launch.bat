@@ -1,12 +1,13 @@
 @echo off
 REM ==========================================================================
-REM  launcher.bat - main entry point for the Live Preview + Automate toolkit
+REM  Launch.bat - THE only file you need to start the toolkit.
 REM  Runs the environment check, then launches Live Preview (with the built-in
-REM  Automate feature). Zero dependencies.
+REM  Automate feature). All program files live in the app\ subfolder.
+REM  Zero dependencies.
 REM ==========================================================================
 setlocal
-set "PS1=%~dp0MacroTool.ps1"
-set "LP=%~dp0LivePreview.ps1"
+set "PS1=%~dp0app\MacroTool.ps1"
+set "LP=%~dp0app\LivePreview.ps1"
 
 echo Checking environment...
 echo.
