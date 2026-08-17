@@ -23,6 +23,7 @@
 # Console Information - Do Not Close This Window
 # ============================================================
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$Host.UI.RawUI.WindowTitle = "Live Window Preview Tool"
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor DarkCyan
 Write-Host "    LivePreview(win) - Live Window Preview Tool" -ForegroundColor Cyan
