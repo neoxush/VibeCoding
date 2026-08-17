@@ -118,6 +118,9 @@ public class DwmCheck {
 # 6. Check MacroTool.ps1 backend is present (for the Automate feature)
 $script:MacroToolPath = Join-Path $PSScriptRoot 'MacroTool.ps1'
 $script:MacroToolAvailable = Test-Path $script:MacroToolPath
+# Auto-stop: hard wall-clock cap (seconds) for any single playback job. A runaway
+# or infinite-repeat macro can never run longer than this. Adjust if needed.
+$script:AutoMaxRuntime = 300
 if (-not $script:MacroToolAvailable) {
     # Not fatal - LivePreview still works for preview-only; Automate button is disabled.
     Write-Host "  [!] MacroTool.ps1 not found next to LivePreview.ps1 - Automate feature will be disabled." -ForegroundColor Yellow
@@ -763,6 +766,13 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
     ) + (($macroArgs -split ' (?=(?:[^"]*"[^"]*")*[^"]*$)' | Where-Object { $_ -ne '' }) |
          ForEach-Object { $_ -replace '^"(.*)"$', '$1' })
     $argList += @("-StopFile", $ctx.AutoStopFile)
+
+    # Auto-stop safety nets for PLAYBACK only:
+    #  - WatchPid: if this LivePreview process exits, the player stops itself.
+    #  - MaxRuntime: hard wall-clock cap so a runaway/infinite macro can't run forever.
+    if ($macroArgs -match '^\s*play\b') {
+        $argList += @("-WatchPid", "$PID", "-MaxRuntime", "$($script:AutoMaxRuntime)")
+    }
 
     $proc = Start-Process powershell -ArgumentList $argList -WindowStyle Hidden -PassThru `
                 -RedirectStandardOutput $ctx.AutoJobLog `

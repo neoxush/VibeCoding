@@ -49,17 +49,37 @@ param(
 
     [switch]$FlashRestore,
 
-    [string]$StopFile
+    [string]$StopFile,
+
+    # Auto-stop safety nets:
+    [double]$MaxRuntime = 300,   # hard wall-clock cap in seconds (0 = unlimited)
+    [int]$WatchPid = 0           # if this PID (the launching UI) exits, stop playback
 )
 
 $ErrorActionPreference = 'Stop'
 
-# Stop-signal: if a caller passes -StopFile, playback aborts the instant that
-# file appears. This is a focus-independent emergency stop (the UI can create
-# the file even while the target window has focus).
+# ---------------------------------------------------------------------------
+# Auto-stop safety: playback aborts when ANY of these becomes true.
+#   1. -StopFile        : the file appears (manual/UI stop, focus-independent)
+#   2. -WatchPid        : the launching UI process exits (dead-man's switch)
+#   3. -MaxRuntime      : wall-clock runtime exceeds the cap (runaway guard)
+# ---------------------------------------------------------------------------
 $script:StopFilePath = $StopFile
+$script:WatchPid     = $WatchPid
+$script:MaxRuntime   = $MaxRuntime
+$script:PlayStart    = $null   # set when playback begins
+
 function Test-StopSignal {
+    # 1. Manual/UI stop file
     if ($script:StopFilePath -and (Test-Path -LiteralPath $script:StopFilePath)) { return $true }
+    # 2. Dead-man's switch: launching UI gone
+    if ($script:WatchPid -gt 0) {
+        if (-not (Get-Process -Id $script:WatchPid -ErrorAction SilentlyContinue)) { return $true }
+    }
+    # 3. Max-runtime cap
+    if ($script:MaxRuntime -gt 0 -and $script:PlayStart) {
+        if (([DateTime]::Now - $script:PlayStart).TotalSeconds -ge $script:MaxRuntime) { return $true }
+    }
     return $false
 }
 
@@ -658,6 +678,7 @@ function Invoke-PlayEventsBackground($events, [double]$speed, [IntPtr]$hWnd) {
 function Show-Countdown([double]$seconds, [string]$label) {
     $r = [int]$seconds
     while ($r -gt 0) {
+        if (Test-StopSignal) { return }   # respect auto-stop during waits
         Write-Host ("`r{0}: {1,3}s " -f $label, $r) -NoNewline
         Start-Sleep -Seconds 1
         $r--
@@ -698,8 +719,23 @@ function Invoke-Play([string]$n, [int]$targetPid, [double]$delay, [int]$repeat, 
 
     if ($delay -gt 0) { Show-Countdown $delay "Starting in" }
 
+    # Start the wall-clock now (after any pre-delay) for the max-runtime guard.
+    $script:PlayStart = [DateTime]::Now
+    if ($script:MaxRuntime -gt 0) {
+        Write-Host ("Safety: auto-stop after {0}s max runtime." -f $script:MaxRuntime) -ForegroundColor DarkGray
+    }
+    if ($script:WatchPid -gt 0) {
+        Write-Host ("Safety: auto-stop if UI (PID {0}) exits." -f $script:WatchPid) -ForegroundColor DarkGray
+    }
+
     $run = 0
     while ($true) {
+        # Auto-stop checks at the top of each run (covers between-run intervals).
+        if (Test-StopSignal) {
+            Write-Host "Auto-stopped (safety trigger)." -ForegroundColor Yellow
+            if ($flashRestore) { Restore-Foreground $priorFg }
+            return
+        }
         if ($background) {
             if (-not (Get-Process -Id $targetPid -ErrorAction SilentlyContinue)) {
                 Write-Host "[error] Target process exited. Stopping." -ForegroundColor Red; return
