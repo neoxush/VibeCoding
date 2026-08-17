@@ -374,22 +374,27 @@ public class NativeMethods {
                     </ComboBox>
 
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                        <TextBox Name="AutoRecName" Text="mymacro" Width="90" FontSize="11" Height="22" Margin="0,0,4,0"/>
-                        <Button Name="BtnAutoRecord" Content="Record" Width="52" Height="22" FontSize="10"
-                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,3,0"/>
-                        <Button Name="BtnAutoPlay" Content="Play" Width="46" Height="22" FontSize="10"
-                                Background="#4266D6" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="0,0,3,0"/>
-                        <Button Name="BtnAutoStop" Content="Stop" Width="46" Height="22" FontSize="10"
-                                Background="#D64242" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="0,0,3,0"/>
+                        <TextBox Name="AutoRecName" Text="mymacro" Width="96" FontSize="11" Height="24" Margin="0,0,4,0"/>
+                        <Button Name="BtnAutoRecord" Content="&#x25CF; Record" Width="76" Height="24" FontSize="11"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
+                        <Button Name="BtnAutoPlay" Content="&#x25B6; Play" Width="64" Height="24" FontSize="11"
+                                Background="#4266D6" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
                         <Button Name="BtnAutoFolder" Content="&#x1F4C1;" ToolTip="Open macro folder"
-                                Width="26" Height="22" FontSize="10"
+                                Width="28" Height="24" FontSize="11"
                                 Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand"/>
                     </StackPanel>
 
-                    <Border Background="#12121E" CornerRadius="3" Padding="4" Margin="0,2,0,0">
-                        <TextBlock Name="AutoStatus" Text="Ready." Foreground="#B8F0B8" FontSize="10"
-                                   FontFamily="Consolas" TextWrapping="Wrap" MinHeight="34"/>
+                    <!-- Status indicator: colored dot + live text (replaces the Stop button) -->
+                    <Border Background="#12121E" CornerRadius="3" Padding="6,4" Margin="0,2,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Name="AutoDot" Width="9" Height="9" Fill="#666666"
+                                     VerticalAlignment="Top" Margin="0,3,6,0"/>
+                            <TextBlock Name="AutoStatus" Text="Idle." Foreground="#B8F0B8" FontSize="10"
+                                       FontFamily="Consolas" TextWrapping="Wrap" MinHeight="30" Width="230"/>
+                        </StackPanel>
                     </Border>
+                    <TextBlock Name="AutoHint" Text="Recording stops with F9. Playback auto-stops when done or on safety limit."
+                               Foreground="#777777" FontSize="9" TextWrapping="Wrap" Margin="0,3,0,0"/>
                 </StackPanel>
             </Border>
 
@@ -745,7 +750,38 @@ function Refresh-AutoMacros($ctx) {
     }
 }
 
-function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
+function Set-AutoUiState($ctx, [string]$state) {
+    # state: 'idle' | 'record' | 'play'
+    $ctx.AutoBusy = if ($state -eq 'idle') { $null } else { $state }
+    switch ($state) {
+        'record' {
+            $ctx.AutoDot.Fill = [System.Windows.Media.Brushes]::Red
+            $ctx.BtnAutoRecord.Content = [char]0x25A0 + " Stop"
+            $ctx.BtnAutoRecord.Background = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(214,66,66))
+            $ctx.BtnAutoPlay.IsEnabled = $false
+            $ctx.AutoHint.Text = "Recording... perform your actions, then press F9 (or click Stop) to finish."
+        }
+        'play' {
+            $ctx.AutoDot.Fill = [System.Windows.Media.Brushes]::LimeGreen
+            $ctx.BtnAutoPlay.Content = [char]0x25A0 + " Stop"
+            $ctx.BtnAutoPlay.Background = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(214,66,66))
+            $ctx.BtnAutoRecord.IsEnabled = $false
+            $ctx.AutoHint.Text = "Playing... click Stop to halt. Auto-stops when done or on safety limit."
+        }
+        default {
+            $ctx.AutoDot.Fill = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(102,102,102))
+            $ctx.BtnAutoRecord.Content = [char]0x25CF + " Record"
+            $ctx.BtnAutoRecord.Background = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(58,58,88))
+            $ctx.BtnAutoRecord.IsEnabled = $true
+            $ctx.BtnAutoPlay.Content = [char]0x25B6 + " Play"
+            $ctx.BtnAutoPlay.Background = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(66,102,214))
+            $ctx.BtnAutoPlay.IsEnabled = $true
+            $ctx.AutoHint.Text = "Recording stops with F9. Playback auto-stops when done or on safety limit."
+        }
+    }
+}
+
+function Start-AutoJob($ctx, [string]$macroArgs, [string]$label, [string]$kind) {
     if (-not $script:MacroToolAvailable) { $ctx.AutoStatus.Text = "MacroTool.ps1 not available."; return }
     $stamp = [DateTime]::Now.Ticks
     $ctx.AutoJobLog  = Join-Path $env:TEMP ("wt_job_{0}.log" -f $stamp)
@@ -754,6 +790,7 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
     Remove-Item -LiteralPath $ctx.AutoStopFile -Force -ErrorAction SilentlyContinue
     Set-Content -LiteralPath $ctx.AutoJobLog -Value "" -Encoding UTF8
     $ctx.AutoStatus.Text = "$label started..."
+    Set-AutoUiState $ctx $kind
 
     # Run MacroTool.ps1 DIRECTLY as the tracked process (no wrapper subshell that
     # could orphan the real player). Redirect its output to the log file so we can
@@ -802,7 +839,8 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
             $c.AutoJobProc = $null
             Remove-Item -LiteralPath $c.AutoJobLog -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath ($c.AutoJobLog + ".err") -Force -ErrorAction SilentlyContinue
-            $c.AutoStatus.Text = ($c.AutoStatus.Text + "`n[job finished]")
+            $c.AutoStatus.Text = ($c.AutoStatus.Text + "`n[finished]")
+            Set-AutoUiState $c 'idle'
             Refresh-AutoMacros $c
         }
     }.GetNewClosure())
@@ -841,11 +879,13 @@ function Stop-AutoJob($ctx) {
         Remove-Item -LiteralPath ($ctx.AutoJobLog + ".err") -Force -ErrorAction SilentlyContinue
     }
     if ($ctx.AutoStopFile) { Remove-Item -LiteralPath $ctx.AutoStopFile -Force -ErrorAction SilentlyContinue }
+    $wasKind = $ctx.AutoBusy
     if ($stopped) {
-        $ctx.AutoStatus.Text = "STOPPED. All playback halted."
+        $ctx.AutoStatus.Text = if ($wasKind -eq 'record') { "Recording stopped (not saved)." } else { "Stopped. All playback halted." }
     } else {
         $ctx.AutoStatus.Text = "Nothing is running."
     }
+    Set-AutoUiState $ctx 'idle'
     Refresh-AutoMacros $ctx
 }
 
@@ -889,9 +929,11 @@ function New-PreviewWindow {
         AutoRecName     = $wnd.FindName("AutoRecName")
         BtnAutoRecord   = $wnd.FindName("BtnAutoRecord")
         BtnAutoPlay     = $wnd.FindName("BtnAutoPlay")
-        BtnAutoStop     = $wnd.FindName("BtnAutoStop")
         BtnAutoFolder   = $wnd.FindName("BtnAutoFolder")
         AutoStatus      = $wnd.FindName("AutoStatus")
+        AutoDot         = $wnd.FindName("AutoDot")
+        AutoHint        = $wnd.FindName("AutoHint")
+        AutoBusy        = $null   # 'record' | 'play' | $null
         ThumbnailHandle = [IntPtr]::Zero
         TargetHandle    = [IntPtr]::Zero
         TargetTitle     = ""
@@ -1031,16 +1073,20 @@ function New-PreviewWindow {
     $ctx.BtnAutoRecord.Add_Click({
         param($sender, $e)
         $c = Get-Ctx $sender
+        # Toggle: if a recording is running, this button stops it.
+        if ($c.AutoBusy -eq 'record') { Stop-AutoJob $c; return }
+        if ($c.AutoBusy) { $c.AutoStatus.Text = "A $($c.AutoBusy) job is already running."; return }
         $name = ("" + $c.AutoRecName.Text).Trim()
         if (-not $name) { $c.AutoStatus.Text = "Enter a macro name first."; return }
-        if ($c.AutoTimer) { $c.AutoStatus.Text = "A job is already running."; return }
-        Start-AutoJob $c ("record -Name `"$name`"") "Recording (press F9 to stop)"
+        Start-AutoJob $c ("record -Name `"$name`"") "Recording" 'record'
     })
 
     $ctx.BtnAutoPlay.Add_Click({
         param($sender, $e)
         $c = Get-Ctx $sender
-        if ($c.AutoTimer) { $c.AutoStatus.Text = "A job is already running."; return }
+        # Toggle: if a playback is running, this button stops it.
+        if ($c.AutoBusy -eq 'play') { Stop-AutoJob $c; return }
+        if ($c.AutoBusy) { $c.AutoStatus.Text = "A $($c.AutoBusy) job is already running."; return }
         $macro = $c.AutoMacro.SelectedItem
         if (-not $macro) { $c.AutoStatus.Text = "Select a macro to play."; return }
         if ($c.TargetHandle -eq [IntPtr]::Zero) { $c.AutoStatus.Text = "Select a window to preview/automate first."; return }
@@ -1054,13 +1100,7 @@ function New-PreviewWindow {
         elseif ($modeIdx -eq 2) { $modeFlag = " -Background" }
         $hwnd = [int64]$c.TargetHandle
         $args = "play -Name `"$macro`" -TargetHwnd $hwnd -Delay $delay -Repeat $repeat -Interval $interval -Speed $speed$modeFlag"
-        Start-AutoJob $c $args "Playback"
-    })
-
-    $ctx.BtnAutoStop.Add_Click({
-        param($sender, $e)
-        $c = Get-Ctx $sender
-        Stop-AutoJob $c
+        Start-AutoJob $c $args "Playback" 'play'
     })
 
     $ctx.BtnAutoFolder.Add_Click({

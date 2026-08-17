@@ -210,8 +210,9 @@ $MOUSEEVENTF_MIDDLEDOWN  = 0x0020
 $MOUSEEVENTF_MIDDLEUP    = 0x0040
 $MOUSEEVENTF_WHEEL       = 0x0800
 
-$KEYEVENTF_KEYUP     = 0x0002
-$KEYEVENTF_SCANCODE  = 0x0008
+$KEYEVENTF_KEYUP        = 0x0002
+$KEYEVENTF_SCANCODE     = 0x0008
+$KEYEVENTF_EXTENDEDKEY  = 0x0001
 
 $SM_CXSCREEN = 0
 $SM_CYSCREEN = 1
@@ -395,8 +396,44 @@ function New-KeyInput([uint16]$vk, [bool]$up) {
     $inp = New-Object Win32.Native+INPUT
     $inp.type = $INPUT_KEYBOARD
     $ki = New-Object Win32.Native+KEYBDINPUT
-    $ki.wVk = $vk; $ki.wScan = 0
-    $ki.dwFlags = if ($up) { $KEYEVENTF_KEYUP } else { 0 }
+
+    # Derive the hardware scan code so modifiers and extended keys register
+    # reliably across apps (some ignore pure virtual-key injection).
+    $scan = [Win32.Native]::MapVirtualKey([uint32]$vk, $MAPVK_VK_TO_VSC)
+
+    # Extended-key flag is required for right-hand modifiers and the nav cluster.
+    $extended = $false
+    switch ($vk) {
+        0xA3 { $extended = $true }  # VK_RCONTROL
+        0xA5 { $extended = $true }  # VK_RMENU (Right Alt)
+        0x21 { $extended = $true }  # PageUp
+        0x22 { $extended = $true }  # PageDown
+        0x23 { $extended = $true }  # End
+        0x24 { $extended = $true }  # Home
+        0x25 { $extended = $true }  # Left
+        0x26 { $extended = $true }  # Up
+        0x27 { $extended = $true }  # Right
+        0x28 { $extended = $true }  # Down
+        0x2D { $extended = $true }  # Insert
+        0x2E { $extended = $true }  # Delete
+        0x5B { $extended = $true }  # LWin
+        0x5C { $extended = $true }  # RWin
+    }
+
+    if ($scan -ne 0) {
+        # Scan-code path (most reliable). wVk must be 0 when using SCANCODE.
+        $ki.wVk = 0
+        $ki.wScan = [uint16]$scan
+        $flags = $KEYEVENTF_SCANCODE
+        if ($extended) { $flags = $flags -bor $KEYEVENTF_EXTENDEDKEY }
+        if ($up)       { $flags = $flags -bor $KEYEVENTF_KEYUP }
+        $ki.dwFlags = $flags
+    } else {
+        # Fallback to virtual-key injection if no scan code is available.
+        $ki.wVk = $vk
+        $ki.wScan = 0
+        $ki.dwFlags = if ($up) { $KEYEVENTF_KEYUP } else { 0 }
+    }
     $ki.time = 0; $ki.dwExtraInfo = [IntPtr]::Zero
     $u = New-Object Win32.Native+INPUTUNION
     $u.ki = $ki
@@ -461,9 +498,14 @@ function Invoke-Record([string]$n, [bool]$recordMoves) {
             }
         }
 
-        # keyboard: scan VKs 0x08..0xFE, skip mouse buttons
+        # keyboard: scan VKs 0x08..0xFE, skip mouse buttons.
+        # Skip the AGGREGATE modifier VKs (VK_SHIFT/CONTROL/MENU) because their
+        # specific left/right variants (VK_LSHIFT..VK_RMENU, 0xA0-0xA5) also fire;
+        # recording both would double every modifier press. We keep the L/R ones
+        # so Ctrl/Alt/Shift are captured with correct handedness.
         for ($vk = 0x08; $vk -le 0xFE; $vk++) {
             if ($vk -eq 0x01 -or $vk -eq 0x02 -or $vk -eq 0x04 -or $vk -eq $VK_STOP) { continue }
+            if ($vk -eq 0x10 -or $vk -eq 0x11 -or $vk -eq 0x12) { continue }  # aggregate Shift/Ctrl/Alt
             $down = ([Win32.Native]::GetAsyncKeyState($vk) -band 0x8000) -ne 0
             $was = $prevKeys[$vk]
             if ($down -and -not $was) {
