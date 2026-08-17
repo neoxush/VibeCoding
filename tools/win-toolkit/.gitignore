@@ -1,0 +1,6 @@
+# Runtime-created macro storage
+macros/
+
+# Temp job artifacts
+*.log
+*.done

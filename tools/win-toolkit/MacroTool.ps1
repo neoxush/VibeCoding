@@ -33,6 +33,7 @@ param(
 
     [string]$Name,
     [int]$TargetPid,
+    [long]$TargetHwnd,
     [string]$ProcName,
 
     [double]$Delay = 0,
@@ -653,7 +654,7 @@ function Show-Countdown([double]$seconds, [string]$label) {
     if ($seconds -gt 0) { Write-Host ("`r" + (' ' * 40) + "`r") -NoNewline }
 }
 
-function Invoke-Play([string]$n, [int]$targetPid, [double]$delay, [int]$repeat, [double]$interval, [double]$speed, [bool]$background, [bool]$flashRestore) {
+function Invoke-Play([string]$n, [int]$targetPid, [double]$delay, [int]$repeat, [double]$interval, [double]$speed, [bool]$background, [bool]$flashRestore, [IntPtr]$explicitHwnd = [IntPtr]::Zero) {
     $macro = Load-Macro $n
     $proc = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
     if (-not $proc) { Write-Host "[error] PID $targetPid not found." -ForegroundColor Red; return }
@@ -662,13 +663,18 @@ function Invoke-Play([string]$n, [int]$targetPid, [double]$delay, [int]$repeat, 
 
     $bgHwnd = [IntPtr]::Zero
     if ($background) {
-        $hwnds = Get-HwndsForPid $targetPid
-        if ($hwnds.Count -eq 0) {
-            Write-Host "[error] No window found for PID $targetPid (needed for background mode)." -ForegroundColor Red
-            return
+        if ($explicitHwnd -ne [IntPtr]::Zero) {
+            $bgHwnd = $explicitHwnd
+            Write-Host ("Background target window (explicit): 0x{0:X}" -f [int64]$bgHwnd)
+        } else {
+            $hwnds = Get-HwndsForPid $targetPid
+            if ($hwnds.Count -eq 0) {
+                Write-Host "[error] No window found for PID $targetPid (needed for background mode)." -ForegroundColor Red
+                return
+            }
+            $bgHwnd = $hwnds[0].Hwnd
+            Write-Host ("Background target window: 0x{0:X} '{1}'" -f [int64]$bgHwnd, $hwnds[0].Title)
         }
-        $bgHwnd = $hwnds[0].Hwnd
-        Write-Host ("Background target window: 0x{0:X} '{1}'" -f [int64]$bgHwnd, $hwnds[0].Title)
         Write-Host "Note: many apps (games/DirectX/Chromium canvas, context menus) may ignore posted input." -ForegroundColor DarkYellow
     }
 
@@ -934,8 +940,14 @@ switch ($Command) {
     }
     'play' {
         if (-not $Name) { throw "play requires -Name" }
-        if (-not $TargetPid)  { throw "play requires -TargetPid" }
-        Invoke-Play $Name $TargetPid $Delay $Repeat $Interval $Speed $Background.IsPresent $FlashRestore.IsPresent
+        # Allow targeting by exact window handle; resolve its PID.
+        if ($TargetHwnd -ne 0 -and -not $TargetPid) {
+            $rpid = 0
+            [void][Win32.Native]::GetWindowThreadProcessId([IntPtr]$TargetHwnd, [ref]$rpid)
+            $TargetPid = [int]$rpid
+        }
+        if (-not $TargetPid)  { throw "play requires -TargetPid or -TargetHwnd" }
+        Invoke-Play $Name $TargetPid $Delay $Repeat $Interval $Speed $Background.IsPresent $FlashRestore.IsPresent ([IntPtr]$TargetHwnd)
     }
     'list' { Invoke-List }
     'pids' {

@@ -115,6 +115,14 @@ public class DwmCheck {
     }
 }
 
+# 6. Check MacroTool.ps1 backend is present (for the Automate feature)
+$script:MacroToolPath = Join-Path $PSScriptRoot 'MacroTool.ps1'
+$script:MacroToolAvailable = Test-Path $script:MacroToolPath
+if (-not $script:MacroToolAvailable) {
+    # Not fatal - LivePreview still works for preview-only; Automate button is disabled.
+    Write-Host "  [!] MacroTool.ps1 not found next to LivePreview.ps1 - Automate feature will be disabled." -ForegroundColor Yellow
+}
+
 # Report results and exit if checks failed
 if (-not $script:checksPassed) {
     Write-Host ""
@@ -277,6 +285,7 @@ public class NativeMethods {
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -307,6 +316,9 @@ public class NativeMethods {
                         <Button Name="BtnPin" Content="&#x1F4CC;" ToolTip="Pin on Top (Ctrl+T)"
                                 Width="26" Height="20" FontSize="10"
                                 Background="Transparent" Foreground="#CCCCCC" BorderThickness="0" Cursor="Hand"/>
+                        <Button Name="BtnAutomate" Content="&#x25B6;" ToolTip="Automate this window (record/play macros)"
+                                Width="26" Height="20" FontSize="10"
+                                Background="Transparent" Foreground="#7EC8FF" BorderThickness="0" Cursor="Hand"/>
                         <Button Name="BtnClose" Content="&#x2715;" ToolTip="Close"
                                 Width="26" Height="20" FontSize="10"
                                 Background="Transparent" Foreground="#CCCCCC" BorderThickness="0" Cursor="Hand"/>
@@ -314,8 +326,72 @@ public class NativeMethods {
                 </Grid>
             </Border>
 
+            <!-- Automate flyout (collapsed by default; toggled by BtnAutomate) -->
+            <Border Grid.Row="1" Name="AutomatePanel" Background="#F02A2A2A"
+                    BorderBrush="#4478B4FF" BorderThickness="0,0,0,1" Visibility="Collapsed">
+                <StackPanel Margin="8,6,8,8">
+                    <TextBlock Text="AUTOMATE THIS WINDOW" Foreground="#7EC8FF" FontSize="10"
+                               FontWeight="Bold" Margin="0,0,0,4"/>
+                    <TextBlock Name="AutoTarget" Text="Target: (none)" Foreground="#AAAAAA"
+                               FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
+
+                    <TextBlock Text="Macro" Foreground="#999999" FontSize="10"/>
+                    <ComboBox Name="AutoMacro" Height="22" FontSize="11" Margin="0,1,0,6"/>
+
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                            <TextBlock Text="Delay" Foreground="#999999" FontSize="9"/>
+                            <TextBox Name="AutoDelay" Text="3" FontSize="11" Height="20"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,3,0">
+                            <TextBlock Text="Repeat" Foreground="#999999" FontSize="9"/>
+                            <TextBox Name="AutoRepeat" Text="1" FontSize="11" Height="20"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,3,0">
+                            <TextBlock Text="Interval" Foreground="#999999" FontSize="9"/>
+                            <TextBox Name="AutoInterval" Text="0" FontSize="11" Height="20"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="3">
+                            <TextBlock Text="Speed" Foreground="#999999" FontSize="9"/>
+                            <TextBox Name="AutoSpeed" Text="1" FontSize="11" Height="20"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="Playback mode" Foreground="#999999" FontSize="10"/>
+                    <ComboBox Name="AutoMode" Height="22" FontSize="11" Margin="0,1,0,6">
+                        <ComboBoxItem Content="Foreground (bring target to front)" IsSelected="True"/>
+                        <ComboBoxItem Content="Flash-restore (focus target, return to you)"/>
+                        <ComboBoxItem Content="Background (no focus - Win32 apps only)"/>
+                    </ComboBox>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBox Name="AutoRecName" Text="mymacro" Width="90" FontSize="11" Height="22" Margin="0,0,4,0"/>
+                        <Button Name="BtnAutoRecord" Content="Record" Width="52" Height="22" FontSize="10"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,3,0"/>
+                        <Button Name="BtnAutoPlay" Content="Play" Width="46" Height="22" FontSize="10"
+                                Background="#4266D6" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="0,0,3,0"/>
+                        <Button Name="BtnAutoStop" Content="Stop" Width="46" Height="22" FontSize="10"
+                                Background="#D64242" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="0,0,3,0"/>
+                        <Button Name="BtnAutoFolder" Content="&#x1F4C1;" ToolTip="Open macro folder"
+                                Width="26" Height="22" FontSize="10"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand"/>
+                    </StackPanel>
+
+                    <Border Background="#12121E" CornerRadius="3" Padding="4" Margin="0,2,0,0">
+                        <TextBlock Name="AutoStatus" Text="Ready." Foreground="#B8F0B8" FontSize="10"
+                                   FontFamily="Consolas" TextWrapping="Wrap" MinHeight="34"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- Preview Area -->
-            <Border Grid.Row="1" Name="PreviewBorder" Background="#FF111111" CornerRadius="0,0,6,6" ClipToBounds="True">
+            <Border Grid.Row="2" Name="PreviewBorder" Background="#FF111111" CornerRadius="0,0,6,6" ClipToBounds="True">
                 <TextBlock Name="PlaceholderText"
                            Text="Right-click title bar or click the magnifying glass to select a window to preview"
                            Foreground="#888888" FontSize="12"
@@ -503,6 +579,8 @@ function Set-TargetWindow($ctx, [IntPtr]$Handle, [string]$Title) {
     $shortTitle = "$procName(#$idx)"
     $ctx.TitleText.Text = "  $shortTitle"
     $ctx.Window.Title = $shortTitle
+    $ctx.TargetTitle = $procName
+    if ($ctx.AutoTarget) { $ctx.AutoTarget.Text = "Target: $procName" }
     $ctx.PlaceholderText.Visibility = [System.Windows.Visibility]::Collapsed
 
     $helper = [System.Windows.Interop.WindowInteropHelper]::new($ctx.Window)
@@ -618,6 +696,8 @@ function Show-TitleBar($ctx) {
 
 function Hide-TitleBar($ctx) {
     if (-not $ctx.TitleBarVisible) { return }
+    # Keep the title bar (and flyout) visible while the Automate panel is open.
+    if ($ctx.AutomatePanel -and $ctx.AutomatePanel.Visibility -eq [System.Windows.Visibility]::Visible) { return }
     $ctx.TitleBarVisible = $false
     $ctx.TitleBar.Visibility = [System.Windows.Visibility]::Collapsed
     $ctx.PreviewBorder.CornerRadius = [System.Windows.CornerRadius]::new(6)
@@ -644,6 +724,75 @@ function Hide-TitleBar($ctx) {
 }
 
 # ============================================================
+# Automate feature helpers (drive MacroTool.ps1 as a background job)
+# ============================================================
+function Refresh-AutoMacros($ctx) {
+    $ctx.AutoMacro.Items.Clear()
+    if (-not $script:MacroToolAvailable) { return }
+    try {
+        $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:MacroToolPath list -Json 2>$null
+        $json = ($out | Out-String).Trim()
+        if ($json) {
+            $names = $json | ConvertFrom-Json
+            foreach ($nm in @($names)) { [void]$ctx.AutoMacro.Items.Add($nm) }
+            if ($ctx.AutoMacro.Items.Count -eq 1) { $ctx.AutoMacro.SelectedIndex = 0 }
+        }
+    } catch {
+        $ctx.AutoStatus.Text = "Could not list macros: $($_.Exception.Message)"
+    }
+}
+
+function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
+    if (-not $script:MacroToolAvailable) { $ctx.AutoStatus.Text = "MacroTool.ps1 not available."; return }
+    $stamp = [DateTime]::Now.Ticks
+    $ctx.AutoJobLog  = Join-Path $env:TEMP ("wt_job_{0}.log" -f $stamp)
+    $ctx.AutoJobDone = Join-Path $env:TEMP ("wt_job_{0}.done" -f $stamp)
+    Set-Content -LiteralPath $ctx.AutoJobLog -Value "" -Encoding UTF8
+    $ctx.AutoStatus.Text = "$label started..."
+
+    $inner = "& { powershell -NoProfile -ExecutionPolicy Bypass -File `"$($script:MacroToolPath)`" $macroArgs *>&1 | " +
+             "Tee-Object -FilePath `"$($ctx.AutoJobLog)`" ; Set-Content -LiteralPath `"$($ctx.AutoJobDone)`" -Value done }"
+    Start-Process powershell -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-Command",$inner) -WindowStyle Hidden | Out-Null
+
+    # Tail the log into the status area via a DispatcherTimer.
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(400)
+    $ctx.AutoTimer = $timer
+    $timerCtx = $ctx
+    $timer.Add_Tick({
+        $c = $timerCtx
+        try {
+            if (Test-Path $c.AutoJobLog) {
+                $lines = Get-Content -LiteralPath $c.AutoJobLog -ErrorAction SilentlyContinue
+                if ($lines) {
+                    $tail = ($lines | Select-Object -Last 6) -join "`n"
+                    $c.AutoStatus.Text = $tail
+                }
+            }
+        } catch {}
+        if (Test-Path $c.AutoJobDone) {
+            $c.AutoTimer.Stop()
+            $c.AutoTimer = $null
+            Remove-Item -LiteralPath $c.AutoJobLog  -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $c.AutoJobDone -Force -ErrorAction SilentlyContinue
+            $c.AutoStatus.Text = ($c.AutoStatus.Text + "`n[job finished]")
+            Refresh-AutoMacros $c
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+function Stop-AutoJob($ctx) {
+    # Signal playback abort (Esc is honored by MacroTool's play loop) and stop tailing.
+    try {
+        $esc = New-Object -ComObject WScript.Shell
+        $esc.SendKeys("{ESC}")
+    } catch {}
+    if ($ctx.AutoTimer) { $ctx.AutoTimer.Stop(); $ctx.AutoTimer = $null }
+    $ctx.AutoStatus.Text = "Stopped by user."
+}
+
+# ============================================================
 # New-PreviewWindow: Creates an independent preview window
 # ============================================================
 function New-PreviewWindow {
@@ -667,12 +816,31 @@ function New-PreviewWindow {
         BtnNew          = $wnd.FindName("BtnNew")
         BtnScale        = $wnd.FindName("BtnScale")
         BtnPin          = $wnd.FindName("BtnPin")
+        BtnAutomate     = $wnd.FindName("BtnAutomate")
         BtnClose        = $wnd.FindName("BtnClose")
         PreviewBorder   = $wnd.FindName("PreviewBorder")
         PlaceholderText = $wnd.FindName("PlaceholderText")
         OuterBorder     = $wnd.FindName("OuterBorder")
+        AutomatePanel   = $wnd.FindName("AutomatePanel")
+        AutoTarget      = $wnd.FindName("AutoTarget")
+        AutoMacro       = $wnd.FindName("AutoMacro")
+        AutoDelay       = $wnd.FindName("AutoDelay")
+        AutoRepeat      = $wnd.FindName("AutoRepeat")
+        AutoInterval    = $wnd.FindName("AutoInterval")
+        AutoSpeed       = $wnd.FindName("AutoSpeed")
+        AutoMode        = $wnd.FindName("AutoMode")
+        AutoRecName     = $wnd.FindName("AutoRecName")
+        BtnAutoRecord   = $wnd.FindName("BtnAutoRecord")
+        BtnAutoPlay     = $wnd.FindName("BtnAutoPlay")
+        BtnAutoStop     = $wnd.FindName("BtnAutoStop")
+        BtnAutoFolder   = $wnd.FindName("BtnAutoFolder")
+        AutoStatus      = $wnd.FindName("AutoStatus")
         ThumbnailHandle = [IntPtr]::Zero
         TargetHandle    = [IntPtr]::Zero
+        TargetTitle     = ""
+        AutoJobLog      = $null
+        AutoJobDone     = $null
+        AutoTimer       = $null
         IsPinned        = $false
         Timer           = $null
         TitleBarVisible = $true
@@ -783,6 +951,67 @@ function New-PreviewWindow {
         $c = Get-Ctx $sender
         $c.Window.Close()
     })
+
+    # ---- Automate feature -----------------------------------------------
+    $ctx.BtnAutomate.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        if ($c.AutomatePanel.Visibility -eq [System.Windows.Visibility]::Visible) {
+            $c.AutomatePanel.Visibility = [System.Windows.Visibility]::Collapsed
+        } else {
+            if (-not $script:MacroToolAvailable) {
+                $c.AutoStatus.Text = "MacroTool.ps1 not found next to LivePreview.ps1."
+            }
+            $c.AutomatePanel.Visibility = [System.Windows.Visibility]::Visible
+            if ($c.TargetTitle) { $c.AutoTarget.Text = "Target: $($c.TargetTitle)" }
+            else { $c.AutoTarget.Text = "Target: (select a window first)" }
+            Refresh-AutoMacros $c
+        }
+    })
+
+    $ctx.BtnAutoRecord.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        $name = ("" + $c.AutoRecName.Text).Trim()
+        if (-not $name) { $c.AutoStatus.Text = "Enter a macro name first."; return }
+        if ($c.AutoTimer) { $c.AutoStatus.Text = "A job is already running."; return }
+        Start-AutoJob $c ("record -Name `"$name`"") "Recording (press F9 to stop)"
+    })
+
+    $ctx.BtnAutoPlay.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        if ($c.AutoTimer) { $c.AutoStatus.Text = "A job is already running."; return }
+        $macro = $c.AutoMacro.SelectedItem
+        if (-not $macro) { $c.AutoStatus.Text = "Select a macro to play."; return }
+        if ($c.TargetHandle -eq [IntPtr]::Zero) { $c.AutoStatus.Text = "Select a window to preview/automate first."; return }
+        $delay    = ("" + $c.AutoDelay.Text).Trim();    if (-not $delay) { $delay = "0" }
+        $repeat   = ("" + $c.AutoRepeat.Text).Trim();   if (-not $repeat) { $repeat = "1" }
+        $interval = ("" + $c.AutoInterval.Text).Trim(); if (-not $interval) { $interval = "0" }
+        $speed    = ("" + $c.AutoSpeed.Text).Trim();    if (-not $speed) { $speed = "1" }
+        $modeIdx  = $c.AutoMode.SelectedIndex
+        $modeFlag = ""
+        if ($modeIdx -eq 1) { $modeFlag = " -FlashRestore" }
+        elseif ($modeIdx -eq 2) { $modeFlag = " -Background" }
+        $hwnd = [int64]$c.TargetHandle
+        $args = "play -Name `"$macro`" -TargetHwnd $hwnd -Delay $delay -Repeat $repeat -Interval $interval -Speed $speed$modeFlag"
+        Start-AutoJob $c $args "Playback"
+    })
+
+    $ctx.BtnAutoStop.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        Stop-AutoJob $c
+    })
+
+    $ctx.BtnAutoFolder.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        $dir = Join-Path $PSScriptRoot 'macros'
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        Start-Process explorer.exe $dir
+    })
+    # ---------------------------------------------------------------------
 
     # Keyboard shortcuts
     $wnd.Add_KeyDown({
