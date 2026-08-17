@@ -51,6 +51,10 @@ param(
 
     [string]$StopFile,
 
+    # Virtual-key code that stops a recording. Defaults to F9 (0x78) but can be
+    # overridden (e.g. by the UI's shortcut setting) when F9 is already occupied.
+    [int]$StopVk = 0x78,
+
     # Auto-stop safety nets:
     [double]$MaxRuntime = 300,   # hard wall-clock cap in seconds (0 = unlimited)
     [int]$WatchPid = 0           # if this PID (the launching UI) exits, stop playback
@@ -158,6 +162,14 @@ if (-not ([System.Management.Automation.PSTypeName]'Win32.Native').Type) {
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int nIndex);
 
+    // Per-monitor DPI awareness so GetCursorPos (record) and SendInput (play)
+    // both work in physical pixels regardless of each monitor's scale factor.
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+
     [DllImport("user32.dll")]
     public static extern IntPtr GetShellWindow();
 
@@ -202,6 +214,7 @@ $INPUT_KEYBOARD = 1
 
 $MOUSEEVENTF_MOVE        = 0x0001
 $MOUSEEVENTF_ABSOLUTE    = 0x8000
+$MOUSEEVENTF_VIRTUALDESK = 0x4000
 $MOUSEEVENTF_LEFTDOWN    = 0x0002
 $MOUSEEVENTF_LEFTUP      = 0x0004
 $MOUSEEVENTF_RIGHTDOWN   = 0x0008
@@ -216,9 +229,45 @@ $KEYEVENTF_EXTENDEDKEY  = 0x0001
 
 $SM_CXSCREEN = 0
 $SM_CYSCREEN = 1
+# Virtual screen (bounding box of ALL monitors) metrics. Non-primary monitors
+# sit at positive or negative offsets within this rectangle, so absolute mouse
+# input must be normalized against the virtual desktop rather than the primary
+# screen alone.
+$SM_XVIRTUALSCREEN  = 76
+$SM_YVIRTUALSCREEN  = 77
+$SM_CXVIRTUALSCREEN = 78
+$SM_CYVIRTUALSCREEN = 79
 $SW_RESTORE  = 9
 
-$VK_STOP = 0x78   # F9 stops recording
+# Virtual-key code that stops recording. Configurable via the -StopVk parameter
+# (defaults to F9 = 0x78) so users can pick another key when F9 is taken.
+$VK_STOP = $StopVk
+
+# Friendly display name for a virtual-key code (used in prompts).
+function Get-VkName([int]$vk) {
+    $names = @{
+        0x70='F1'; 0x71='F2'; 0x72='F3'; 0x73='F4'; 0x74='F5'; 0x75='F6';
+        0x76='F7'; 0x77='F8'; 0x78='F9'; 0x79='F10'; 0x7A='F11'; 0x7B='F12';
+        0x13='Pause'; 0x91='ScrollLock'; 0x2D='Insert'; 0x24='Home'; 0x23='End';
+        0x21='PageUp'; 0x22='PageDown'; 0x1B='Esc'; 0x60='Num0'; 0x6A='Num*'
+    }
+    if ($names.ContainsKey($vk)) { return $names[$vk] }
+    return ("VK 0x{0:X2}" -f $vk)
+}
+
+# Opt into per-monitor DPI awareness before capturing or replaying coordinates.
+# Without this, Windows virtualizes cursor coordinates on high-DPI monitors and
+# recorded points drift when played back on a differently-scaled display. Prefer
+# the Per-Monitor-v2 context (Win10 1703+); fall back to system DPI awareness.
+function Enable-DpiAwareness {
+    try {
+        # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (HANDLE)-4
+        $ctx = [IntPtr](-4)
+        if ([Win32.Native]::SetProcessDpiAwarenessContext($ctx)) { return }
+    } catch { }
+    try { [void][Win32.Native]::SetProcessDPIAware() } catch { }
+}
+Enable-DpiAwareness
 
 $script:MacrosDir = Join-Path $PSScriptRoot 'macros'
 
@@ -448,12 +497,32 @@ function Send-Inputs([array]$inputs) {
 }
 
 function Move-MouseAbsolute([int]$x, [int]$y) {
-    $sw = [Win32.Native]::GetSystemMetrics($SM_CXSCREEN)
-    $sh = [Win32.Native]::GetSystemMetrics($SM_CYSCREEN)
-    if ($sw -le 1) { $sw = 1 }; if ($sh -le 1) { $sh = 1 }
-    $ax = [int](($x * 65535) / ($sw - 1))
-    $ay = [int](($y * 65535) / ($sh - 1))
-    Send-Inputs @( (New-MouseInput ($MOUSEEVENTF_MOVE -bor $MOUSEEVENTF_ABSOLUTE) $ax $ay) )
+    # Absolute SendInput coordinates are normalized to the 0..65535 range across
+    # the whole virtual desktop. Using MOUSEEVENTF_VIRTUALDESK together with the
+    # SM_*VIRTUALSCREEN metrics lets recorded points land correctly on secondary
+    # monitors (which live at positive/negative offsets from the primary screen).
+    $vx = [Win32.Native]::GetSystemMetrics($SM_XVIRTUALSCREEN)
+    $vy = [Win32.Native]::GetSystemMetrics($SM_YVIRTUALSCREEN)
+    $vw = [Win32.Native]::GetSystemMetrics($SM_CXVIRTUALSCREEN)
+    $vh = [Win32.Native]::GetSystemMetrics($SM_CYVIRTUALSCREEN)
+
+    # Fall back to the primary screen if the virtual metrics are unavailable
+    # (older interop stubs / single-monitor probes return 0 width/height).
+    if ($vw -le 0) { $vx = 0; $vw = [Win32.Native]::GetSystemMetrics($SM_CXSCREEN) }
+    if ($vh -le 0) { $vy = 0; $vh = [Win32.Native]::GetSystemMetrics($SM_CYSCREEN) }
+    if ($vw -le 1) { $vw = 1 }; if ($vh -le 1) { $vh = 1 }
+
+    # Translate the absolute screen point into the virtual-desktop origin, then
+    # scale to the normalized 0..65535 absolute coordinate space.
+    $ax = [int]((($x - $vx) * 65535) / ($vw - 1))
+    $ay = [int]((($y - $vy) * 65535) / ($vh - 1))
+
+    # Clamp so slightly out-of-bounds recordings don't wrap to the far edge.
+    if ($ax -lt 0) { $ax = 0 }; if ($ax -gt 65535) { $ax = 65535 }
+    if ($ay -lt 0) { $ay = 0 }; if ($ay -gt 65535) { $ay = 65535 }
+
+    $flags = $MOUSEEVENTF_MOVE -bor $MOUSEEVENTF_ABSOLUTE -bor $MOUSEEVENTF_VIRTUALDESK
+    Send-Inputs @( (New-MouseInput $flags $ax $ay) )
 }
 
 # --------------------------------------------------------------------------
@@ -463,7 +532,7 @@ function Move-MouseAbsolute([int]$x, [int]$y) {
 $MOUSE_VKS = @{ 0x01 = 'left'; 0x02 = 'right'; 0x04 = 'middle' }  # VK_LBUTTON/RBUTTON/MBUTTON
 
 function Invoke-Record([string]$n, [bool]$recordMoves) {
-    Write-Host "Recording... press F9 to stop." -ForegroundColor Yellow
+    Write-Host ("Recording... press {0} to stop." -f (Get-VkName $VK_STOP)) -ForegroundColor Yellow
     $events = New-Object System.Collections.ArrayList
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 

@@ -121,6 +121,56 @@ $script:MacroToolAvailable = Test-Path $script:MacroToolPath
 # Auto-stop: hard wall-clock cap (seconds) for any single playback job. A runaway
 # or infinite-repeat macro can never run longer than this. Adjust if needed.
 $script:AutoMaxRuntime = 300
+
+# --------------------------------------------------------------------------
+# Persisted settings (settings.json next to the scripts).
+# Currently stores the record/stop shortcut key so users can override F9 when
+# it is already claimed by another app.
+# --------------------------------------------------------------------------
+$script:SettingsPath = Join-Path $PSScriptRoot 'settings.json'
+$script:RecordStopVk = 0x78   # default F9
+
+# Friendly labels for the shortcut dropdown. Order here defines the UI order.
+$script:StopKeyChoices = [ordered]@{
+    'F9'          = 0x78
+    'F8'          = 0x77
+    'F10'         = 0x79
+    'F11'         = 0x7A
+    'F12'         = 0x7B
+    'F7'          = 0x76
+    'F6'          = 0x75
+    'Pause/Break' = 0x13
+    'Scroll Lock' = 0x91
+}
+
+function Get-StopKeyName([int]$vk) {
+    foreach ($k in $script:StopKeyChoices.Keys) {
+        if ($script:StopKeyChoices[$k] -eq $vk) { return $k }
+    }
+    return ("Key 0x{0:X2}" -f $vk)
+}
+
+function Load-Settings {
+    if (Test-Path -LiteralPath $script:SettingsPath) {
+        try {
+            $s = Get-Content -LiteralPath $script:SettingsPath -Raw | ConvertFrom-Json
+            if ($s -and $s.recordStopVk) { $script:RecordStopVk = [int]$s.recordStopVk }
+        } catch {
+            Write-Host "  [!] Could not read settings.json - using defaults." -ForegroundColor Yellow
+        }
+    }
+}
+
+function Save-Settings {
+    try {
+        [ordered]@{ recordStopVk = [int]$script:RecordStopVk } |
+            ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
+    } catch {
+        Write-Host "  [!] Could not write settings.json." -ForegroundColor Yellow
+    }
+}
+
+Load-Settings
 if (-not $script:MacroToolAvailable) {
     # Not fatal - LivePreview still works for preview-only; Automate button is disabled.
     Write-Host "  [!] MacroTool.ps1 not found next to LivePreview.ps1 - Automate feature will be disabled." -ForegroundColor Yellow
@@ -335,6 +385,24 @@ public class NativeMethods {
                 <StackPanel Margin="8,6,8,8">
                     <TextBlock Text="AUTOMATE THIS WINDOW" Foreground="#7EC8FF" FontSize="10"
                                FontWeight="Bold" Margin="0,0,0,4"/>
+
+                    <!-- Settings sub-panel (toggled by the gear button; collapsed by default) -->
+                    <Border Name="SettingsPanel" Background="#12121E" CornerRadius="3"
+                            BorderBrush="#4478B4FF" BorderThickness="1" Padding="6,5"
+                            Margin="0,0,0,6" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="SETTINGS" Foreground="#7EC8FF" FontSize="10"
+                                       FontWeight="Bold" Margin="0,0,0,4"/>
+                            <TextBlock Text="Record / stop shortcut" Foreground="#999999" FontSize="10"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                <ComboBox Name="SetStopKey" Width="130" Height="22" FontSize="11" Margin="0,0,4,0"/>
+                                <Button Name="BtnSettingsSave" Content="Save" Width="56" Height="22" FontSize="11"
+                                        Background="#4266D6" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock Name="SetHint" Text="Use a different key if F9 is already taken by another app."
+                                       Foreground="#777777" FontSize="9" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
                     <TextBlock Name="AutoTarget" Text="Target: (none)" Foreground="#AAAAAA"
                                FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
 
@@ -382,8 +450,11 @@ public class NativeMethods {
                         <Button Name="BtnAutoRefresh" Content="&#x21BB;" ToolTip="Refresh macro list"
                                 Width="28" Height="24" FontSize="13"
                                 Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
-                        <Button Name="BtnAutoFolder" Content="&#x1F4C1;" ToolTip="Open macro folder"
+                        <Button Name="BtnAutoFolder" Content="&#x1F4C1;" ToolTip="Reveal macro folder in Explorer"
                                 Width="28" Height="24" FontSize="11"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
+                        <Button Name="BtnSettings" Content="&#x2699;" ToolTip="Settings (record/stop shortcut)"
+                                Width="28" Height="24" FontSize="13"
                                 Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand"/>
                     </StackPanel>
 
@@ -396,7 +467,7 @@ public class NativeMethods {
                                        FontFamily="Consolas" TextWrapping="Wrap" MinHeight="30" Width="230"/>
                         </StackPanel>
                     </Border>
-                    <TextBlock Name="AutoHint" Text="Recording stops with F9. Playback auto-stops when done or on safety limit."
+                    <TextBlock Name="AutoHint" Text="Recording stops with the configured shortcut. Playback auto-stops when done or on safety limit."
                                Foreground="#777777" FontSize="9" TextWrapping="Wrap" Margin="0,3,0,0"/>
                 </StackPanel>
             </Border>
@@ -762,7 +833,7 @@ function Set-AutoUiState($ctx, [string]$state) {
             $ctx.BtnAutoRecord.Content = [char]0x25A0 + " Stop"
             $ctx.BtnAutoRecord.Background = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(214,66,66))
             $ctx.BtnAutoPlay.IsEnabled = $false
-            $ctx.AutoHint.Text = "Recording... perform your actions, then press F9 (or click Stop) to finish."
+            $ctx.AutoHint.Text = "Recording... perform your actions, then press $(Get-StopKeyName $script:RecordStopVk) (or click Stop) to finish."
         }
         'play' {
             $ctx.AutoDot.Fill = [System.Windows.Media.Brushes]::LimeGreen
@@ -779,7 +850,7 @@ function Set-AutoUiState($ctx, [string]$state) {
             $ctx.BtnAutoPlay.Content = [char]0x25B6 + " Play"
             $ctx.BtnAutoPlay.Background = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(66,102,214))
             $ctx.BtnAutoPlay.IsEnabled = $true
-            $ctx.AutoHint.Text = "Recording stops with F9. Playback auto-stops when done or on safety limit."
+            $ctx.AutoHint.Text = "Recording stops with $(Get-StopKeyName $script:RecordStopVk). Playback auto-stops when done or on safety limit."
         }
     }
 }
@@ -819,6 +890,11 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label, [string]$kind) 
     #  - MaxRuntime: hard wall-clock cap so a runaway/infinite macro can't run forever.
     if ($macroArgs -match '^\s*play\b') {
         $argParts += @("-WatchPid", "$PID", "-MaxRuntime", "$($script:AutoMaxRuntime)")
+    }
+
+    # Pass the user-configured record/stop shortcut for RECORD jobs.
+    if ($macroArgs -match '^\s*record\b') {
+        $argParts += @("-StopVk", "$($script:RecordStopVk)")
     }
 
     $argString = $argParts -join ' '
@@ -925,7 +1001,12 @@ function New-PreviewWindow {
         BtnScale        = $wnd.FindName("BtnScale")
         BtnPin          = $wnd.FindName("BtnPin")
         BtnAutomate     = $wnd.FindName("BtnAutomate")
+        BtnSettings     = $wnd.FindName("BtnSettings")
         BtnClose        = $wnd.FindName("BtnClose")
+        SettingsPanel   = $wnd.FindName("SettingsPanel")
+        SetStopKey      = $wnd.FindName("SetStopKey")
+        BtnSettingsSave = $wnd.FindName("BtnSettingsSave")
+        SetHint         = $wnd.FindName("SetHint")
         PreviewBorder   = $wnd.FindName("PreviewBorder")
         PlaceholderText = $wnd.FindName("PlaceholderText")
         OuterBorder     = $wnd.FindName("OuterBorder")
@@ -1078,7 +1159,54 @@ function New-PreviewWindow {
             $c.AutomatePanel.Visibility = [System.Windows.Visibility]::Visible
             if ($c.TargetTitle) { $c.AutoTarget.Text = "Target: $($c.TargetTitle)" }
             else { $c.AutoTarget.Text = "Target: (select a window first)" }
+            if (-not $c.AutoBusy) {
+                $c.AutoHint.Text = "Recording stops with $(Get-StopKeyName $script:RecordStopVk). Playback auto-stops when done or on safety limit."
+            }
             Refresh-AutoMacros $c
+        }
+    })
+
+    # ---- Settings (gear) -------------------------------------------------
+    # Populate the shortcut dropdown and select the persisted key.
+    $ctx.SetStopKey.Items.Clear()
+    foreach ($label in $script:StopKeyChoices.Keys) { [void]$ctx.SetStopKey.Items.Add($label) }
+    $ctx.SetStopKey.SelectedItem = (Get-StopKeyName $script:RecordStopVk)
+    if ($null -eq $ctx.SetStopKey.SelectedItem) { $ctx.SetStopKey.SelectedIndex = 0 }
+
+    $ctx.BtnSettings.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        # Ensure the Automate panel (which hosts the settings sub-panel) is open.
+        if ($c.AutomatePanel.Visibility -ne [System.Windows.Visibility]::Visible) {
+            $c.AutomatePanel.Visibility = [System.Windows.Visibility]::Visible
+            if ($c.TargetTitle) { $c.AutoTarget.Text = "Target: $($c.TargetTitle)" }
+            else { $c.AutoTarget.Text = "Target: (select a window first)" }
+            Refresh-AutoMacros $c
+        }
+        if ($c.SettingsPanel.Visibility -eq [System.Windows.Visibility]::Visible) {
+            $c.SettingsPanel.Visibility = [System.Windows.Visibility]::Collapsed
+        } else {
+            $c.SetStopKey.SelectedItem = (Get-StopKeyName $script:RecordStopVk)
+            $c.SettingsPanel.Visibility = [System.Windows.Visibility]::Visible
+        }
+    })
+
+    $ctx.BtnSettingsSave.Add_Click({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        $label = "" + $c.SetStopKey.SelectedItem
+        if ($script:StopKeyChoices.Contains($label)) {
+            $script:RecordStopVk = [int]$script:StopKeyChoices[$label]
+            Save-Settings
+            $c.SetHint.Text = "Saved. Recording now stops with $label."
+            # Refresh the Automate hint if idle so it reflects the new key.
+            if (-not $c.AutoBusy) {
+                $c.AutoHint.Text = "Recording stops with $label. Playback auto-stops when done or on safety limit."
+            }
+            # Save also closes the settings sub-panel.
+            $c.SettingsPanel.Visibility = [System.Windows.Visibility]::Collapsed
+        } else {
+            $c.SetHint.Text = "Pick a key first."
         }
     })
 
