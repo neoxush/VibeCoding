@@ -220,7 +220,10 @@
 <script language="javascript">
 var fso = new ActiveXObject("Scripting.FileSystemObject");
 var shell = new ActiveXObject("WScript.Shell");
-var scriptDir = fso.GetParentFolderName(location.pathname.replace(/^\//, "").replace(/\//g, "\\"));
+// Decode %20 etc. so paths with spaces in the install directory work correctly.
+var _rawPath = location.pathname.replace(/^\//, "").replace(/\//g, "\\");
+try { _rawPath = decodeURIComponent(_rawPath); } catch (e) {}
+var scriptDir = fso.GetParentFolderName(_rawPath);
 var ps1 = scriptDir + "\\MacroTool.ps1";
 var macrosDir = scriptDir + "\\macros";
 var selectedMacro = null;

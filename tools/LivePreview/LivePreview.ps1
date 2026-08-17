@@ -800,21 +800,29 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label, [string]$kind) 
     # tail it. Because AutoJobProc IS the player, Stop can kill it reliably and
     # input injection halts immediately. A -StopFile is passed so playback also
     # aborts gracefully the instant the flag file appears (focus-independent).
-    $argList = @(
-        "-NoProfile","-ExecutionPolicy","Bypass",
-        "-File", $script:MacroToolPath
-    ) + (($macroArgs -split ' (?=(?:[^"]*"[^"]*")*[^"]*$)' | Where-Object { $_ -ne '' }) |
-         ForEach-Object { $_ -replace '^"(.*)"$', '$1' })
-    $argList += @("-StopFile", $ctx.AutoStopFile)
+    #
+    # IMPORTANT: -ArgumentList as an array does NOT auto-quote elements that
+    # contain spaces, which would break if the install/user path has spaces.
+    # Build the argument list as a single, explicitly-quoted string instead.
+    $macroParts = ($macroArgs -split ' (?=(?:[^"]*"[^"]*")*[^"]*$)' | Where-Object { $_ -ne '' }) |
+                  ForEach-Object { $_ -replace '^"(.*)"$', '$1' }
+    # Requote any argument token that contains whitespace.
+    $macroTokens = $macroParts | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
+
+    $argParts = @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", ('"' + $script:MacroToolPath + '"')
+    ) + $macroTokens + @("-StopFile", ('"' + $ctx.AutoStopFile + '"'))
 
     # Auto-stop safety nets for PLAYBACK only:
     #  - WatchPid: if this LivePreview process exits, the player stops itself.
     #  - MaxRuntime: hard wall-clock cap so a runaway/infinite macro can't run forever.
     if ($macroArgs -match '^\s*play\b') {
-        $argList += @("-WatchPid", "$PID", "-MaxRuntime", "$($script:AutoMaxRuntime)")
+        $argParts += @("-WatchPid", "$PID", "-MaxRuntime", "$($script:AutoMaxRuntime)")
     }
 
-    $proc = Start-Process powershell -ArgumentList $argList -WindowStyle Hidden -PassThru `
+    $argString = $argParts -join ' '
+    $proc = Start-Process powershell -ArgumentList $argString -WindowStyle Hidden -PassThru `
                 -RedirectStandardOutput $ctx.AutoJobLog `
                 -RedirectStandardError ($ctx.AutoJobLog + ".err")
     $ctx.AutoJobProc = $proc
@@ -1119,7 +1127,8 @@ function New-PreviewWindow {
         $c = Get-Ctx $sender
         $dir = Join-Path $PSScriptRoot 'macros'
         if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-        Start-Process explorer.exe $dir
+        # Quote the path so it survives spaces in the install directory.
+        Start-Process explorer.exe -ArgumentList "`"$dir`""
     })
     # ---------------------------------------------------------------------
 
