@@ -752,7 +752,8 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
 
     $inner = "& { powershell -NoProfile -ExecutionPolicy Bypass -File `"$($script:MacroToolPath)`" $macroArgs *>&1 | " +
              "Tee-Object -FilePath `"$($ctx.AutoJobLog)`" ; Set-Content -LiteralPath `"$($ctx.AutoJobDone)`" -Value done }"
-    Start-Process powershell -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-Command",$inner) -WindowStyle Hidden | Out-Null
+    $proc = Start-Process powershell -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-Command",$inner) -WindowStyle Hidden -PassThru
+    $ctx.AutoJobProc = $proc
 
     # Tail the log into the status area via a DispatcherTimer.
     $timer = New-Object System.Windows.Threading.DispatcherTimer
@@ -773,6 +774,7 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
         if (Test-Path $c.AutoJobDone) {
             $c.AutoTimer.Stop()
             $c.AutoTimer = $null
+            $c.AutoJobProc = $null
             Remove-Item -LiteralPath $c.AutoJobLog  -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $c.AutoJobDone -Force -ErrorAction SilentlyContinue
             $c.AutoStatus.Text = ($c.AutoStatus.Text + "`n[job finished]")
@@ -783,13 +785,28 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
 }
 
 function Stop-AutoJob($ctx) {
-    # Signal playback abort (Esc is honored by MacroTool's play loop) and stop tailing.
-    try {
-        $esc = New-Object -ComObject WScript.Shell
-        $esc.SendKeys("{ESC}")
-    } catch {}
+    # Stop the running job (playback or recording) WITHOUT closing this window.
+    # Kill the hidden job process tree directly; do NOT send Esc (Esc would
+    # close the LivePreview window via its keyboard handler).
+    $stopped = $false
+    if ($ctx.AutoJobProc -and -not $ctx.AutoJobProc.HasExited) {
+        try {
+            # taskkill /T terminates the whole tree (the wrapper PS + the child MacroTool PS).
+            & taskkill.exe /PID $ctx.AutoJobProc.Id /T /F 2>$null | Out-Null
+            $stopped = $true
+        } catch {}
+    }
+    $ctx.AutoJobProc = $null
     if ($ctx.AutoTimer) { $ctx.AutoTimer.Stop(); $ctx.AutoTimer = $null }
-    $ctx.AutoStatus.Text = "Stopped by user."
+    # Clean up the marker/log files.
+    if ($ctx.AutoJobLog)  { Remove-Item -LiteralPath $ctx.AutoJobLog  -Force -ErrorAction SilentlyContinue }
+    if ($ctx.AutoJobDone) { Remove-Item -LiteralPath $ctx.AutoJobDone -Force -ErrorAction SilentlyContinue }
+    if ($stopped) {
+        $ctx.AutoStatus.Text = "Stopped by user."
+    } else {
+        $ctx.AutoStatus.Text = "Nothing is running."
+    }
+    Refresh-AutoMacros $ctx
 }
 
 # ============================================================
@@ -840,6 +857,7 @@ function New-PreviewWindow {
         TargetTitle     = ""
         AutoJobLog      = $null
         AutoJobDone     = $null
+        AutoJobProc     = $null
         AutoTimer       = $null
         IsPinned        = $false
         Timer           = $null
