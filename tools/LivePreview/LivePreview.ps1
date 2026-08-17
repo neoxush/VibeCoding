@@ -746,16 +746,30 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
     if (-not $script:MacroToolAvailable) { $ctx.AutoStatus.Text = "MacroTool.ps1 not available."; return }
     $stamp = [DateTime]::Now.Ticks
     $ctx.AutoJobLog  = Join-Path $env:TEMP ("wt_job_{0}.log" -f $stamp)
-    $ctx.AutoJobDone = Join-Path $env:TEMP ("wt_job_{0}.done" -f $stamp)
+    $ctx.AutoStopFile = Join-Path $env:TEMP ("wt_stop_{0}.flag" -f $stamp)
+    $ctx.AutoJobDone = $null
+    Remove-Item -LiteralPath $ctx.AutoStopFile -Force -ErrorAction SilentlyContinue
     Set-Content -LiteralPath $ctx.AutoJobLog -Value "" -Encoding UTF8
     $ctx.AutoStatus.Text = "$label started..."
 
-    $inner = "& { powershell -NoProfile -ExecutionPolicy Bypass -File `"$($script:MacroToolPath)`" $macroArgs *>&1 | " +
-             "Tee-Object -FilePath `"$($ctx.AutoJobLog)`" ; Set-Content -LiteralPath `"$($ctx.AutoJobDone)`" -Value done }"
-    $proc = Start-Process powershell -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-Command",$inner) -WindowStyle Hidden -PassThru
+    # Run MacroTool.ps1 DIRECTLY as the tracked process (no wrapper subshell that
+    # could orphan the real player). Redirect its output to the log file so we can
+    # tail it. Because AutoJobProc IS the player, Stop can kill it reliably and
+    # input injection halts immediately. A -StopFile is passed so playback also
+    # aborts gracefully the instant the flag file appears (focus-independent).
+    $argList = @(
+        "-NoProfile","-ExecutionPolicy","Bypass",
+        "-File", $script:MacroToolPath
+    ) + (($macroArgs -split ' (?=(?:[^"]*"[^"]*")*[^"]*$)' | Where-Object { $_ -ne '' }) |
+         ForEach-Object { $_ -replace '^"(.*)"$', '$1' })
+    $argList += @("-StopFile", $ctx.AutoStopFile)
+
+    $proc = Start-Process powershell -ArgumentList $argList -WindowStyle Hidden -PassThru `
+                -RedirectStandardOutput $ctx.AutoJobLog `
+                -RedirectStandardError ($ctx.AutoJobLog + ".err")
     $ctx.AutoJobProc = $proc
 
-    # Tail the log into the status area via a DispatcherTimer.
+    # Tail the log into the status area and detect completion via process exit.
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(400)
     $ctx.AutoTimer = $timer
@@ -771,12 +785,13 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
                 }
             }
         } catch {}
-        if (Test-Path $c.AutoJobDone) {
+        # Completion = the tracked player process has exited.
+        if (-not $c.AutoJobProc -or $c.AutoJobProc.HasExited) {
             $c.AutoTimer.Stop()
             $c.AutoTimer = $null
             $c.AutoJobProc = $null
-            Remove-Item -LiteralPath $c.AutoJobLog  -Force -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $c.AutoJobDone -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $c.AutoJobLog -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath ($c.AutoJobLog + ".err") -Force -ErrorAction SilentlyContinue
             $c.AutoStatus.Text = ($c.AutoStatus.Text + "`n[job finished]")
             Refresh-AutoMacros $c
         }
@@ -786,23 +801,38 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label) {
 
 function Stop-AutoJob($ctx) {
     # Stop the running job (playback or recording) WITHOUT closing this window.
-    # Kill the hidden job process tree directly; do NOT send Esc (Esc would
-    # close the LivePreview window via its keyboard handler).
+    # 1) Drop the stop-flag file so any running playback aborts gracefully.
+    # 2) Kill the tracked player process.
+    # 3) Sweep for any stray MacroTool play process (belt and braces).
     $stopped = $false
+    if ($ctx.AutoStopFile) {
+        try { Set-Content -LiteralPath $ctx.AutoStopFile -Value 'stop' -ErrorAction SilentlyContinue; $stopped = $true } catch {}
+    }
     if ($ctx.AutoJobProc -and -not $ctx.AutoJobProc.HasExited) {
         try {
-            # taskkill /T terminates the whole tree (the wrapper PS + the child MacroTool PS).
             & taskkill.exe /PID $ctx.AutoJobProc.Id /T /F 2>$null | Out-Null
             $stopped = $true
         } catch {}
     }
+    # Safety sweep: kill ANY powershell running MacroTool.ps1 'play'.
+    try {
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match 'MacroTool\.ps1.*\bplay\b' } |
+            ForEach-Object {
+                & taskkill.exe /PID $_.ProcessId /T /F 2>$null | Out-Null
+                $stopped = $true
+            }
+    } catch {}
+
     $ctx.AutoJobProc = $null
     if ($ctx.AutoTimer) { $ctx.AutoTimer.Stop(); $ctx.AutoTimer = $null }
-    # Clean up the marker/log files.
-    if ($ctx.AutoJobLog)  { Remove-Item -LiteralPath $ctx.AutoJobLog  -Force -ErrorAction SilentlyContinue }
-    if ($ctx.AutoJobDone) { Remove-Item -LiteralPath $ctx.AutoJobDone -Force -ErrorAction SilentlyContinue }
+    if ($ctx.AutoJobLog) {
+        Remove-Item -LiteralPath $ctx.AutoJobLog -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath ($ctx.AutoJobLog + ".err") -Force -ErrorAction SilentlyContinue
+    }
+    if ($ctx.AutoStopFile) { Remove-Item -LiteralPath $ctx.AutoStopFile -Force -ErrorAction SilentlyContinue }
     if ($stopped) {
-        $ctx.AutoStatus.Text = "Stopped by user."
+        $ctx.AutoStatus.Text = "STOPPED. All playback halted."
     } else {
         $ctx.AutoStatus.Text = "Nothing is running."
     }
@@ -857,6 +887,7 @@ function New-PreviewWindow {
         TargetTitle     = ""
         AutoJobLog      = $null
         AutoJobDone     = $null
+        AutoStopFile    = $null
         AutoJobProc     = $null
         AutoTimer       = $null
         IsPinned        = $false

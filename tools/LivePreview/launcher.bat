@@ -1,8 +1,8 @@
 @echo off
 REM ==========================================================================
-REM  win-toolkit launcher
-REM  Runs the MacroTool environment check, then launches Live Preview
-REM  (which includes the Automate feature). Zero dependencies.
+REM  launcher.bat - main entry point for the Live Preview + Automate toolkit
+REM  Runs the environment check, then launches Live Preview (with the built-in
+REM  Automate feature). Zero dependencies.
 REM ==========================================================================
 setlocal
 set "PS1=%~dp0MacroTool.ps1"

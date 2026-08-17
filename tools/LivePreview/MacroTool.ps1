@@ -47,10 +47,21 @@ param(
 
     [switch]$Background,
 
-    [switch]$FlashRestore
+    [switch]$FlashRestore,
+
+    [string]$StopFile
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Stop-signal: if a caller passes -StopFile, playback aborts the instant that
+# file appears. This is a focus-independent emergency stop (the UI can create
+# the file even while the target window has focus).
+$script:StopFilePath = $StopFile
+function Test-StopSignal {
+    if ($script:StopFilePath -and (Test-Path -LiteralPath $script:StopFilePath)) { return $true }
+    return $false
+}
 
 # --------------------------------------------------------------------------
 # Win32 interop
@@ -475,15 +486,15 @@ function Invoke-PlayEvents($events, [double]$speed) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
     foreach ($ev in $events) {
-        # abort on Esc
-        if (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) {
-            Write-Host "Aborted (Esc)." -ForegroundColor Red
+        # abort on Esc OR stop-file (focus-independent kill signal)
+        if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+            Write-Host "Aborted." -ForegroundColor Red
             return $false
         }
         $target = ($ev.t / $speed) * 1000.0
         while ($sw.Elapsed.TotalMilliseconds -lt $target) {
-            if (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) {
-                Write-Host "Aborted (Esc)." -ForegroundColor Red
+            if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+                Write-Host "Aborted." -ForegroundColor Red
                 return $false
             }
             Start-Sleep -Milliseconds 2
@@ -581,13 +592,13 @@ function Invoke-PlayEventsBackground($events, [double]$speed, [IntPtr]$hWnd) {
     $keyTarget = Find-EditableChild $hWnd
 
     foreach ($ev in $events) {
-        if (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) {
-            Write-Host "Aborted (Esc)." -ForegroundColor Red; return $false
+        if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+            Write-Host "Aborted." -ForegroundColor Red; return $false
         }
         $target = ($ev.t / $speed) * 1000.0
         while ($sw.Elapsed.TotalMilliseconds -lt $target) {
-            if (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) {
-                Write-Host "Aborted (Esc)." -ForegroundColor Red; return $false
+            if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+                Write-Host "Aborted." -ForegroundColor Red; return $false
             }
             Start-Sleep -Milliseconds 2
         }

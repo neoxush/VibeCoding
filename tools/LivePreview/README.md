@@ -1,4 +1,4 @@
-# win-toolkit — Live Preview + Macro Automation for Windows
+# LivePreview — Live Preview + Macro Automation for Windows
 
 A zero-dependency Windows toolkit that combines two features into one:
 
@@ -23,13 +23,12 @@ no pip, no drivers.**
 
 ## Quick start
 
-Double-click **`Launch-Toolkit.bat`**. It runs an environment check, then opens
-Live Preview. Use the toolbar to pick a window; click the **▶ Automate** button
-in the title bar to record/play macros against it.
+Double-click **`launcher.bat`** — the main entry point. It runs an environment
+check, then opens Live Preview. Use the toolbar to pick a window; click the
+**▶ Automate** button in the title bar to record/play macros against it.
 
 Alternatively:
-- `LivePreview.bat` — launch Live Preview directly.
-- `Launch-Console.bat` — launch the standalone **MacroTool console** (HTA), an
+- `console.bat` — launch the standalone **MacroTool console** (HTA), an
   alternative UI for the automation features without the live preview.
 
 ---

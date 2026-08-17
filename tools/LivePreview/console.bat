@@ -1,15 +1,15 @@
 @echo off
-REM Launch the MacroTool visual console (HTA), after verifying the environment.
-REM No dependencies - uses built-in Windows PowerShell and mshta.exe.
-
+REM ==========================================================================
+REM  console.bat - alternative UI (MacroTool HTA console, automation only)
+REM  Use launcher.bat for the main Live Preview + Automate experience.
+REM  Verifies the environment, then opens the HTA console. No dependencies.
+REM ==========================================================================
 setlocal
 set "PS1=%~dp0MacroTool.ps1"
 set "HTA=%~dp0MacroTool.hta"
 
 echo Checking environment...
 echo.
-
-REM Run the environment check. Exit code 0 = OK (possibly with warnings), 1 = failed.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" checkenv
 if errorlevel 1 (
     echo.
