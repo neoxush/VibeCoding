@@ -73,7 +73,7 @@
 因为你在预览里能看到目标窗口，所以可以实时观察宏的运行。
 
 **自动停止安全机制：** 播放会在以下任一情况自动停止——点击停止、按 Esc、启动它的
-界面（LivePreview）退出，或超过最大运行时长上限（默认 300 秒）。
+界面（windows-enhancedthumbnail）退出，或超过最大运行时长上限（默认 300 秒）。
 
 ---
 
@@ -222,7 +222,7 @@ Because you are watching the target in the preview, you can see the macro run in
 real time.
 
 **Auto-stop safety:** playback stops automatically on any of — clicking Stop,
-pressing Esc, the launching UI (LivePreview) exiting, or exceeding the max
+pressing Esc, the launching UI (windows-enhancedthumbnail) exiting, or exceeding the max
 runtime cap (default 300s).
 
 ---
