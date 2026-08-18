@@ -352,6 +352,7 @@ public class NativeMethods {
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <TextBlock Grid.Column="0" Name="TitleText"
@@ -360,7 +361,18 @@ public class NativeMethods {
                                VerticalAlignment="Center" Margin="6,0,0,0"
                                TextTrimming="CharacterEllipsis"/>
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,2,4,2">
+                    <!-- EXPERIMENTAL: live macro countdown / progress badge.
+                         Populated purely from the existing playback log tail; no
+                         new deps. Collapsed when idle so it never intrudes. -->
+                    <Border Grid.Column="1" Name="AutoTabBadge" Visibility="Collapsed"
+                            Background="#3322AACC" CornerRadius="8" Padding="7,1"
+                            VerticalAlignment="Center" Margin="0,0,4,0">
+                        <TextBlock Name="AutoTabStatus" Text=""
+                                   Foreground="#8AE6FF" FontSize="10" FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,2,4,2">
                         <Button Name="BtnSelect" Content="&#x1F50D;" ToolTip="Select Window (Ctrl+W)"
                                 Width="26" Height="20" FontSize="10"
                                 Background="Transparent" Foreground="#CCCCCC" BorderThickness="0" Cursor="Hand"/>
@@ -436,7 +448,7 @@ public class NativeMethods {
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,3,0">
-                            <TextBlock Text="Delay" Foreground="#999999" FontSize="9"/>
+                            <TextBlock Text="CountDown" Foreground="#999999" FontSize="9"/>
                             <TextBox Name="AutoDelay" Text="3" FontSize="11" Height="20"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="0,0,3,0">
@@ -799,6 +811,9 @@ function Hide-TitleBar($ctx) {
     if (-not $ctx.TitleBarVisible) { return }
     # Keep the title bar (and flyout) visible while the Automate panel is open.
     if ($ctx.AutomatePanel -and $ctx.AutomatePanel.Visibility -eq [System.Windows.Visibility]::Visible) { return }
+    # EXPERIMENTAL: keep the title bar visible while a macro job is running so the
+    # countdown / progress badge stays on-screen even when focus is on the target.
+    if ($ctx.AutoJobProc -and -not $ctx.AutoJobProc.HasExited) { return }
     $ctx.TitleBarVisible = $false
     $ctx.TitleBar.Visibility = [System.Windows.Visibility]::Collapsed
     $ctx.PreviewBorder.CornerRadius = [System.Windows.CornerRadius]::new(6)
@@ -874,6 +889,74 @@ function Set-AutoUiState($ctx, [string]$state) {
     }
 }
 
+# ============================================================
+# EXPERIMENTAL: live macro countdown / progress in the tab title bar.
+#
+# Fully self-contained: it only *reads* the playback log text that
+# Start-AutoJob already tails (no new processes, files, timers, modules or
+# other dependencies). If parsing fails for any reason it silently does
+# nothing, so existing behavior is never affected.
+#
+# Recognized log lines (emitted by MacroTool.ps1):
+#   "Starting in:   Ns"   -> pre-run delay countdown
+#   "Run 3/5..."          -> current run / total (or 3/inf)
+#   "Next run in:   Ns"   -> between-run interval countdown
+#   "Done."               -> handled separately as a finished flash
+# ============================================================
+function Set-AutoTabBadge($ctx, [string]$text, [string]$colorHex) {
+    if (-not $ctx.AutoTabStatus -or -not $ctx.AutoTabBadge) { return }
+    if ([string]::IsNullOrEmpty($text)) {
+        $ctx.AutoTabBadge.Visibility = [System.Windows.Visibility]::Collapsed
+        $ctx.AutoTabStatus.Text = ""
+        return
+    }
+    $ctx.AutoTabStatus.Text = $text
+    if ($colorHex) {
+        try {
+            $ctx.AutoTabStatus.Foreground =
+                [System.Windows.Media.SolidColorBrush]::new(
+                    [System.Windows.Media.ColorConverter]::ConvertFromString($colorHex))
+        } catch {}
+    }
+    $ctx.AutoTabBadge.Visibility = [System.Windows.Visibility]::Visible
+}
+
+function Update-AutoTabBadge($ctx, $lines) {
+    if (-not $lines) { return }
+    # Scan from the newest line backwards for the most recent meaningful state.
+    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+        $ln = "" + $lines[$i]
+        if ($ln -match 'Starting in:\s*(\d+)\s*s') {
+            Set-AutoTabBadge $ctx ("start " + $matches[1] + "s") "#8AE6FF"; return
+        }
+        if ($ln -match 'Next run in:\s*(\d+)\s*s') {
+            Set-AutoTabBadge $ctx ("next " + $matches[1] + "s") "#8AE6FF"; return
+        }
+        if ($ln -match 'Run\s+(\d+)\s*/\s*(\d+|inf)') {
+            $cur = $matches[1]; $tot = $matches[2]
+            $sym = [char]0x25B6  # play triangle
+            Set-AutoTabBadge $ctx ("$sym $cur/$tot") "#8AE6FF"; return
+        }
+        if ($ln -match '^\s*Done\.') { return }  # completion handled by the flash
+    }
+}
+
+# Flash a transient "done" badge in the tab, then auto-hide after a moment.
+function Show-AutoTabDone($ctx) {
+    if (-not $ctx.AutoTabStatus -or -not $ctx.AutoTabBadge) { return }
+    # Make sure the badge is on-screen: reveal the title bar for the flash.
+    try { Show-TitleBar $ctx } catch {}
+    Set-AutoTabBadge $ctx ([char]0x2713 + " done") "#B8F0B8"   # checkmark
+    $t = New-Object System.Windows.Threading.DispatcherTimer
+    $t.Interval = [TimeSpan]::FromSeconds(3)
+    $doneCtx = $ctx
+    $t.Add_Tick({
+        $t.Stop()
+        try { Set-AutoTabBadge $doneCtx "" $null } catch {}
+    }.GetNewClosure())
+    $t.Start()
+}
+
 function Start-AutoJob($ctx, [string]$macroArgs, [string]$label, [string]$kind) {
     if (-not $script:MacroToolAvailable) { $ctx.AutoStatus.Text = "MacroTool.ps1 not available."; return }
     $stamp = [DateTime]::Now.Ticks
@@ -935,6 +1018,8 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label, [string]$kind) 
                 if ($lines) {
                     $tail = ($lines | Select-Object -Last 6) -join "`n"
                     $c.AutoStatus.Text = $tail
+                    # EXPERIMENTAL: derive a compact tab-view badge from the same log.
+                    try { Update-AutoTabBadge $c $lines } catch {}
                 }
             }
         } catch {}
@@ -946,6 +1031,8 @@ function Start-AutoJob($ctx, [string]$macroArgs, [string]$label, [string]$kind) 
             Remove-Item -LiteralPath $c.AutoJobLog -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath ($c.AutoJobLog + ".err") -Force -ErrorAction SilentlyContinue
             $c.AutoStatus.Text = ($c.AutoStatus.Text + "`n[finished]")
+            # EXPERIMENTAL: flash a transient "done" badge, then auto-hide.
+            try { Show-AutoTabDone $c } catch {}
             Set-AutoUiState $c 'idle'
             Refresh-AutoMacros $c
         }
@@ -993,8 +1080,9 @@ function Stop-AutoJob($ctx) {
     }
     Set-AutoUiState $ctx 'idle'
     Refresh-AutoMacros $ctx
+    # EXPERIMENTAL: clear the tab countdown badge on manual stop.
+    try { Set-AutoTabBadge $ctx "" $null } catch {}
 }
-
 # ============================================================
 # New-PreviewWindow: Creates an independent preview window
 # ============================================================
@@ -1044,6 +1132,8 @@ function New-PreviewWindow {
         BtnAutoFolder   = $wnd.FindName("BtnAutoFolder")
         AutoStatus      = $wnd.FindName("AutoStatus")
         AutoDot         = $wnd.FindName("AutoDot")
+        AutoTabBadge    = $wnd.FindName("AutoTabBadge")
+        AutoTabStatus   = $wnd.FindName("AutoTabStatus")
         AutoHint        = $wnd.FindName("AutoHint")
         SetAutoCollapse = $wnd.FindName("SetAutoCollapse")
         AutoPanelScale  = $wnd.FindName("AutoPanelScale")
