@@ -129,6 +129,7 @@ $script:AutoMaxRuntime = 300
 # --------------------------------------------------------------------------
 $script:SettingsPath = Join-Path $PSScriptRoot 'settings.json'
 $script:RecordStopVk = 0x78   # default F9
+$script:AutoCollapseOnPlay = $false   # off by default; collapse macro panel after Play
 
 # Friendly labels for the shortcut dropdown. Order here defines the UI order.
 $script:StopKeyChoices = [ordered]@{
@@ -155,6 +156,9 @@ function Load-Settings {
         try {
             $s = Get-Content -LiteralPath $script:SettingsPath -Raw | ConvertFrom-Json
             if ($s -and $s.recordStopVk) { $script:RecordStopVk = [int]$s.recordStopVk }
+            if ($s -and ($s.PSObject.Properties.Name -contains 'autoCollapseOnPlay')) {
+                $script:AutoCollapseOnPlay = [bool]$s.autoCollapseOnPlay
+            }
         } catch {
             Write-Host "  [!] Could not read settings.json - using defaults." -ForegroundColor Yellow
         }
@@ -163,7 +167,7 @@ function Load-Settings {
 
 function Save-Settings {
     try {
-        [ordered]@{ recordStopVk = [int]$script:RecordStopVk } |
+        [ordered]@{ recordStopVk = [int]$script:RecordStopVk; autoCollapseOnPlay = [bool]$script:AutoCollapseOnPlay } |
             ConvertTo-Json | Set-Content -LiteralPath $script:SettingsPath -Encoding UTF8
     } catch {
         Write-Host "  [!] Could not write settings.json." -ForegroundColor Yellow
@@ -383,6 +387,9 @@ public class NativeMethods {
             <Border Grid.Row="1" Name="AutomatePanel" Background="#F02A2A2A"
                     BorderBrush="#4478B4FF" BorderThickness="0,0,0,1" Visibility="Collapsed">
                 <StackPanel Margin="8,6,8,8">
+                    <StackPanel.LayoutTransform>
+                        <ScaleTransform x:Name="AutoPanelScale" ScaleX="1" ScaleY="1"/>
+                    </StackPanel.LayoutTransform>
                     <TextBlock Text="AUTOMATE THIS WINDOW" Foreground="#7EC8FF" FontSize="10"
                                FontWeight="Bold" Margin="0,0,0,4"/>
 
@@ -401,13 +408,25 @@ public class NativeMethods {
                             </StackPanel>
                             <TextBlock Name="SetHint" Text="Use a different key if F9 is already taken by another app."
                                        Foreground="#777777" FontSize="9" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            <CheckBox Name="SetAutoCollapse" Content="Auto-collapse this panel after Play"
+                                      Foreground="#CCCCCC" FontSize="10" Margin="0,6,0,0"/>
                         </StackPanel>
                     </Border>
                     <TextBlock Name="AutoTarget" Text="Target: (none)" Foreground="#AAAAAA"
                                FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,0,6"/>
 
                     <TextBlock Text="Macro" Foreground="#999999" FontSize="10"/>
-                    <ComboBox Name="AutoMacro" Height="22" FontSize="11" Margin="0,1,0,6"/>
+                    <!-- Macro list row: Refresh + Folder act on the macro list, so they
+                         live next to the dropdown. The ComboBox fills remaining width. -->
+                    <DockPanel Margin="0,1,0,6" LastChildFill="True">
+                        <Button Name="BtnAutoRefresh" Content="&#x21BB;" ToolTip="Refresh macro list"
+                                DockPanel.Dock="Right" Width="26" Height="22" FontSize="13"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
+                        <Button Name="BtnAutoFolder" Content="&#x1F4C1;" ToolTip="Reveal macro folder in Explorer"
+                                DockPanel.Dock="Right" Width="26" Height="22" FontSize="11"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
+                        <ComboBox Name="AutoMacro" Height="22" FontSize="11" MaxDropDownHeight="260"/>
+                    </DockPanel>
 
                     <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
@@ -436,36 +455,36 @@ public class NativeMethods {
 
                     <TextBlock Text="Playback mode" Foreground="#999999" FontSize="10"/>
                     <ComboBox Name="AutoMode" Height="22" FontSize="11" Margin="0,1,0,6">
-                        <ComboBoxItem Content="Foreground (bring target to front)" IsSelected="True"/>
-                        <ComboBoxItem Content="Flash-restore (focus target, return to you)"/>
+                        <ComboBoxItem Content="Flash-restore (focus target, return to you)" IsSelected="True"/>
+                        <ComboBoxItem Content="Foreground (bring target to front)"/>
                         <ComboBoxItem Content="Background (no focus - Win32 apps only)"/>
                     </ComboBox>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                        <TextBox Name="AutoRecName" Text="mymacro" Width="96" FontSize="11" Height="24" Margin="0,0,4,0"/>
-                        <Button Name="BtnAutoRecord" Content="&#x25CF; Record" Width="76" Height="24" FontSize="11"
-                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
-                        <Button Name="BtnAutoPlay" Content="&#x25B6; Play" Width="64" Height="24" FontSize="11"
-                                Background="#4266D6" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
-                        <Button Name="BtnAutoRefresh" Content="&#x21BB;" ToolTip="Refresh macro list"
-                                Width="28" Height="24" FontSize="13"
-                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
-                        <Button Name="BtnAutoFolder" Content="&#x1F4C1;" ToolTip="Reveal macro folder in Explorer"
-                                Width="28" Height="24" FontSize="11"
-                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"/>
+                    <!-- Action row: name box stretches; Record / Play / Settings are
+                         fixed. Refresh + Folder moved up next to the macro list. -->
+                    <DockPanel Margin="0,0,0,4" LastChildFill="True">
                         <Button Name="BtnSettings" Content="&#x2699;" ToolTip="Settings (record/stop shortcut)"
-                                Width="28" Height="24" FontSize="13"
-                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand"/>
-                    </StackPanel>
+                                DockPanel.Dock="Right" Width="28" Height="24" FontSize="13"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
+                        <Button Name="BtnAutoPlay" Content="&#x25B6; Play" DockPanel.Dock="Right"
+                                Width="64" Height="24" FontSize="11"
+                                Background="#4266D6" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
+                        <Button Name="BtnAutoRecord" Content="&#x25CF; Record" DockPanel.Dock="Right"
+                                Width="76" Height="24" FontSize="11"
+                                Background="#3A3A58" Foreground="#EEEEEE" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
+                        <TextBox Name="AutoRecName" Text="mymacro" FontSize="11" Height="24"
+                                 VerticalContentAlignment="Center"/>
+                    </DockPanel>
 
                     <!-- Status indicator: colored dot + live text (replaces the Stop button) -->
                     <Border Background="#12121E" CornerRadius="3" Padding="6,4" Margin="0,2,0,0">
-                        <StackPanel Orientation="Horizontal">
+                        <DockPanel LastChildFill="True">
                             <Ellipse Name="AutoDot" Width="9" Height="9" Fill="#666666"
+                                     DockPanel.Dock="Left"
                                      VerticalAlignment="Top" Margin="0,3,6,0"/>
                             <TextBlock Name="AutoStatus" Text="Idle." Foreground="#B8F0B8" FontSize="10"
-                                       FontFamily="Consolas" TextWrapping="Wrap" MinHeight="30" Width="230"/>
-                        </StackPanel>
+                                       FontFamily="Consolas" TextWrapping="Wrap" MinHeight="30"/>
+                        </DockPanel>
                     </Border>
                     <TextBlock Name="AutoHint" Text="Recording stops with the configured shortcut. Playback auto-stops when done or on safety limit."
                                Foreground="#777777" FontSize="9" TextWrapping="Wrap" Margin="0,3,0,0"/>
@@ -1026,6 +1045,8 @@ function New-PreviewWindow {
         AutoStatus      = $wnd.FindName("AutoStatus")
         AutoDot         = $wnd.FindName("AutoDot")
         AutoHint        = $wnd.FindName("AutoHint")
+        SetAutoCollapse = $wnd.FindName("SetAutoCollapse")
+        AutoPanelScale  = $wnd.FindName("AutoPanelScale")
         AutoBusy        = $null   # 'record' | 'play' | $null
         ThumbnailHandle = [IntPtr]::Zero
         TargetHandle    = [IntPtr]::Zero
@@ -1080,6 +1101,7 @@ function New-PreviewWindow {
             $c.BaseHeight = $c.Window.Height
             $c.BaseCaptured = $true
             $c.BtnScale.Content = "1x"
+            if ($c.AutoPanelScale) { $c.AutoPanelScale.ScaleX = 1; $c.AutoPanelScale.ScaleY = 1 }
         } else {
             $c.Window.DragMove()
         }
@@ -1121,6 +1143,11 @@ function New-PreviewWindow {
         $c.BtnScale.Content = "$($factor)x"
         $c.Window.Width  = $c.BaseWidth  * $factor
         $c.Window.Height = $c.BaseHeight * $factor
+        # Scale the Automate panel content so its controls stay readable/fit at each scale.
+        if ($c.AutoPanelScale) {
+            $c.AutoPanelScale.ScaleX = $factor
+            $c.AutoPanelScale.ScaleY = $factor
+        }
         Update-Thumbnail $c
     })
 
@@ -1166,12 +1193,50 @@ function New-PreviewWindow {
         }
     })
 
+    # ---- Macro dropdown: grow the window while open so the list isn't -----
+    # clipped. Under WindowStyle=None + AllowsTransparency=True, ComboBox
+    # popups are clipped to the parent window, so we temporarily enlarge it.
+    $ctx.AutoMacro.Add_DropDownOpened({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        try {
+            $count = [Math]::Max(1, $c.AutoMacro.Items.Count)
+            # ~22px per row (scaled), capped by MaxDropDownHeight (260) + chrome.
+            $factor = 1.0
+            if ($c.AutoPanelScale) { $factor = [double]$c.AutoPanelScale.ScaleY }
+            $needed = [Math]::Min(260, ($count * 22)) * $factor + 40
+            $c.AutoMacroSavedHeight = $c.Window.Height
+            $c.AutoMacroSavedMinHeight = $c.Window.MinHeight
+            $required = $c.Window.ActualHeight + $needed
+            if ($required -gt $c.Window.Height) {
+                # Relax MinHeight if it would block growth, then grow.
+                if ($c.Window.MinHeight -gt $required) { $c.Window.MinHeight = $required }
+                $c.Window.Height = $required
+            }
+        } catch {}
+    })
+    $ctx.AutoMacro.Add_DropDownClosed({
+        param($sender, $e)
+        $c = Get-Ctx $sender
+        try {
+            if ($c.ContainsKey('AutoMacroSavedHeight') -and $c.AutoMacroSavedHeight) {
+                $c.Window.Height = $c.AutoMacroSavedHeight
+                $c.AutoMacroSavedHeight = $null
+            }
+            if ($c.ContainsKey('AutoMacroSavedMinHeight') -and $c.AutoMacroSavedMinHeight) {
+                $c.Window.MinHeight = $c.AutoMacroSavedMinHeight
+                $c.AutoMacroSavedMinHeight = $null
+            }
+        } catch {}
+    })
+
     # ---- Settings (gear) -------------------------------------------------
     # Populate the shortcut dropdown and select the persisted key.
     $ctx.SetStopKey.Items.Clear()
     foreach ($label in $script:StopKeyChoices.Keys) { [void]$ctx.SetStopKey.Items.Add($label) }
     $ctx.SetStopKey.SelectedItem = (Get-StopKeyName $script:RecordStopVk)
     if ($null -eq $ctx.SetStopKey.SelectedItem) { $ctx.SetStopKey.SelectedIndex = 0 }
+    $ctx.SetAutoCollapse.IsChecked = $script:AutoCollapseOnPlay
 
     $ctx.BtnSettings.Add_Click({
         param($sender, $e)
@@ -1187,6 +1252,7 @@ function New-PreviewWindow {
             $c.SettingsPanel.Visibility = [System.Windows.Visibility]::Collapsed
         } else {
             $c.SetStopKey.SelectedItem = (Get-StopKeyName $script:RecordStopVk)
+            $c.SetAutoCollapse.IsChecked = $script:AutoCollapseOnPlay
             $c.SettingsPanel.Visibility = [System.Windows.Visibility]::Visible
         }
     })
@@ -1197,6 +1263,7 @@ function New-PreviewWindow {
         $label = "" + $c.SetStopKey.SelectedItem
         if ($script:StopKeyChoices.Contains($label)) {
             $script:RecordStopVk = [int]$script:StopKeyChoices[$label]
+            $script:AutoCollapseOnPlay = [bool]$c.SetAutoCollapse.IsChecked
             Save-Settings
             $c.SetHint.Text = "Saved. Recording now stops with $label."
             # Refresh the Automate hint if idle so it reflects the new key.
@@ -1236,11 +1303,15 @@ function New-PreviewWindow {
         $speed    = ("" + $c.AutoSpeed.Text).Trim();    if (-not $speed) { $speed = "1" }
         $modeIdx  = $c.AutoMode.SelectedIndex
         $modeFlag = ""
-        if ($modeIdx -eq 1) { $modeFlag = " -FlashRestore" }
+        if ($modeIdx -eq 0) { $modeFlag = " -FlashRestore" }
         elseif ($modeIdx -eq 2) { $modeFlag = " -Background" }
         $hwnd = [int64]$c.TargetHandle
         $args = "play -Name `"$macro`" -TargetHwnd $hwnd -Delay $delay -Repeat $repeat -Interval $interval -Speed $speed$modeFlag"
         Start-AutoJob $c $args "Playback" 'play'
+        # Optionally collapse the macro panel after starting playback (opt-in setting).
+        if ($script:AutoCollapseOnPlay) {
+            $c.AutomatePanel.Visibility = [System.Windows.Visibility]::Collapsed
+        }
     })
 
     $ctx.BtnAutoRefresh.Add_Click({
