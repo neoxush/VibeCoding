@@ -1,4 +1,4 @@
-# LivePreview — 实时窗口预览 + 宏自动化工具（Windows）
+# windows-enhancedthumbnail — 实时窗口预览 + 宏自动化工具（Windows）
 
 > 中文说明在前，English below.
 
@@ -142,7 +142,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\MacroTool.ps1 checkenv
 
 <br>
 
-# LivePreview — Live Preview + Macro Automation for Windows
+# windows-enhancedthumbnail — Live Preview + Macro Automation for Windows
 
 A zero-dependency Windows toolkit that combines two features into one:
 
