@@ -716,14 +716,23 @@ function Move-MouseAbsolute([int]$x, [int]$y) {
     Send-Inputs @( (New-MouseInput $flags $ax $ay) )
 }
 
+function ConvertTo-UInt32Bits([int]$v) {
+    # Reinterpret a signed 32-bit int's bit pattern as a uint32 WITHOUT throwing.
+    # A direct [uint32]$negative cast throws ("value too small"), and
+    # ($v -band 0xFFFFFFFF) stays negative because 0xFFFFFFFF is a signed int.
+    # Masking through int64 yields the correct unsigned bit pattern (e.g.
+    # -120 -> 4294967176) which is what mouseData / wheel deltas require.
+    return [uint32]([int64]$v -band 0xFFFFFFFFL)
+}
+
 function Send-Wheel([int]$dx, [int]$dy) {
-    # Reproduce a recorded wheel notch. mouseData carries the (signed) delta;
-    # vertical uses MOUSEEVENTF_WHEEL, horizontal uses MOUSEEVENTF_HWHEEL.
+    # Reproduce a recorded wheel notch. mouseData carries the (signed) delta as a
+    # 32-bit bit pattern; vertical uses MOUSEEVENTF_WHEEL, horizontal HWHEEL.
     if ($dy -ne 0) {
-        Send-Inputs @( (New-MouseInput $MOUSEEVENTF_WHEEL 0 0 ([uint32]($dy -band 0xFFFFFFFF))) )
+        Send-Inputs @( (New-MouseInput $MOUSEEVENTF_WHEEL 0 0 (ConvertTo-UInt32Bits $dy)) )
     }
     if ($dx -ne 0) {
-        Send-Inputs @( (New-MouseInput $MOUSEEVENTF_HWHEEL 0 0 ([uint32]($dx -band 0xFFFFFFFF))) )
+        Send-Inputs @( (New-MouseInput $MOUSEEVENTF_HWHEEL 0 0 (ConvertTo-UInt32Bits $dx)) )
     }
 }
 
