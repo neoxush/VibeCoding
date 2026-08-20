@@ -616,15 +616,27 @@ function Invoke-PlayEvents($events, [double]$speed) {
     if ($speed -le 0) { $speed = 1.0 }
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
+    # Does this macro itself use Esc? If so, the raw GetAsyncKeyState(Esc) panic
+    # key would false-trigger the instant we INJECT the macro's own Esc, aborting
+    # playback immediately (this is the classic "macro does nothing" symptom).
+    # When the macro contains Esc events we rely solely on the -StopFile signal
+    # (used by the UI Stop button) for aborting, which never collides with
+    # injected input.
+    $macroUsesEsc = $false
     foreach ($ev in $events) {
-        # abort on Esc OR stop-file (focus-independent kill signal)
-        if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+        if ($ev.type -eq 'key' -and [int]$ev.vk -eq 0x1B) { $macroUsesEsc = $true; break }
+    }
+    $escAbortEnabled = -not $macroUsesEsc
+
+    foreach ($ev in $events) {
+        # abort on Esc (only when the macro doesn't use Esc itself) OR stop-file.
+        if (($escAbortEnabled -and (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0)) -or (Test-StopSignal)) {
             Write-Host "Aborted." -ForegroundColor Red
             return $false
         }
         $target = ($ev.t / $speed) * 1000.0
         while ($sw.Elapsed.TotalMilliseconds -lt $target) {
-            if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+            if (($escAbortEnabled -and (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0)) -or (Test-StopSignal)) {
                 Write-Host "Aborted." -ForegroundColor Red
                 return $false
             }
@@ -722,13 +734,21 @@ function Invoke-PlayEventsBackground($events, [double]$speed, [IntPtr]$hWnd) {
     # If the macro has no mouse events, fall back to an editable child control.
     $keyTarget = Find-EditableChild $hWnd
 
+    # See Invoke-PlayEvents: disable the raw Esc panic key when the macro itself
+    # injects Esc, otherwise playback aborts on its own injected keystroke.
+    $macroUsesEsc = $false
     foreach ($ev in $events) {
-        if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+        if ($ev.type -eq 'key' -and [int]$ev.vk -eq 0x1B) { $macroUsesEsc = $true; break }
+    }
+    $escAbortEnabled = -not $macroUsesEsc
+
+    foreach ($ev in $events) {
+        if (($escAbortEnabled -and (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0)) -or (Test-StopSignal)) {
             Write-Host "Aborted." -ForegroundColor Red; return $false
         }
         $target = ($ev.t / $speed) * 1000.0
         while ($sw.Elapsed.TotalMilliseconds -lt $target) {
-            if ((([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0) -or (Test-StopSignal)) {
+            if (($escAbortEnabled -and (([Win32.Native]::GetAsyncKeyState(0x1B) -band 0x8000) -ne 0)) -or (Test-StopSignal)) {
                 Write-Host "Aborted." -ForegroundColor Red; return $false
             }
             Start-Sleep -Milliseconds 2
