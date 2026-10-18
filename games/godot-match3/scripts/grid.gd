@@ -17,7 +17,15 @@ var controlling: bool = false
 var first_touch = Vector2i.ZERO
 var final_touch = Vector2i.ZERO
 var is_dragging = false
+var match_audio_player: AudioStreamPlayer = null
 var clink_audio_player: AudioStreamPlayer = null
+var default_match_sfx: AudioStream = preload("res://assets/lightning_match.wav")
+var cascade_count: int = 0
+var is_busy: bool = false
+var last_swapped_a: Vector2i = Vector2i(-1, -1)
+var last_swapped_b: Vector2i = Vector2i(-1, -1)
+var pending_thunder_gem_spawns: Array[Vector2i] = []
+var arc_lightning_line: Line2D = null
 
 # Preload
 
@@ -52,9 +60,22 @@ func _ready():
 	# Ensure RPG Area elements (gauge/counter) are active
 	initialize_explosion_counter()
 	
-	clink_audio_player = AudioStreamPlayer.new()
-	add_child(clink_audio_player)
-	clink_audio_player.stream = load("res://assets/explosion-clinking.mp3")
+	match_audio_player = AudioStreamPlayer.new()
+	match_audio_player.max_polyphony = 4
+	add_child(match_audio_player)
+	match_audio_player.stream = default_match_sfx
+	clink_audio_player = match_audio_player
+	
+	# Dedicated Line2D for Zeus Arc Lightning effects
+	arc_lightning_line = Line2D.new()
+	arc_lightning_line.top_level = true
+	arc_lightning_line.z_index = 650
+	arc_lightning_line.width = 9.0
+	arc_lightning_line.default_color = Color(0.4, 0.85, 1.0, 1.0)
+	arc_lightning_line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	arc_lightning_line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	arc_lightning_line.hide()
+	add_child(arc_lightning_line)
 	
 	call_deferred("_fix_background_texture")
 
@@ -170,6 +191,8 @@ func match_at(i, j, type):
 
 # Input Handling
 func _unhandled_input(event):
+	if is_busy:
+		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
@@ -228,11 +251,38 @@ func touch_difference(start, end):
 func swap_pieces(pos_a, pos_b):
 	if not is_in_grid(pos_a) or not is_in_grid(pos_b):
 		return
+	if is_busy:
+		return
 		
 	var piece_a = all_pieces[pos_a.x][pos_a.y]
 	var piece_b = all_pieces[pos_b.x][pos_b.y]
 	
 	if piece_a == null or piece_b == null:
+		return
+
+	last_swapped_a = pos_a
+	last_swapped_b = pos_b
+
+	# Check for Thunder Gem activation
+	if piece_a.is_thunder_gem or piece_b.is_thunder_gem:
+		is_busy = true
+		# Swap in data
+		all_pieces[pos_a.x][pos_a.y] = piece_b
+		all_pieces[pos_b.x][pos_b.y] = piece_a
+		piece_a.grid_position = pos_b
+		piece_b.grid_position = pos_a
+		piece_a.move(grid_to_pixel(pos_b.x, pos_b.y))
+		piece_b.move(grid_to_pixel(pos_a.x, pos_a.y))
+		await get_tree().create_timer(0.35).timeout
+		
+		if piece_a.is_thunder_gem and piece_b.is_thunder_gem:
+			await cast_wrath_of_thundergod(pos_a, pos_b)
+		else:
+			var thunder_gem_pos = pos_b if piece_a.is_thunder_gem else pos_a
+			var regular_pos = pos_a if piece_a.is_thunder_gem else pos_b
+			var target_type = all_pieces[regular_pos.x][regular_pos.y].type
+			await cast_arc_lightning(thunder_gem_pos, target_type)
+		is_busy = false
 		return
 
 	# Swap in data
@@ -250,6 +300,8 @@ func swap_pieces(pos_a, pos_b):
 	
 	# Check if this swap creates any matches
 	if check_for_matches():
+		# Reset cascade step for new move
+		cascade_count = 0
 		# Valid swap - destroy matches and continue game loop
 		find_matches()
 	else:
@@ -295,47 +347,91 @@ func swap_back(pos_a, pos_b):
 	piece_b.move(grid_to_pixel(pos_a.x, pos_a.y))
 
 func find_matches():
-	# Reset flags first? No, we just need to set them for new matches.
-	# But technically we should clear them if we are re-scanning? 
-	# Actually pieces are created fresh or moved. Existing matches are destroyed.
+	pending_thunder_gem_spawns.clear()
 	
+	# Horizontal check
+	for j in height:
+		var run_start = 0
+		while run_start < width:
+			if all_pieces[run_start][j] == null:
+				run_start += 1
+				continue
+			var p_type = all_pieces[run_start][j].type
+			var run_end = run_start + 1
+			while run_end < width and all_pieces[run_end][j] != null and all_pieces[run_end][j].type == p_type:
+				run_end += 1
+			var run_len = run_end - run_start
+			if run_len >= 3:
+				var coords: Array[Vector2i] = []
+				for k in range(run_start, run_end):
+					all_pieces[k][j].matched = true
+					all_pieces[k][j].match_flags |= 1
+					coords.append(Vector2i(k, j))
+				if run_len >= 5:
+					# 5-match detected!
+					var spawn_pos = choose_thunder_gem_spawn(coords)
+					if not pending_thunder_gem_spawns.has(spawn_pos):
+						pending_thunder_gem_spawns.append(spawn_pos)
+			run_start = run_end
+
+	# Vertical check
 	for i in width:
-		for j in height:
-			if all_pieces[i][j] != null:
-				var type = all_pieces[i][j].type
-				# Horizontal
-				if i > 0 and i < width - 1:
-					if all_pieces[i-1][j] != null and all_pieces[i+1][j] != null:
-						if all_pieces[i-1][j].type == type and all_pieces[i+1][j].type == type:
-							all_pieces[i-1][j].matched = true
-							all_pieces[i][j].matched = true
-							all_pieces[i+1][j].matched = true
-							
-							all_pieces[i-1][j].match_flags |= 1 # Horizontal
-							all_pieces[i][j].match_flags |= 1
-							all_pieces[i+1][j].match_flags |= 1
-							
-				# Vertical
-				if j > 0 and j < height - 1:
-					if all_pieces[i][j-1] != null and all_pieces[i][j+1] != null:
-						if all_pieces[i][j-1].type == type and all_pieces[i][j+1].type == type:
-							all_pieces[i][j-1].matched = true
-							all_pieces[i][j].matched = true
-							all_pieces[i][j+1].matched = true
-							
-							all_pieces[i][j-1].match_flags |= 2 # Vertical
-							all_pieces[i][j].match_flags |= 2
-							all_pieces[i][j+1].match_flags |= 2
-	
+		var run_start = 0
+		while run_start < height:
+			if all_pieces[i][run_start] == null:
+				run_start += 1
+				continue
+			var p_type = all_pieces[i][run_start].type
+			var run_end = run_start + 1
+			while run_end < height and all_pieces[i][run_end] != null and all_pieces[i][run_end].type == p_type:
+				run_end += 1
+			var run_len = run_end - run_start
+			if run_len >= 3:
+				var coords: Array[Vector2i] = []
+				for k in range(run_start, run_end):
+					all_pieces[i][k].matched = true
+					all_pieces[i][k].match_flags |= 2
+					coords.append(Vector2i(i, k))
+				if run_len >= 5:
+					# 5-match detected!
+					var spawn_pos = choose_thunder_gem_spawn(coords)
+					if not pending_thunder_gem_spawns.has(spawn_pos):
+						pending_thunder_gem_spawns.append(spawn_pos)
+			run_start = run_end
+
 	destroy_matches()
+
+func choose_thunder_gem_spawn(coords: Array[Vector2i]) -> Vector2i:
+	if coords.has(last_swapped_a):
+		return last_swapped_a
+	if coords.has(last_swapped_b):
+		return last_swapped_b
+	return coords[coords.size() / 2]
 
 func destroy_matches():
 	var was_matched = false
+	var new_thunder_gems_created: Array[Vector2i] = []
+	var detonating_thunder_gems: Array[Vector2i] = []
+
 	for i in width:
 		for j in height:
-			if all_pieces[i][j] != null and all_pieces[i][j].matched:
+			var piece = all_pieces[i][j]
+			if piece != null and piece.matched:
 				was_matched = true
+				var pos = Vector2i(i, j)
 				
+				# Check if this piece transforms into a Thunder Gem from a 5-match!
+				if pending_thunder_gem_spawns.has(pos) and not new_thunder_gems_created.has(pos):
+					new_thunder_gems_created.append(pos)
+					piece.make_thunder_gem()
+					spawn_thunder_creation_effect(grid_to_pixel(i, j))
+					continue
+					
+				# If an existing thunder gem was matched in a cascade
+				if piece.is_thunder_gem:
+					detonating_thunder_gems.append(pos)
+					continue
+
 				# Create explosion
 				var explosion = explosion_scene.instantiate()
 				explosion.position = grid_to_pixel(i, j)
@@ -343,7 +439,7 @@ func destroy_matches():
 				add_child(explosion)
 				
 				# Shape based on match direction
-				var flags = all_pieces[i][j].match_flags
+				var flags = piece.match_flags
 				if (flags & 1) and not (flags & 2):
 					# Horizontal Match
 					explosion.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
@@ -357,29 +453,36 @@ func destroy_matches():
 					explosion.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
 					explosion.emission_sphere_radius = 25.0
 
-				
 				# Set color based on type
-				match all_pieces[i][j].type:
+				match piece.type:
 					"red": explosion.color = Color(0.9, 0.2, 0.2)
 					"blue": explosion.color = Color(0.2, 0.2, 0.9)
 					"green": explosion.color = Color(0.2, 0.9, 0.2)
 					"yellow": explosion.color = Color(0.9, 0.9, 0.2)
+					_: explosion.color = Color(0.4, 0.8, 1.0)
 				
 				explosion.emitting = true
 				
-				all_pieces[i][j].queue_free()
+				piece.queue_free()
 				all_pieces[i][j] = null
-	
+
+	pending_thunder_gem_spawns.clear()
+
+	# Trigger Arc Lightning for any thunder gems caught in matches
+	for tg_pos in detonating_thunder_gems:
+		var best_type = get_most_abundant_color()
+		await cast_arc_lightning(tg_pos, best_type, false)
+
 	# Trigger single counter for this match batch
 	if was_matched:
-		if clink_audio_player:
-			clink_audio_player.stop()
-			clink_audio_player.play()
-			
+		cascade_count += 1
+		play_match_sfx()
 		trigger_explosion_counter()
-		print("Matches found and destroyed")
+		print("Matches found and destroyed (cascade: ", cascade_count, ")")
 		await get_tree().create_timer(0.4).timeout
 		collapse_columns()
+	else:
+		cascade_count = 0
 
 func collapse_columns():
 	for i in width:
@@ -424,25 +527,47 @@ func trigger_explosion_counter():
 	explosion_counter.add_explosion()
 
 func select_random_targets(count_to_select: int):
-	var available_positions = []
+	var regular_positions = []
+	var special_positions = []
+	
 	for i in width:
 		for j in height:
 			if all_pieces[i][j] != null:
-				available_positions.append(Vector2i(i, j))
+				if all_pieces[i][j].is_thunder_gem:
+					special_positions.append(Vector2i(i, j))
+				else:
+					regular_positions.append(Vector2i(i, j))
 	
-	if available_positions.is_empty():
-		return []
-		
-	available_positions.shuffle()
+	regular_positions.shuffle()
+	special_positions.shuffle()
+	
+	var chosen = []
+	# Prioritize regular positions so Zeus's random strikes clear candies instead of sniping Thunder Gems
+	for pos in regular_positions:
+		if chosen.size() < count_to_select:
+			chosen.append(pos)
+			
+	# If not enough regular pieces, include special pieces
+	for pos in special_positions:
+		if chosen.size() < count_to_select:
+			chosen.append(pos)
+			
 	var targets = []
-	var actual_count = min(count_to_select, available_positions.size())
-	
-	for i in range(actual_count):
-		var pos = available_positions[i]
-		var piece = all_pieces[pos.x][pos.y]
-		if piece != null:
-			targets.append(grid_to_pixel(pos.x, pos.y))
+	for pos in chosen:
+		targets.append(grid_to_pixel(pos.x, pos.y))
 	return targets
+
+func create_explosion_fx(pixel_pos: Vector2, color: Color = Color(1.0, 1.0, 1.4, 1.0)):
+	var explosion = explosion_scene.instantiate()
+	explosion.position = pixel_pos
+	explosion.z_index = 110
+	explosion.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	explosion.emission_sphere_radius = 40.0
+	explosion.color = color
+	explosion.scale_amount_min = 15.0
+	explosion.scale_amount_max = 25.0
+	add_child(explosion)
+	explosion.emitting = true
 
 func explode_at_position(pixel_pos: Vector2):
 	var grid_pos = pixel_to_grid(pixel_pos)
@@ -451,23 +576,253 @@ func explode_at_position(pixel_pos: Vector2):
 	var piece = all_pieces[grid_pos.x][grid_pos.y]
 	if piece == null: return
 	
-	# Visual effect: Replicate match explosion
-	var explosion = explosion_scene.instantiate()
-	explosion.position = pixel_pos
-	explosion.z_index = 110
+	create_explosion_fx(pixel_pos)
 	
-	# Lightning flash explosion
-	explosion.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
-	explosion.emission_sphere_radius = 40.0
-	explosion.color = Color(1.0, 1.0, 1.4, 1.0) # Overbright lightning white
-	explosion.scale_amount_min = 15.0
-	explosion.scale_amount_max = 25.0
-	
-	add_child(explosion)
-	explosion.emitting = true
+	# If a Thunder Gem is striked (by Zeus's skill or lightning),
+	# do NOT simply dispense! Trigger its Thunder Gem Arc Lightning effect!
+	if piece.is_thunder_gem:
+		print("Thunder Gem was STRIKED at ", grid_pos, "! Activating Arc Lightning overcharge!")
+		await detonate_thunder_gem_strike(grid_pos)
+		return
 	
 	piece.queue_free()
 	all_pieces[grid_pos.x][grid_pos.y] = null
 
 func refill_after_lightning():
+	cascade_count = 0
 	collapse_columns()
+
+# Musical pentatonic scale offsets (semitones): C, D, E, G, A, C(+1), D(+1), E(+1)
+const PENTATONIC_SEMITONES: Array[int] = [0, 2, 4, 7, 9, 12, 14, 16]
+
+func play_match_sfx():
+	if not match_audio_player:
+		return
+	
+	# Fetch character/skill themed SFX if available
+	var sfx: AudioStream = null
+	if explosion_counter and explosion_counter.current_skill and explosion_counter.current_skill.match_sfx:
+		sfx = explosion_counter.current_skill.match_sfx
+	else:
+		sfx = default_match_sfx
+	
+	if sfx:
+		match_audio_player.stream = sfx
+	
+	# Increase pitch dynamically with each cascade/combo step
+	var semitone_idx = clamp(cascade_count - 1, 0, PENTATONIC_SEMITONES.size() - 1)
+	var semitone = PENTATONIC_SEMITONES[semitone_idx]
+	match_audio_player.pitch_scale = pow(2.0, float(semitone) / 12.0)
+	match_audio_player.play()
+
+# ==============================================================================
+# ZEUS DOTA 2 BONUS: ELECTRIC THUNDER GEM & ARC LIGHTNING
+# ==============================================================================
+
+func spawn_thunder_creation_effect(pixel_pos: Vector2):
+	# Zeus divine thunder strike on creation
+	var explosion = explosion_scene.instantiate()
+	explosion.position = pixel_pos
+	explosion.z_index = 120
+	explosion.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	explosion.emission_sphere_radius = 45.0
+	explosion.color = Color(1.0, 1.0, 1.5, 1.0)
+	explosion.scale_amount_min = 20.0
+	explosion.scale_amount_max = 35.0
+	add_child(explosion)
+	explosion.emitting = true
+	
+	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
+		explosion_counter.play_strike_sound()
+		
+	spawn_floating_text(pixel_pos, "⚡ THUNDER GEM!", Color(1.0, 0.9, 0.2))
+
+func spawn_floating_text(pos: Vector2, text: String, color: Color = Color.WHITE):
+	var lbl = Label.new()
+	lbl.text = text
+	lbl.z_index = 700
+	lbl.position = pos - Vector2(100, 30)
+	lbl.size = Vector2(200, 40)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.modulate = color
+	lbl.add_theme_font_size_override("font_size", 24)
+	add_child(lbl)
+	
+	var tw = create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lbl, "position:y", pos.y - 70, 0.75).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lbl, "scale", Vector2(1.2, 1.2), 0.2)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.75).set_delay(0.2)
+	tw.chain().tween_callback(lbl.queue_free)
+
+func get_most_abundant_color() -> String:
+	var counts = {}
+	for t in piece_types:
+		counts[t] = 0
+	for i in width:
+		for j in height:
+			var p = all_pieces[i][j]
+			if p != null and not p.is_thunder_gem and counts.has(p.type):
+				counts[p.type] += 1
+				
+	var best_type = piece_types[0]
+	var max_c = -1
+	for t in counts:
+		if counts[t] > max_c:
+			max_c = counts[t]
+			best_type = t
+	return best_type
+
+func detonate_thunder_gem_strike(grid_pos: Vector2i):
+	var piece = all_pieces[grid_pos.x][grid_pos.y]
+	if piece == null: return
+	
+	spawn_thunder_creation_effect(grid_to_pixel(grid_pos.x, grid_pos.y))
+	spawn_floating_text(grid_to_pixel(grid_pos.x, grid_pos.y), "⚡ THUNDER GEM OVERCHARGED!", Color(1.0, 0.8, 0.1))
+	
+	var best_color = get_most_abundant_color()
+	await cast_arc_lightning(grid_pos, best_color, false)
+
+func cast_arc_lightning(thunder_pos: Vector2i, target_type: String, should_refill: bool = true):
+	print("Zeus casting Arc Lightning! Target type: ", target_type)
+	is_busy = true
+	
+	var start_pixel = grid_to_pixel(thunder_pos.x, thunder_pos.y)
+	spawn_floating_text(start_pixel, "⚡ ARC LIGHTNING!", Color(0.4, 0.9, 1.0))
+	
+	# Find all pieces matching target_type
+	var targets: Array[Vector2i] = []
+	for i in width:
+		for j in height:
+			var p = all_pieces[i][j]
+			if p != null and p.type == target_type and Vector2i(i, j) != thunder_pos:
+				targets.append(Vector2i(i, j))
+				
+	# If no pieces of that type exist, pick up to 5 random pieces
+	if targets.is_empty():
+		for i in width:
+			for j in height:
+				if all_pieces[i][j] != null and Vector2i(i, j) != thunder_pos:
+					targets.append(Vector2i(i, j))
+		targets.shuffle()
+		targets = targets.slice(0, 5)
+
+	# Sequential nearest-neighbor chain for Arc Lightning leap effect
+	var ordered_targets: Array[Vector2i] = []
+	var curr_pt = thunder_pos
+	var pool = targets.duplicate()
+	while not pool.is_empty():
+		var closest_idx = 0
+		var min_dist = 999999.0
+		for idx in pool.size():
+			var d = curr_pt.distance_squared_to(pool[idx])
+			if d < min_dist:
+				min_dist = d
+				closest_idx = idx
+		var next_pt = pool[closest_idx]
+		ordered_targets.append(next_pt)
+		curr_pt = next_pt
+		pool.remove_at(closest_idx)
+
+	# Explode the thunder gem itself
+	var thunder_piece = all_pieces[thunder_pos.x][thunder_pos.y]
+	if thunder_piece != null:
+		create_explosion_fx(start_pixel, Color(1.0, 1.0, 1.5))
+		thunder_piece.queue_free()
+		all_pieces[thunder_pos.x][thunder_pos.y] = null
+	
+	trigger_explosion_counter()
+	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
+		explosion_counter.play_strike_sound()
+
+	# Arc leap through each target in sequence
+	var current_source = start_pixel
+	for target_coord in ordered_targets:
+		var target_pixel = grid_to_pixel(target_coord.x, target_coord.y)
+		await draw_electric_arc(current_source, target_pixel)
+		
+		# Explode target piece
+		var target_piece = all_pieces[target_coord.x][target_coord.y]
+		if target_piece != null:
+			create_explosion_fx(target_pixel, Color(0.4, 0.8, 1.0))
+			target_piece.queue_free()
+			all_pieces[target_coord.x][target_coord.y] = null
+			
+		trigger_explosion_counter()
+		if explosion_counter and explosion_counter.has_method("play_strike_sound"):
+			explosion_counter.play_strike_sound()
+			
+		current_source = target_pixel
+		await get_tree().create_timer(0.06).timeout
+		
+	if arc_lightning_line:
+		arc_lightning_line.hide()
+		
+	await get_tree().create_timer(0.3).timeout
+	is_busy = false
+	if should_refill:
+		collapse_columns()
+
+func draw_electric_arc(p1: Vector2, p2: Vector2):
+	if not arc_lightning_line:
+		return
+	arc_lightning_line.show()
+	arc_lightning_line.modulate.a = 1.0
+	
+	var points: Array[Vector2] = []
+	points.append(p1)
+	var segments = 8
+	for s in range(1, segments):
+		var t = float(s) / segments
+		var mid = p1.lerp(p2, t)
+		var displace = 25.0 * (1.0 - abs(t * 2.0 - 1.0))
+		mid += Vector2(randf_range(-displace, displace), randf_range(-displace, displace))
+		points.append(mid)
+	points.append(p2)
+	
+	arc_lightning_line.points = PackedVector2Array(points)
+	arc_lightning_line.default_color = Color(3.0, 3.0, 4.0, 1.0)
+	arc_lightning_line.width = 12.0
+	await get_tree().create_timer(0.04).timeout
+	arc_lightning_line.default_color = Color(0.3, 0.8, 1.0, 1.0)
+	arc_lightning_line.width = 6.0
+	await get_tree().create_timer(0.04).timeout
+
+func cast_wrath_of_thundergod(pos_a: Vector2i, pos_b: Vector2i):
+	print("Zeus Double Thunder Gem: Wrath of the Gods!")
+	is_busy = true
+	var p_a = grid_to_pixel(pos_a.x, pos_a.y)
+	var p_b = grid_to_pixel(pos_b.x, pos_b.y)
+	
+	spawn_floating_text((p_a + p_b) * 0.5, "⚡ THUNDERGOD'S WRATH! ⚡", Color(1.0, 0.8, 0.1))
+	
+	if explosion_counter and explosion_counter.has_method("play_skill_sound"):
+		explosion_counter.play_skill_sound()
+		
+	# Clear the two thunder gems
+	if all_pieces[pos_a.x][pos_a.y]:
+		all_pieces[pos_a.x][pos_a.y].queue_free()
+		all_pieces[pos_a.x][pos_a.y] = null
+	if all_pieces[pos_b.x][pos_b.y]:
+		all_pieces[pos_b.x][pos_b.y].queue_free()
+		all_pieces[pos_b.x][pos_b.y] = null
+		
+	# Staggered lightning strike across every tile on the board
+	for j in height:
+		for i in width:
+			var piece = all_pieces[i][j]
+			if piece != null:
+				create_explosion_fx(grid_to_pixel(i, j))
+				piece.queue_free()
+				all_pieces[i][j] = null
+				trigger_explosion_counter()
+		await get_tree().create_timer(0.05).timeout
+		
+	await get_tree().create_timer(0.4).timeout
+	is_busy = false
+	collapse_columns()
+
+func detonate_unswapped_thunder_gem(pos: Vector2i):
+	var best_color = get_most_abundant_color()
+	await cast_arc_lightning(pos, best_color, true)

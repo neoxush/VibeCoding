@@ -9,6 +9,8 @@ var matched: bool = false
 var match_flags: int = 0 # 1=Horizontal, 2=Vertical, 3=Both
 var sprite: Sprite2D
 var selected: bool = false
+var is_thunder_gem: bool = false
+var pulse_tween: Tween = null
 
 func _ready():
 	sprite = $Sprite2D
@@ -51,7 +53,27 @@ func set_piece(new_type: String, asset_path: String):
 		sprite.texture = null
 		queue_redraw() 
 
+func make_thunder_gem():
+	is_thunder_gem = true
+	type = "thunder"
+	matched = false
+	match_flags = 0
+	set_piece("thunder", "res://assets/thunder_gem.svg")
+	start_thunder_pulse()
+
+func start_thunder_pulse():
+	if pulse_tween and pulse_tween.is_valid():
+		pulse_tween.kill()
+	pulse_tween = create_tween().set_loops()
+	pulse_tween.tween_property(self, "scale", Vector2(1.15, 1.15), 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	pulse_tween.tween_property(self, "scale", Vector2(1.0, 1.0), 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
 func _draw():
+	if is_thunder_gem:
+		# Electric aura rings
+		draw_arc(Vector2.ZERO, 46.0, 0, TAU, 32, Color(0.2, 0.8, 1.0, 0.8), 3.0)
+		draw_arc(Vector2.ZERO, 50.0, 0, TAU, 32, Color(1.0, 0.9, 0.3, 0.5), 1.5)
+	
 	# Only draw fallback if texture is missing
 	if sprite.texture == null:
 		var color = Color.WHITE
@@ -60,6 +82,7 @@ func _draw():
 			"blue": color = Color(0.2, 0.2, 0.9)
 			"green": color = Color(0.2, 0.9, 0.2)
 			"yellow": color = Color(0.9, 0.9, 0.2)
+			"thunder": color = Color(0.3, 0.7, 1.0)
 		
 		# Draw a more styled fallback
 		draw_circle(Vector2.ZERO, 35, color)
@@ -67,7 +90,8 @@ func _draw():
 		draw_fallback_highlight(Rect2(-10, -10, 20, 20), color.darkened(0.2)) 
 	
 	if selected:
-		draw_rect(Rect2(-40, -40, 80, 80), Color(1, 1, 1, 0.6), false, 5.0)
+		var border_color = Color(1.0, 0.9, 0.2, 0.9) if is_thunder_gem else Color(1, 1, 1, 0.6)
+		draw_rect(Rect2(-40, -40, 80, 80), border_color, false, 5.0)
 
 func draw_fallback_highlight(rect, color):
 	draw_rect(rect, color, true)
@@ -75,15 +99,18 @@ func draw_fallback_highlight(rect, color):
 func select():
 	selected = true
 	queue_redraw()
-	# Optional: Tweens
+	if pulse_tween and pulse_tween.is_valid():
+		pulse_tween.kill()
 	var tween = create_tween()
-	tween.tween_property(self, "scale", Vector2(1.2, 1.2), 0.1)
+	tween.tween_property(self, "scale", Vector2(1.25, 1.25), 0.1)
 
 func deselect():
 	selected = false
 	queue_redraw()
 	var tween = create_tween()
 	tween.tween_property(self, "scale", Vector2(1.0, 1.0), 0.1)
+	if is_thunder_gem:
+		tween.chain().tween_callback(start_thunder_pulse)
 
 func move(target_pos: Vector2):
 	# Simple tween for movement

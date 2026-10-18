@@ -4,6 +4,7 @@ extends Resource
 @export var name: String = "Skill"
 @export var icon: Texture2D
 @export var energy_cost: int = 4
+@export var match_sfx: AudioStream = null
 
 # Context should contain:
 # - grid: The game grid

@@ -5,6 +5,8 @@ func _init():
 	energy_cost = 4
 	# Load the icon
 	icon = load("res://assets/skill_zuus_thundergods_wrath.png")
+	# Character themed match SFX: Electric lightning zap
+	match_sfx = load("res://assets/lightning_match.wav")
 
 func execute(context: Dictionary) -> void:
 	var grid = context.get("grid")
@@ -70,7 +72,7 @@ func animate_lightning(runner: Node, lightning: Line2D, start_pos: Vector2, targ
 			runner.play_strike_sound()
 		
 		if grid and grid.has_method("explode_at_position"):
-			grid.explode_at_position(target_pos)
+			await grid.explode_at_position(target_pos)
 		
 		var fade = runner.create_tween()
 		fade.tween_property(lightning, "modulate:a", 0.0, 0.08)
