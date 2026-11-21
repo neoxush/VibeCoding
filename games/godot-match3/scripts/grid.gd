@@ -24,8 +24,10 @@ var cascade_count: int = 0
 var is_busy: bool = false
 var last_swapped_a: Vector2i = Vector2i(-1, -1)
 var last_swapped_b: Vector2i = Vector2i(-1, -1)
-var pending_thunder_gem_spawns: Array[Vector2i] = []
+var pending_thunder_gem_spawns: Dictionary = {}
 var arc_lightning_line: Line2D = null
+var cross_h_line: Line2D = null
+var cross_v_line: Line2D = null
 
 # Preload
 
@@ -76,6 +78,23 @@ func _ready():
 	arc_lightning_line.end_cap_mode = Line2D.LINE_CAP_ROUND
 	arc_lightning_line.hide()
 	add_child(arc_lightning_line)
+
+	# Dedicated Line2D nodes for Cross Lightning overcharge (row and column)
+	cross_h_line = Line2D.new()
+	cross_h_line.top_level = true
+	cross_h_line.z_index = 660
+	cross_h_line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	cross_h_line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	cross_h_line.hide()
+	add_child(cross_h_line)
+
+	cross_v_line = Line2D.new()
+	cross_v_line.top_level = true
+	cross_v_line.z_index = 660
+	cross_v_line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	cross_v_line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	cross_v_line.hide()
+	add_child(cross_v_line)
 	
 	call_deferred("_fix_background_texture")
 
@@ -279,8 +298,11 @@ func swap_pieces(pos_a, pos_b):
 			await cast_wrath_of_thundergod(pos_a, pos_b)
 		else:
 			var thunder_gem_pos = pos_b if piece_a.is_thunder_gem else pos_a
+			var thunder_piece = all_pieces[thunder_gem_pos.x][thunder_gem_pos.y]
 			var regular_pos = pos_a if piece_a.is_thunder_gem else pos_b
-			var target_type = all_pieces[regular_pos.x][regular_pos.y].type
+			var regular_piece = all_pieces[regular_pos.x][regular_pos.y]
+			# Target elemental color matching the thunder gem (or swapped color if generic)
+			var target_type = thunder_piece.type if (thunder_piece != null and piece_types.has(thunder_piece.type)) else (regular_piece.type if regular_piece != null else get_most_abundant_color())
 			await cast_arc_lightning(thunder_gem_pos, target_type)
 		is_busy = false
 		return
@@ -370,8 +392,7 @@ func find_matches():
 				if run_len >= 5:
 					# 5-match detected!
 					var spawn_pos = choose_thunder_gem_spawn(coords)
-					if not pending_thunder_gem_spawns.has(spawn_pos):
-						pending_thunder_gem_spawns.append(spawn_pos)
+					pending_thunder_gem_spawns[spawn_pos] = p_type
 			run_start = run_end
 
 	# Vertical check
@@ -395,8 +416,7 @@ func find_matches():
 				if run_len >= 5:
 					# 5-match detected!
 					var spawn_pos = choose_thunder_gem_spawn(coords)
-					if not pending_thunder_gem_spawns.has(spawn_pos):
-						pending_thunder_gem_spawns.append(spawn_pos)
+					pending_thunder_gem_spawns[spawn_pos] = p_type
 			run_start = run_end
 
 	destroy_matches()
@@ -423,8 +443,9 @@ func destroy_matches():
 				# Check if this piece transforms into a Thunder Gem from a 5-match!
 				if pending_thunder_gem_spawns.has(pos) and not new_thunder_gems_created.has(pos):
 					new_thunder_gems_created.append(pos)
-					piece.make_thunder_gem()
-					spawn_thunder_creation_effect(grid_to_pixel(i, j))
+					var gem_color = pending_thunder_gem_spawns[pos]
+					piece.make_thunder_gem(gem_color)
+					spawn_thunder_creation_effect(grid_to_pixel(i, j), gem_color)
 					continue
 					
 				# If an existing thunder gem was matched in a cascade
@@ -470,8 +491,9 @@ func destroy_matches():
 
 	# Trigger Arc Lightning for any thunder gems caught in matches
 	for tg_pos in detonating_thunder_gems:
-		var best_type = get_most_abundant_color()
-		await cast_arc_lightning(tg_pos, best_type, false)
+		var tg_piece = all_pieces[tg_pos.x][tg_pos.y]
+		var target_type = tg_piece.type if (tg_piece != null and piece_types.has(tg_piece.type)) else get_most_abundant_color()
+		await cast_arc_lightning(tg_pos, target_type, false)
 
 	# Trigger single counter for this match batch
 	if was_matched:
@@ -579,10 +601,10 @@ func explode_at_position(pixel_pos: Vector2):
 	create_explosion_fx(pixel_pos)
 	
 	# If a Thunder Gem is striked (by Zeus's skill or lightning),
-	# do NOT simply dispense! Trigger its Thunder Gem Arc Lightning effect!
+	# activate the Cross Lightning overcharge bonus (row and column)!
 	if piece.is_thunder_gem:
-		print("Thunder Gem was STRIKED at ", grid_pos, "! Activating Arc Lightning overcharge!")
-		await detonate_thunder_gem_strike(grid_pos)
+		print("Thunder Gem was STRIKED by chain lightning at ", grid_pos, "! Activating Cross Lightning overcharge!")
+		await cast_cross_lightning(grid_pos, piece.type, false)
 		return
 	
 	piece.queue_free()
@@ -619,14 +641,23 @@ func play_match_sfx():
 # ZEUS DOTA 2 BONUS: ELECTRIC THUNDER GEM & ARC LIGHTNING
 # ==============================================================================
 
-func spawn_thunder_creation_effect(pixel_pos: Vector2):
+func get_type_color(type_name: String) -> Color:
+	match type_name:
+		"red": return Color(1.0, 0.25, 0.3)
+		"green": return Color(0.25, 0.95, 0.35)
+		"yellow": return Color(1.0, 0.9, 0.15)
+		"blue": return Color(0.3, 0.8, 1.0)
+		_: return Color(0.4, 0.85, 1.0)
+
+func spawn_thunder_creation_effect(pixel_pos: Vector2, color_type: String = "blue"):
 	# Zeus divine thunder strike on creation
 	var explosion = explosion_scene.instantiate()
 	explosion.position = pixel_pos
 	explosion.z_index = 120
 	explosion.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
 	explosion.emission_sphere_radius = 45.0
-	explosion.color = Color(1.0, 1.0, 1.5, 1.0)
+	var text_color = get_type_color(color_type)
+	explosion.color = text_color.lightened(0.4)
 	explosion.scale_amount_min = 20.0
 	explosion.scale_amount_max = 35.0
 	add_child(explosion)
@@ -635,7 +666,7 @@ func spawn_thunder_creation_effect(pixel_pos: Vector2):
 	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
 		explosion_counter.play_strike_sound()
 		
-	spawn_floating_text(pixel_pos, "⚡ THUNDER GEM!", Color(1.0, 0.9, 0.2))
+	spawn_floating_text(pixel_pos, "⚡ " + color_type.to_upper() + " THUNDER GEM!", text_color)
 
 func spawn_floating_text(pos: Vector2, text: String, color: Color = Color.WHITE):
 	var lbl = Label.new()
@@ -678,18 +709,136 @@ func detonate_thunder_gem_strike(grid_pos: Vector2i):
 	var piece = all_pieces[grid_pos.x][grid_pos.y]
 	if piece == null: return
 	
-	spawn_thunder_creation_effect(grid_to_pixel(grid_pos.x, grid_pos.y))
-	spawn_floating_text(grid_to_pixel(grid_pos.x, grid_pos.y), "⚡ THUNDER GEM OVERCHARGED!", Color(1.0, 0.8, 0.1))
+	var target_color = piece.type if piece_types.has(piece.type) else get_most_abundant_color()
+	var text_color = get_type_color(target_color)
+	spawn_thunder_creation_effect(grid_to_pixel(grid_pos.x, grid_pos.y), target_color)
+	spawn_floating_text(grid_to_pixel(grid_pos.x, grid_pos.y), "⚡ " + target_color.to_upper() + " OVERCHARGED!", text_color)
 	
-	var best_color = get_most_abundant_color()
-	await cast_arc_lightning(grid_pos, best_color, false)
+	# Struck by chain lightning: trigger row & column Cross Lightning bonus!
+	await cast_cross_lightning(grid_pos, target_color, false)
+
+func generate_lightning_path(p1: Vector2, p2: Vector2, segments: int = 14, max_displace: float = 22.0) -> PackedVector2Array:
+	var pts: Array[Vector2] = []
+	pts.append(p1)
+	for s in range(1, segments):
+		var t = float(s) / segments
+		var mid = p1.lerp(p2, t)
+		var displace = max_displace * (1.0 - abs(t * 2.0 - 1.0))
+		mid += Vector2(randf_range(-displace, displace), randf_range(-displace, displace))
+		pts.append(mid)
+	pts.append(p2)
+	return PackedVector2Array(pts)
+
+func cast_cross_lightning(thunder_pos: Vector2i, color_type: String = "blue", should_refill: bool = false):
+	print("⚡ CROSS LIGHTNING OVERCHARGE at ", thunder_pos, "! Color: ", color_type)
+	is_busy = true
+	
+	var center_pixel = grid_to_pixel(thunder_pos.x, thunder_pos.y)
+	var elem_color = get_type_color(color_type)
+	
+	spawn_floating_text(center_pixel, "⚡ CROSS LIGHTNING! ⚡", elem_color.lightened(0.2))
+	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
+		explosion_counter.play_strike_sound()
+
+	# Remove the origin thunder piece first to avoid infinite recursion
+	var thunder_piece = all_pieces[thunder_pos.x][thunder_pos.y]
+	if thunder_piece != null:
+		create_explosion_fx(center_pixel, elem_color.lightened(0.4))
+		thunder_piece.queue_free()
+		all_pieces[thunder_pos.x][thunder_pos.y] = null
+		trigger_explosion_counter()
+
+	# Full row (horizontal) and column (vertical) paths across the entire board
+	var left_pixel = grid_to_pixel(0, thunder_pos.y) - Vector2(35, 0)
+	var right_pixel = grid_to_pixel(width - 1, thunder_pos.y) + Vector2(35, 0)
+	var top_pixel = grid_to_pixel(thunder_pos.x, 0) - Vector2(0, 35)
+	var bottom_pixel = grid_to_pixel(thunder_pos.x, height - 1) + Vector2(0, 35)
+
+	if cross_h_line and cross_v_line:
+		cross_h_line.points = generate_lightning_path(left_pixel, right_pixel, 16, 20.0)
+		cross_v_line.points = generate_lightning_path(top_pixel, bottom_pixel, 16, 20.0)
+		
+		# Bright white-hot initial flash
+		cross_h_line.default_color = Color.WHITE.lerp(elem_color, 0.25)
+		cross_v_line.default_color = Color.WHITE.lerp(elem_color, 0.25)
+		cross_h_line.width = 16.0
+		cross_v_line.width = 16.0
+		cross_h_line.show()
+		cross_v_line.show()
+
+	# Collect all tiles along the entire row and column
+	var tiles_to_destroy: Array[Vector2i] = []
+	var chain_thunder_gems: Array[Vector2i] = []
+
+	# Horizontal row
+	for i in width:
+		if i != thunder_pos.x:
+			var p = Vector2i(i, thunder_pos.y)
+			var pc = all_pieces[p.x][p.y]
+			if pc != null:
+				if pc.is_thunder_gem:
+					chain_thunder_gems.append(p)
+				else:
+					tiles_to_destroy.append(p)
+
+	# Vertical column
+	for j in height:
+		if j != thunder_pos.y:
+			var p = Vector2i(thunder_pos.x, j)
+			var pc = all_pieces[p.x][p.y]
+			if pc != null:
+				if pc.is_thunder_gem:
+					if not chain_thunder_gems.has(p):
+						chain_thunder_gems.append(p)
+				else:
+					if not tiles_to_destroy.has(p):
+						tiles_to_destroy.append(p)
+
+	await get_tree().create_timer(0.04).timeout
+
+	# Saturated elemental color trail
+	if cross_h_line and cross_v_line:
+		cross_h_line.default_color = elem_color
+		cross_v_line.default_color = elem_color
+		cross_h_line.width = 8.0
+		cross_v_line.width = 8.0
+
+	# Explode all tiles along the cross
+	for p in tiles_to_destroy:
+		var target_pixel = grid_to_pixel(p.x, p.y)
+		create_explosion_fx(target_pixel, elem_color)
+		var piece = all_pieces[p.x][p.y]
+		if piece != null:
+			piece.queue_free()
+			all_pieces[p.x][p.y] = null
+			trigger_explosion_counter()
+
+	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
+		explosion_counter.play_strike_sound()
+
+	await get_tree().create_timer(0.18).timeout
+	if cross_h_line: cross_h_line.hide()
+	if cross_v_line: cross_v_line.hide()
+
+	# Chain reaction: if any other Thunder Gems were caught in the crossfire!
+	for sub_gem in chain_thunder_gems:
+		var sub_piece = all_pieces[sub_gem.x][sub_gem.y]
+		if sub_piece != null:
+			var sub_color = sub_piece.type if piece_types.has(sub_piece.type) else "yellow"
+			await cast_cross_lightning(sub_gem, sub_color, false)
+
+	await get_tree().create_timer(0.15).timeout
+	is_busy = false
+	if should_refill:
+		collapse_columns()
 
 func cast_arc_lightning(thunder_pos: Vector2i, target_type: String, should_refill: bool = true):
 	print("Zeus casting Arc Lightning! Target type: ", target_type)
 	is_busy = true
 	
+	var arc_color = get_type_color(target_type)
 	var start_pixel = grid_to_pixel(thunder_pos.x, thunder_pos.y)
-	spawn_floating_text(start_pixel, "⚡ ARC LIGHTNING!", Color(0.4, 0.9, 1.0))
+	spawn_floating_text(start_pixel, "⚡ " + target_type.to_upper() + " ARC LIGHTNING!", arc_color)
 	
 	# Find all pieces matching target_type
 	var targets: Array[Vector2i] = []
@@ -728,7 +877,7 @@ func cast_arc_lightning(thunder_pos: Vector2i, target_type: String, should_refil
 	# Explode the thunder gem itself
 	var thunder_piece = all_pieces[thunder_pos.x][thunder_pos.y]
 	if thunder_piece != null:
-		create_explosion_fx(start_pixel, Color(1.0, 1.0, 1.5))
+		create_explosion_fx(start_pixel, arc_color.lightened(0.4))
 		thunder_piece.queue_free()
 		all_pieces[thunder_pos.x][thunder_pos.y] = null
 	
@@ -740,14 +889,19 @@ func cast_arc_lightning(thunder_pos: Vector2i, target_type: String, should_refil
 	var current_source = start_pixel
 	for target_coord in ordered_targets:
 		var target_pixel = grid_to_pixel(target_coord.x, target_coord.y)
-		await draw_electric_arc(current_source, target_pixel)
+		await draw_electric_arc(current_source, target_pixel, arc_color)
 		
 		# Explode target piece
 		var target_piece = all_pieces[target_coord.x][target_coord.y]
 		if target_piece != null:
-			create_explosion_fx(target_pixel, Color(0.4, 0.8, 1.0))
-			target_piece.queue_free()
-			all_pieces[target_coord.x][target_coord.y] = null
+			if target_piece.is_thunder_gem:
+				# Thunder Gem triggered by ongoing chain lightning: unleash Cross Lightning bonus!
+				print("Ongoing Arc Lightning hit Thunder Gem at ", target_coord, "! Triggering Cross Lightning bonus!")
+				await cast_cross_lightning(target_coord, target_piece.type, false)
+			else:
+				create_explosion_fx(target_pixel, arc_color)
+				target_piece.queue_free()
+				all_pieces[target_coord.x][target_coord.y] = null
 			
 		trigger_explosion_counter()
 		if explosion_counter and explosion_counter.has_method("play_strike_sound"):
@@ -764,7 +918,7 @@ func cast_arc_lightning(thunder_pos: Vector2i, target_type: String, should_refil
 	if should_refill:
 		collapse_columns()
 
-func draw_electric_arc(p1: Vector2, p2: Vector2):
+func draw_electric_arc(p1: Vector2, p2: Vector2, arc_color: Color = Color(0.3, 0.8, 1.0)):
 	if not arc_lightning_line:
 		return
 	arc_lightning_line.show()
@@ -782,10 +936,10 @@ func draw_electric_arc(p1: Vector2, p2: Vector2):
 	points.append(p2)
 	
 	arc_lightning_line.points = PackedVector2Array(points)
-	arc_lightning_line.default_color = Color(3.0, 3.0, 4.0, 1.0)
+	arc_lightning_line.default_color = Color.WHITE.lerp(arc_color, 0.3)
 	arc_lightning_line.width = 12.0
 	await get_tree().create_timer(0.04).timeout
-	arc_lightning_line.default_color = Color(0.3, 0.8, 1.0, 1.0)
+	arc_lightning_line.default_color = arc_color
 	arc_lightning_line.width = 6.0
 	await get_tree().create_timer(0.04).timeout
 
@@ -824,5 +978,6 @@ func cast_wrath_of_thundergod(pos_a: Vector2i, pos_b: Vector2i):
 	collapse_columns()
 
 func detonate_unswapped_thunder_gem(pos: Vector2i):
-	var best_color = get_most_abundant_color()
-	await cast_arc_lightning(pos, best_color, true)
+	var piece = all_pieces[pos.x][pos.y]
+	var target_color = piece.type if (piece != null and piece_types.has(piece.type)) else get_most_abundant_color()
+	await cast_arc_lightning(pos, target_color, true)
