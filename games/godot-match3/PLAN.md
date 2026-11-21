@@ -1,5 +1,7 @@
 # Project Overhaul Plan: Match-3 RPG
 
+> 📖 **Feature Documentation**: For existing mechanics, terminology glossary, trigger conditions, and technical design notes, refer to [FEATURES.md](FEATURES.md).
+
 ## 1. Current Parameter Inventory (Difficulty & Feel)
 **Grid & Logic (`grid.gd`):**
 - `width` (6): Number of columns.

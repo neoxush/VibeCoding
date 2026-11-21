@@ -2,6 +2,8 @@
 
 A colorful Match-3 puzzle game prototype built with **Godot 4.x**. Swap candies to create matches of 3 or more and watch them explode with satisfying particle effects!
 
+> 📖 **Feature Documentation**: For a complete list of mechanics, terms (Thunder Gem, Arc Lightning, Cross Lightning Overcharge), triggers, and notes, see [FEATURES.md](FEATURES.md).
+
 ![Godot 4.x](https://img.shields.io/badge/Godot-4.x-blue?logo=godotengine&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
