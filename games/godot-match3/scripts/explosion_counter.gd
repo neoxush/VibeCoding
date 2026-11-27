@@ -4,6 +4,7 @@ extends Node2D
 # Features: Energy gauge, skill name display, lightning chain, camera shake, and elastic snap
 
 var count: int = 0
+const COMBO_CAP: int = 20
 var reset_timer: float = 0.0
 const RESET_TIME: float = 5.0
 
@@ -97,8 +98,27 @@ func add_explosion():
 	premium_pop_animation()
 	shake_effect()
 	
+	if count >= COMBO_CAP:
+		handle_combo_cap()
+	
 	if current_skill and energy >= max_volume and not is_casting:
 		cast_skill()
+
+func handle_combo_cap():
+	print("ExplosionCounter: Reached COMBO_CAP (", COMBO_CAP, ")! Triggering ARC gem overcharge.")
+	if grid and grid.has_method("on_combo_20_cap_reached"):
+		grid.on_combo_20_cap_reached()
+	
+	# Flash ⚡20! on the counter HUD
+	if label and not is_casting and not is_lingering:
+		label.text = "⚡20!"
+		label.visible = true
+		label.modulate = Color(3.5, 2.8, 0.5, 1.0)
+		var t = create_tween()
+		t.tween_property(label, "modulate", Color(1, 1, 1, 1), 0.35)
+	
+	# Reset count to zero so subsequent strikes climb 1..20 repeatedly
+	count = 0
 
 func update_display():
 	var display_text = ""

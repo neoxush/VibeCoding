@@ -85,6 +85,7 @@ Use this section to look up standard names and disambiguate terms across discuss
 | **Arc Lightning (Match)** | 3-match containing a Thunder Gem | Player swap or cascade | Detonates and arcs through all gems of that same element |
 | **Cross Lightning** | Thunder Gem hit by active lightning chain or Zeus strike | Passive / Chain hit | Blasts **entire row + entire column** in both axes (+ shape) |
 | **Wrath of the Thundergod** | Two Thunder Gems adjacent | Player drag/swap | **Full-board wipe** + staggered lightning strikes |
+| **20-Strike Overcharge Loop** | Accumulating 20 strikes/combos | Continuous cascades / strikes | Plays 20-combo summit chime & kick, **randomly transforms 1 regular gem into an ARC Thunder Gem**, and resets combo counter from 0 to repeat the level-up ladder |
 
 ---
 
@@ -116,6 +117,16 @@ Use this section to look up standard names and disambiguate terms across discuss
    * **Persistent Combo Counter**:
      * Combo count persists across the 5.0s inactivity window in `scripts/explosion_counter.gd` without resetting during skill casting.
 
+   * **20-Strike Combo Cap & Overcharge Progression Loop**:
+     * To prevent gameplay and audio from plateauing into a dull monotone during large chain reactions or board wipes (e.g., reaching 60–100+ combos):
+       * The combo counter is capped at **20 strikes** (`const COMBO_CAP: int = 20`).
+       * **Reaching 20 Strikes**:
+         1. Plays the 20-combo summit pitch (C8), Tier 4 sub-bass thunder kick, and extended milestone chime.
+         2. Displays the celebratory screen banner: `"⚡ 20x COMBO! ARC OVERCHARGE! ⚡"`.
+         3. Randomly transforms one regular candy on the board into a **Thunder Gem (ARC Gem)**, accompanied by a divine electric arc zap and creation burst.
+         4. Flashes `"⚡20!"` on the counter HUD and resets `count = 0` (while preserving the 5.0s active combo window).
+       * **Continuous Progression**: Subsequent matches/cascades immediately climb notes 1 through 20 again, allowing players to repeatedly experience the musical level-up ascension and continuously forge bonus ARC gems during massive combos!
+
 ---
 
 ## 📌 5. Codebase Implementation Map
@@ -127,13 +138,18 @@ Use this section to look up standard names and disambiguate terms across discuss
 | **Arc Lightning Execution** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `cast_arc_lightning()`, `draw_electric_arc()` |
 | **Cross Lightning Overcharge** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `cast_cross_lightning()`, `generate_lightning_path()`, `explode_at_position()` |
 | **Double Gem Board Wipe** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `cast_wrath_of_thundergod()` |
-| **Combo & Skill Charge Counter** | [`scripts/explosion_counter.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/explosion_counter.gd) | `add_explosion()`, `trigger_skill()` |
+| **Combo & Skill Charge Counter** | [`scripts/explosion_counter.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/explosion_counter.gd) | `add_explosion()`, `handle_combo_cap()`, `trigger_skill()` |
 | **20-Combo Audio & Milestone Kicks** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `play_match_sfx()`, `COMBO_SEMITONES` |
+| **20-Strike ARC Gem Conversion & Loop** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `on_combo_20_cap_reached()`, `convert_random_gem_to_thunder_gem()` |
 
 ---
 
 ## 📜 6. Progress & Change History
 
+* **20-Strike Combo Cap & ARC Gem Overcharge Loop**:
+  * Implemented 20-strike cap on combo counter to avoid audio fatigue and repetitive flatlining on 100+ cascades.
+  * Every 20 strikes triggers an overcharge bonus: randomly converts a normal candy into an ARC Thunder Gem with lightning strike effects.
+  * Counter resets to zero at 20 while maintaining the 5.0s combo timer, allowing the 20-note musical ladder and milestone kicks to loop repeatedly.
 * **20-Combo Pentatonic Audio & Milestone Kicks**:
   * Implemented 20-step musical pentatonic progression across 4 full octaves.
   * Added milestone audio kicks at Combos 5, 10, 15, and 20 with dedicated sub-bass and chime layers.

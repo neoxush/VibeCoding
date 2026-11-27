@@ -653,8 +653,10 @@ func play_match_sfx(custom_combo: int = -1):
 	if combo <= 0:
 		if explosion_counter and explosion_counter.count > 0:
 			combo = explosion_counter.count
+		elif cascade_count > 0:
+			combo = cascade_count
 		else:
-			combo = max(1, cascade_count)
+			return
 			
 	# Fetch character/skill themed SFX if available
 	var sfx: AudioStream = null
@@ -707,14 +709,50 @@ func play_match_sfx(custom_combo: int = -1):
 			kick_audio_player.play()
 
 	# Grand celebration on reaching Combo 20:
-	if combo == 20:
+	if combo >= 20:
 		if milestone_chime_player:
 			milestone_chime_player.pitch_scale = 1.5
 			milestone_chime_player.volume_db = 2.0
 			milestone_chime_player.play()
-			
-		var center_screen = grid_to_pixel(width / 2, height / 2)
-		spawn_floating_text(center_screen, "⚡ 20x COMBO! TRANSCENDENT! ⚡", Color(1.0, 0.85, 0.2))
+
+func on_combo_20_cap_reached():
+	print("⚡ 20-COMBO CAP REACHED! OVERCHARGING BOARD & RESETTING COUNTER ⚡")
+	play_match_sfx(20)
+	cascade_count = 0
+	
+	var center_screen = grid_to_pixel(width / 2, height / 2)
+	spawn_floating_text(center_screen, "⚡ 20x COMBO! ARC OVERCHARGE! ⚡", Color(1.0, 0.85, 0.2))
+	
+	convert_random_gem_to_thunder_gem()
+
+func convert_random_gem_to_thunder_gem():
+	var candidates: Array[Vector2i] = []
+	for x in range(width):
+		for y in range(height):
+			var piece = all_pieces[x][y]
+			if piece != null and is_instance_valid(piece) and not piece.is_thunder_gem and not piece.matched:
+				candidates.append(Vector2i(x, y))
+				
+	if candidates.is_empty():
+		print("20-Combo Overcharge: No regular candidate pieces found to convert.")
+		return
+		
+	var chosen_pos = candidates.pick_random()
+	var piece = all_pieces[chosen_pos.x][chosen_pos.y]
+	if piece != null and is_instance_valid(piece):
+		var gem_color = piece.type if piece_types.has(piece.type) else "blue"
+		print("20-Combo Overcharge: Transformed gem at ", chosen_pos, " into a ", gem_color.to_upper(), " ARC Thunder Gem!")
+		piece.make_thunder_gem(gem_color)
+		var pixel_pos = grid_to_pixel(chosen_pos.x, chosen_pos.y)
+		spawn_thunder_creation_effect(pixel_pos, gem_color)
+		spawn_floating_text(pixel_pos, "⚡ ARC OVERCHARGE!", get_type_color(gem_color))
+		
+		# Animate an electric arc striking the transformed gem from the counter or sky
+		var start_origin = explosion_counter.global_position if explosion_counter else grid_to_pixel(width / 2, 0)
+		draw_electric_arc(start_origin, pixel_pos, get_type_color(gem_color))
+		await get_tree().create_timer(0.12).timeout
+		if arc_lightning_line:
+			arc_lightning_line.hide()
 
 # ==============================================================================
 # ZEUS DOTA 2 BONUS: ELECTRIC THUNDER GEM & ARC LIGHTNING
