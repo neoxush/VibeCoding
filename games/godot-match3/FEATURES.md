@@ -15,7 +15,7 @@ Use this section to look up standard names and disambiguate terms across discuss
 | **Cross Lightning Overcharge** | `cast_cross_lightning()` | Row & Column Blast, Plus Lightning, Cross Shockwave | A special bonus blast triggered when a Thunder Gem is **struck by another ongoing lightning chain** (user didn't choose the swap). Casts full-span horizontal and vertical lightning beams across the entire row and column. |
 | **Wrath of the Thundergod** | `cast_wrath_of_thundergod()` | Double Thunder Combo, Board Wipe, Ultimate Strike | Triggered by **swapping two Thunder Gems together**. Clears both gems and delivers a staggered lightning strike across every single tile on the grid. |
 | **Explosion Counter / Combo Gauge** | `scripts/explosion_counter.gd` | Skill Gauge, Energy Meter, RPG Meter | The circular HUD meter that charges up as matches and cascades occur. Once full, it casts the character's active skill (Zeus's Divine Wrath). |
-| **Pentatonic Cascades** | `play_match_sfx()` | Dynamic Pitch, Musical Combo | Audio system where each consecutive cascade step increases the pitch scale along a musical pentatonic scale (C, D, E, G, A...). |
+| **Pentatonic Combo Scale & Milestone Kicks** | `play_match_sfx()`, `COMBO_SEMITONES` | Musical Combo, Dynamic Pitch, Sound Cues | 20-step musical pentatonic progression across 4 octaves. Features acoustic bass "kicks" at milestones 5, 10, 15, and a grand sub-bass thunder kick + celebratory chime at Combo 20. |
 
 ---
 
@@ -98,8 +98,23 @@ Use this section to look up standard names and disambiguate terms across discuss
    * Solution: An inner `LightningOverlay (Node2D)` child with `z_index = 20` executes its own `_draw()` explicitly on top of `$Sprite2D`.
 3. **Chain Reaction Safeguard**:
    * When `cast_cross_lightning()` executes, the origin piece is immediately removed from `all_pieces` before secondary cross-explosions are evaluated, preventing infinite circular recursion.
-4. **Musical Cascade Feedback**:
-   * Cascades cycle through `const PENTATONIC_SEMITONES = [0, 2, 4, 7, 9, 12, 14, 16]`. The pitch scales via `pow(2.0, semitone / 12.0)` to give a rewarding, harmonious audio feel to combos.
+4. **20-Combo Musical Pentatonic Scale & Milestone Kicks**:
+   * Combos progress across 4 full octaves of the pentatonic scale (`COMBO_SEMITONES` = 20 distinct musical semitones from C4 up to C8):
+     * *Octave 1 (Combos 1-5)*: C4 (0), D4 (2), E4 (4), G4 (7), A4 (9).
+     * *Octave 2 (Combos 6-10)*: C5 (12), D5 (14), E5 (16), G5 (19), A5 (21).
+     * *Octave 3 (Combos 11-15)*: C6 (24), D6 (26), E6 (28), G6 (31), A6 (33).
+     * *Octave 4 (Combos 16-20)*: C7 (36), D7 (38), E7 (40), G7 (43), C8 (48 - Climax Summit).
+   * **Multi-Layered Polyphonic Audio Stack**:
+     * `match_audio_player` (`lightning_match.wav`, polyphony 6): Melodic lead pitch note. Wrapped across octaves to prevent ultra-high frequency distortion.
+     * `clink_audio_player` (`explosion-clinking.mp3`, polyphony 6): Crystalline harmonic chime overtone layer entering at combo 5 and escalating in volume.
+     * `kick_audio_player` (`skill-lightning-1s.mp3`, polyphony 4): Delivers visceral acoustic "kicks" at milestone thresholds:
+       * **Combo 5**: Low kick thump.
+       * **Combo 10**: Halfway mark punch kick.
+       * **Combo 15**: High-voltage resonant electro kick.
+       * **Combo 20**: Deep thunder sub-bass slam.
+     * `milestone_chime_player` (`skill-lightning-4s.mp3`, polyphony 2): Extended angelic chime fanfare on achieving Combo 20 ("⚡ 20x COMBO! TRANSCENDENT! ⚡").
+   * **Persistent Combo Counter**:
+     * Combo count persists across the 5.0s inactivity window in `scripts/explosion_counter.gd` without resetting during skill casting.
 
 ---
 
@@ -113,11 +128,17 @@ Use this section to look up standard names and disambiguate terms across discuss
 | **Cross Lightning Overcharge** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `cast_cross_lightning()`, `generate_lightning_path()`, `explode_at_position()` |
 | **Double Gem Board Wipe** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `cast_wrath_of_thundergod()` |
 | **Combo & Skill Charge Counter** | [`scripts/explosion_counter.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/explosion_counter.gd) | `add_explosion()`, `trigger_skill()` |
+| **20-Combo Audio & Milestone Kicks** | [`scripts/grid.gd`](file:///d:/Github/VibeCoding/games/godot-match3/scripts/grid.gd) | `play_match_sfx()`, `COMBO_SEMITONES` |
 
 ---
 
 ## 📜 6. Progress & Change History
 
+* **20-Combo Pentatonic Audio & Milestone Kicks**:
+  * Implemented 20-step musical pentatonic progression across 4 full octaves.
+  * Added milestone audio kicks at Combos 5, 10, 15, and 20 with dedicated sub-bass and chime layers.
+  * Connected regular matches, Arc Lightning leaps, and Cross Lightning detonations to the combo audio pipeline.
+  * Preserved combo accumulator through character skill activation in `explosion_counter.gd`.
 * **Commit `641733c3`**:
   * Implemented color-infused Thunder Gems retaining base candy geometry (Circle, Square, Triangle, Star).
   * Added `LightningOverlay` with `z_index = 20` to prevent sprite texture clipping.

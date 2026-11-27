@@ -19,7 +19,12 @@ var final_touch = Vector2i.ZERO
 var is_dragging = false
 var match_audio_player: AudioStreamPlayer = null
 var clink_audio_player: AudioStreamPlayer = null
+var kick_audio_player: AudioStreamPlayer = null
+var milestone_chime_player: AudioStreamPlayer = null
 var default_match_sfx: AudioStream = preload("res://assets/lightning_match.wav")
+var clink_sfx: AudioStream = preload("res://assets/explosion-clinking.mp3")
+var kick_sfx: AudioStream = preload("res://assets/skill-lightning-1s.mp3")
+var milestone_sfx: AudioStream = preload("res://assets/skill-lightning-4s.mp3")
 var cascade_count: int = 0
 var is_busy: bool = false
 var last_swapped_a: Vector2i = Vector2i(-1, -1)
@@ -63,10 +68,24 @@ func _ready():
 	initialize_explosion_counter()
 	
 	match_audio_player = AudioStreamPlayer.new()
-	match_audio_player.max_polyphony = 4
+	match_audio_player.max_polyphony = 6
 	add_child(match_audio_player)
 	match_audio_player.stream = default_match_sfx
-	clink_audio_player = match_audio_player
+
+	clink_audio_player = AudioStreamPlayer.new()
+	clink_audio_player.max_polyphony = 6
+	add_child(clink_audio_player)
+	clink_audio_player.stream = clink_sfx
+
+	kick_audio_player = AudioStreamPlayer.new()
+	kick_audio_player.max_polyphony = 4
+	add_child(kick_audio_player)
+	kick_audio_player.stream = kick_sfx
+
+	milestone_chime_player = AudioStreamPlayer.new()
+	milestone_chime_player.max_polyphony = 2
+	add_child(milestone_chime_player)
+	milestone_chime_player.stream = milestone_sfx
 	
 	# Dedicated Line2D for Zeus Arc Lightning effects
 	arc_lightning_line = Line2D.new()
@@ -498,9 +517,9 @@ func destroy_matches():
 	# Trigger single counter for this match batch
 	if was_matched:
 		cascade_count += 1
-		play_match_sfx()
 		trigger_explosion_counter()
-		print("Matches found and destroyed (cascade: ", cascade_count, ")")
+		play_match_sfx()
+		print("Matches found and destroyed (cascade: ", cascade_count, ", combo: ", explosion_counter.count if explosion_counter else 0, ")")
 		await get_tree().create_timer(0.4).timeout
 		collapse_columns()
 	else:
@@ -614,13 +633,29 @@ func refill_after_lightning():
 	cascade_count = 0
 	collapse_columns()
 
-# Musical pentatonic scale offsets (semitones): C, D, E, G, A, C(+1), D(+1), E(+1)
-const PENTATONIC_SEMITONES: Array[int] = [0, 2, 4, 7, 9, 12, 14, 16]
+# 20 distinct musical pentatonic scale steps across 4 octaves
+# Octave 1 (Combos 1-5):   C4(0),  D4(2),  E4(4),  G4(7),  A4(9)
+# Octave 2 (Combos 6-10):  C5(12), D5(14), E5(16), G5(19), A5(21)
+# Octave 3 (Combos 11-15): C6(24), D6(26), E6(28), G6(31), A6(33)
+# Octave 4 (Combos 16-20): C7(36), D7(38), E7(40), G7(43), C8(48 - Climax Summit)
+const COMBO_SEMITONES: Array[int] = [
+	0,  2,  4,  7,  9,
+	12, 14, 16, 19, 21,
+	24, 26, 28, 31, 33,
+	36, 38, 40, 43, 48
+]
 
-func play_match_sfx():
+func play_match_sfx(custom_combo: int = -1):
 	if not match_audio_player:
 		return
-	
+		
+	var combo = custom_combo
+	if combo <= 0:
+		if explosion_counter and explosion_counter.count > 0:
+			combo = explosion_counter.count
+		else:
+			combo = max(1, cascade_count)
+			
 	# Fetch character/skill themed SFX if available
 	var sfx: AudioStream = null
 	if explosion_counter and explosion_counter.current_skill and explosion_counter.current_skill.match_sfx:
@@ -630,12 +665,56 @@ func play_match_sfx():
 	
 	if sfx:
 		match_audio_player.stream = sfx
+		
+	var idx = clamp(combo - 1, 0, COMBO_SEMITONES.size() - 1)
+	var semitone = COMBO_SEMITONES[idx]
 	
-	# Increase pitch dynamically with each cascade/combo step
-	var semitone_idx = clamp(cascade_count - 1, 0, PENTATONIC_SEMITONES.size() - 1)
-	var semitone = PENTATONIC_SEMITONES[semitone_idx]
-	match_audio_player.pitch_scale = pow(2.0, float(semitone) / 12.0)
+	# Primary melodic strike note (musical pitch with wrapped base for acoustic clarity)
+	var wrapped_semitone = semitone if semitone < 24 else (12 + (semitone % 12))
+	match_audio_player.pitch_scale = pow(2.0, float(wrapped_semitone) / 12.0)
+	match_audio_player.volume_db = lerp(-1.0, 3.5, clamp(float(combo) / 20.0, 0.0, 1.0))
 	match_audio_player.play()
+	
+	# Harmonic crystalline chime overtone layer (joins at combo 5 and grows toward combo 20)
+	if clink_audio_player and combo >= 5:
+		var chime_pitch = pow(2.0, float(semitone) / 24.0)
+		clink_audio_player.pitch_scale = chime_pitch
+		clink_audio_player.volume_db = lerp(-5.0, 2.5, clamp(float(combo) / 20.0, 0.0, 1.0))
+		clink_audio_player.play()
+		
+	# Acoustic "KICK" punch on milestones:
+	if kick_audio_player:
+		if combo == 5:
+			# Tier 1 Milestone (5 combo): Low kick thump
+			kick_audio_player.pitch_scale = 1.3
+			kick_audio_player.volume_db = -5.0
+			kick_audio_player.play()
+		elif combo == 10:
+			# Tier 2 Milestone (10 combo - Halfway to 20!): Resonant double-digit punch kick
+			kick_audio_player.pitch_scale = 1.0
+			kick_audio_player.volume_db = -1.0
+			kick_audio_player.play()
+		elif combo == 15:
+			# Tier 3 Milestone (15 combo - High voltage surge): Deep electro kick
+			kick_audio_player.pitch_scale = 0.85
+			kick_audio_player.volume_db = +1.5
+			kick_audio_player.play()
+		elif combo >= 20:
+			# Tier 4 Grand 20 Milestone: THE 20 COMBO KICK!
+			# Deep thunder sub-bass punch
+			kick_audio_player.pitch_scale = 0.65
+			kick_audio_player.volume_db = +4.5
+			kick_audio_player.play()
+
+	# Grand celebration on reaching Combo 20:
+	if combo == 20:
+		if milestone_chime_player:
+			milestone_chime_player.pitch_scale = 1.5
+			milestone_chime_player.volume_db = 2.0
+			milestone_chime_player.play()
+			
+		var center_screen = grid_to_pixel(width / 2, height / 2)
+		spawn_floating_text(center_screen, "⚡ 20x COMBO! TRANSCENDENT! ⚡", Color(1.0, 0.85, 0.2))
 
 # ==============================================================================
 # ZEUS DOTA 2 BONUS: ELECTRIC THUNDER GEM & ARC LIGHTNING
@@ -665,6 +744,7 @@ func spawn_thunder_creation_effect(pixel_pos: Vector2, color_type: String = "blu
 	
 	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
 		explosion_counter.play_strike_sound()
+	play_match_sfx()
 		
 	spawn_floating_text(pixel_pos, "⚡ " + color_type.to_upper() + " THUNDER GEM!", text_color)
 
@@ -739,6 +819,7 @@ func cast_cross_lightning(thunder_pos: Vector2i, color_type: String = "blue", sh
 	spawn_floating_text(center_pixel, "⚡ CROSS LIGHTNING! ⚡", elem_color.lightened(0.2))
 	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
 		explosion_counter.play_strike_sound()
+	play_match_sfx()
 
 	# Remove the origin thunder piece first to avoid infinite recursion
 	var thunder_piece = all_pieces[thunder_pos.x][thunder_pos.y]
@@ -815,6 +896,7 @@ func cast_cross_lightning(thunder_pos: Vector2i, color_type: String = "blue", sh
 
 	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
 		explosion_counter.play_strike_sound()
+	play_match_sfx()
 
 	await get_tree().create_timer(0.18).timeout
 	if cross_h_line: cross_h_line.hide()
@@ -884,6 +966,7 @@ func cast_arc_lightning(thunder_pos: Vector2i, target_type: String, should_refil
 	trigger_explosion_counter()
 	if explosion_counter and explosion_counter.has_method("play_strike_sound"):
 		explosion_counter.play_strike_sound()
+	play_match_sfx()
 
 	# Arc leap through each target in sequence
 	var current_source = start_pixel
@@ -904,6 +987,7 @@ func cast_arc_lightning(thunder_pos: Vector2i, target_type: String, should_refil
 				all_pieces[target_coord.x][target_coord.y] = null
 			
 		trigger_explosion_counter()
+		play_match_sfx()
 		if explosion_counter and explosion_counter.has_method("play_strike_sound"):
 			explosion_counter.play_strike_sound()
 			

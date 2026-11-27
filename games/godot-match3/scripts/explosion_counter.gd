@@ -165,7 +165,7 @@ func cast_skill():
 	
 	# Transition into lingering state for fade out
 	max_volume += 2
-	count = 0
+	# Retain active combo count through skill strikes (only resets via reset_timer in reset_counter)
 	is_lingering = true
 	is_casting = false
 	update_display()
